@@ -1,0 +1,190 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import Image from "next/image";
+import { cn } from "@/lib/utils";
+import {
+  LayoutDashboard,
+  Building2,
+  Search,
+  Database,
+  Bot,
+  Globe,
+  Bookmark,
+  BarChart3,
+  Settings,
+  ScrollText,
+  Menu,
+  X,
+} from "lucide-react";
+
+interface NavItem {
+  label: string;
+  href: string;
+  icon: React.ElementType;
+  section: string;
+}
+
+const navItems: NavItem[] = [
+  // MAIN
+  { label: "Dashboard", href: "/", icon: LayoutDashboard, section: "MAIN" },
+  { label: "Properties", href: "/properties", icon: Building2, section: "MAIN" },
+  { label: "Search", href: "/search", icon: Search, section: "MAIN" },
+
+  // DATA & TOOLS
+  { label: "Data Explorer", href: "/data-explorer", icon: Database, section: "DATA & TOOLS" },
+  { label: "Scraper", href: "/scraper", icon: Bot, section: "DATA & TOOLS" },
+  { label: "Sites", href: "/scraper/sites", icon: Globe, section: "DATA & TOOLS" },
+
+  // ANALYTICS
+  { label: "Analytics", href: "/analytics", icon: BarChart3, section: "ANALYTICS" },
+  { label: "Saved Searches", href: "/saved-searches", icon: Bookmark, section: "ANALYTICS" },
+
+  // SYSTEM
+  { label: "Audit Log", href: "/audit-log", icon: ScrollText, section: "SYSTEM" },
+  { label: "Settings", href: "/settings", icon: Settings, section: "SYSTEM" },
+];
+
+function SidebarContent({ expanded }: { expanded: boolean }) {
+  const pathname = usePathname();
+  const sections = [...new Set(navItems.map((item) => item.section))];
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Logo */}
+      <div className="flex items-center h-16 px-4 border-b" style={{ borderColor: "var(--sidebar-border)" }}>
+        <Image
+          src="/logo.png"
+          alt="RP"
+          width={32}
+          height={32}
+          className="shrink-0"
+        />
+        {expanded && (
+          <span
+            className="ml-3 font-display font-bold text-sm whitespace-nowrap overflow-hidden"
+            style={{ color: "var(--sidebar-foreground)" }}
+          >
+            Realtors&apos; Practice
+          </span>
+        )}
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-6">
+        {sections.map((section) => (
+          <div key={section}>
+            {expanded && (
+              <span
+                className="px-3 text-[10px] font-semibold uppercase tracking-wider"
+                style={{ color: "var(--muted-foreground)" }}
+              >
+                {section}
+              </span>
+            )}
+            <div className="mt-2 space-y-1">
+              {navItems
+                .filter((item) => item.section === section)
+                .map((item) => {
+                  const isActive =
+                    item.href === "/"
+                      ? pathname === "/"
+                      : pathname.startsWith(item.href);
+                  const Icon = item.icon;
+
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={cn(
+                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                        isActive
+                          ? "font-medium"
+                          : "hover:bg-[var(--sidebar-accent)]"
+                      )}
+                      style={{
+                        backgroundColor: isActive ? "var(--sidebar-accent)" : undefined,
+                        color: isActive
+                          ? "var(--sidebar-accent-foreground)"
+                          : "var(--sidebar-foreground)",
+                      }}
+                    >
+                      <Icon className="h-4 w-4 shrink-0" />
+                      {expanded && (
+                        <span className="whitespace-nowrap overflow-hidden">
+                          {item.label}
+                        </span>
+                      )}
+                    </Link>
+                  );
+                })}
+            </div>
+          </div>
+        ))}
+      </nav>
+    </div>
+  );
+}
+
+// Desktop sidebar with hover-to-expand
+export function AppSidebar() {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <aside
+      className="hidden md:flex flex-col h-screen fixed left-0 top-0 z-40 border-r transition-all duration-300"
+      style={{
+        width: expanded ? 240 : 60,
+        backgroundColor: "var(--sidebar)",
+        borderColor: "var(--sidebar-border)",
+      }}
+      onMouseEnter={() => setExpanded(true)}
+      onMouseLeave={() => setExpanded(false)}
+    >
+      <SidebarContent expanded={expanded} />
+    </aside>
+  );
+}
+
+// Mobile sidebar
+export function MobileSidebar() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="md:hidden fixed top-4 left-4 z-50 p-2 rounded-lg"
+        style={{ backgroundColor: "var(--card)", border: "1px solid var(--border)" }}
+      >
+        <Menu className="h-5 w-5" />
+      </button>
+
+      {open && (
+        <>
+          <div
+            className="fixed inset-0 z-50 bg-black/50"
+            onClick={() => setOpen(false)}
+          />
+          <aside
+            className="fixed left-0 top-0 z-50 h-screen w-[240px] border-r"
+            style={{
+              backgroundColor: "var(--sidebar)",
+              borderColor: "var(--sidebar-border)",
+            }}
+          >
+            <button
+              onClick={() => setOpen(false)}
+              className="absolute top-4 right-4"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <SidebarContent expanded={true} />
+          </aside>
+        </>
+      )}
+    </>
+  );
+}

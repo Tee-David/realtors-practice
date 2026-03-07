@@ -1,0 +1,468 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "cockroachdb"
+  url       = env("DATABASE_URL")
+}
+
+// ==================== ENUMS ====================
+
+enum PropertyCategory {
+  RESIDENTIAL
+  COMMERCIAL
+  LAND
+  SHORTLET
+  INDUSTRIAL
+}
+
+enum ListingType {
+  SALE
+  RENT
+  LEASE
+  SHORTLET
+}
+
+enum PropertyStatus {
+  AVAILABLE
+  SOLD
+  RENTED
+  UNDER_OFFER
+  WITHDRAWN
+  EXPIRED
+}
+
+enum VerificationStatus {
+  UNVERIFIED
+  VERIFIED
+  FLAGGED
+  REJECTED
+}
+
+enum Furnishing {
+  FURNISHED
+  SEMI_FURNISHED
+  UNFURNISHED
+  UNKNOWN
+}
+
+enum PropertyCondition {
+  NEW
+  GOOD
+  FAIR
+  NEEDS_RENOVATION
+  UNKNOWN
+}
+
+enum ScrapeJobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum ScrapeJobType {
+  PASSIVE_BULK
+  ACTIVE_INTENT
+  RESCRAPE
+  SCHEDULED
+}
+
+enum UserRole {
+  ADMIN
+  EDITOR
+  VIEWER
+  API_USER
+}
+
+enum ChangeSource {
+  SCRAPER
+  MANUAL_EDIT
+  ENRICHMENT
+  SYSTEM
+}
+
+enum NotificationType {
+  NEW_MATCH
+  PRICE_DROP
+  SCRAPE_COMPLETE
+  SCRAPE_FAILED
+  SYSTEM
+}
+
+// ==================== CORE MODELS ====================
+
+model User {
+  id            String    @id @default(cuid())
+  supabaseId    String    @unique
+  email         String    @unique
+  role          UserRole  @default(VIEWER)
+  isActive      Boolean   @default(true)
+  firstName     String?
+  lastName      String?
+  avatarUrl     String?
+
+  lastLoginAt   DateTime?
+  loginCount    Int       @default(0)
+
+  savedSearches   SavedSearch[]
+  propertyEdits   PropertyVersion[]   @relation("EditedBy")
+  scrapeJobs      ScrapeJob[]         @relation("CreatedBy")
+  notifications   Notification[]
+  auditLogs       AuditLog[]
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  @@index([email])
+  @@index([supabaseId])
+  @@index([role])
+  @@index([deletedAt])
+}
+
+model Site {
+  id              String    @id @default(cuid())
+  key             String    @unique
+  name            String
+  baseUrl         String
+  enabled         Boolean   @default(true)
+  parser          String    @default("universal")
+
+  listPaths       String[]  @default([])
+  selectors       Json?
+  detailSelectors Json?
+  paginationType  String    @default("auto")
+  maxPages        Int       @default(30)
+  requiresBrowser Boolean   @default(false)
+  customHeaders   Json?
+
+  lastScrapeAt    DateTime?
+  lastSuccessAt   DateTime?
+  failCount       Int       @default(0)
+  avgListings     Int       @default(0)
+  healthScore     Float     @default(100)
+
+  properties      Property[]
+  scrapeJobs      ScrapeJob[]
+  scrapeLogs      ScrapeLog[]
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  @@index([key])
+  @@index([enabled])
+  @@index([deletedAt])
+}
+
+model Property {
+  id                  String              @id @default(cuid())
+  hash                String              @unique
+
+  // === BASIC INFO ===
+  title               String
+  listingUrl          String
+  source              String
+  siteId              String
+  site                Site                @relation(fields: [siteId], references: [id])
+  status              PropertyStatus      @default(AVAILABLE)
+  verificationStatus  VerificationStatus  @default(UNVERIFIED)
+  listingType         ListingType
+  category            PropertyCategory    @default(RESIDENTIAL)
+
+  // === PROPERTY DETAILS ===
+  propertyType        String?
+  propertySubtype     String?
+  bedrooms            Int?
+  bathrooms           Int?
+  toilets             Int?
+  bq                  Int?
+  landSize            String?
+  landSizeSqm         Float?
+  buildingSize        String?
+  buildingSizeSqm     Float?
+  plotDimensions      String?
+  yearBuilt           Int?
+  renovationYear      Int?
+  furnishing          Furnishing          @default(UNKNOWN)
+  condition           PropertyCondition   @default(UNKNOWN)
+  floors              Int?
+  unitsAvailable      Int?
+  description         String?
+
+  // === FINANCIAL ===
+  price               Float?
+  priceCurrency       String              @default("NGN")
+  pricePerSqm         Float?
+  pricePerBedroom     Float?
+  initialDeposit      Float?
+  paymentPlan         String?
+  serviceCharge       Float?
+  serviceChargeFreq   String?
+  legalFees           Float?
+  agentCommission     Float?
+  priceNegotiable     Boolean?
+  rentFrequency       String?
+
+  // === LOCATION ===
+  fullAddress         String?
+  locationText        String?
+  estateName          String?
+  streetName          String?
+  area                String?
+  lga                 String?
+  state               String?             @default("Lagos")
+  country             String              @default("Nigeria")
+  latitude            Float?
+  longitude           Float?
+  landmarks           String[]            @default([])
+
+  // === AMENITIES ===
+  features            String[]            @default([])
+  security            String[]            @default([])
+  utilities           String[]            @default([])
+  parkingSpaces       Int?
+
+  // === MEDIA ===
+  images              Json?
+  videos              Json?
+  virtualTourUrl      String?
+  floorPlanUrl        String?
+
+  // === AGENT INFO ===
+  agentName           String?
+  agentPhone          String?
+  agentEmail          String?
+  contactInfo         String?
+  agencyName          String?
+  agencyLogo          String?
+  agentVerified       Boolean             @default(false)
+
+  // === METADATA ===
+  qualityScore        Float?
+  scrapeTimestamp     DateTime?
+  lastVerifiedAt      DateTime?
+  viewCount           Int                 @default(0)
+  inquiryCount        Int                 @default(0)
+  favoriteCount       Int                 @default(0)
+  daysOnMarket        Int?
+  searchKeywords      String[]            @default([])
+
+  // === TAGS ===
+  promoTags           String[]            @default([])
+  titleTag            String?
+  isPremium           Boolean             @default(false)
+  isFeatured          Boolean             @default(false)
+  isHotDeal           Boolean             @default(false)
+
+  // === VERSION TRACKING ===
+  currentVersion      Int                 @default(1)
+
+  // Relations
+  versions            PropertyVersion[]
+  priceHistory        PriceHistory[]
+  savedSearchMatches  SavedSearchMatch[]
+
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  deletedAt           DateTime?
+
+  @@index([hash])
+  @@index([siteId])
+  @@index([status])
+  @@index([listingType])
+  @@index([category])
+  @@index([state, area])
+  @@index([price])
+  @@index([bedrooms])
+  @@index([qualityScore])
+  @@index([createdAt])
+  @@index([updatedAt])
+  @@index([deletedAt])
+  @@index([latitude, longitude])
+  @@index([listingType, category, state, area])
+  @@index([listingType, price])
+  @@index([category, bedrooms, price])
+  @@index([state, area, listingType, price])
+}
+
+model PropertyVersion {
+  id            String        @id @default(cuid())
+  propertyId    String
+  property      Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  version       Int
+  changeSource  ChangeSource
+  changedBy     String?
+  editor        User?         @relation("EditedBy", fields: [changedBy], references: [id])
+  changeSummary String?
+
+  previousData  Json
+  newData       Json
+  changedFields String[]
+
+  createdAt     DateTime      @default(now())
+
+  @@index([propertyId])
+  @@index([propertyId, version])
+  @@index([changeSource])
+  @@index([createdAt])
+}
+
+model PriceHistory {
+  id          String    @id @default(cuid())
+  propertyId  String
+  property    Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  price       Float
+  source      String
+  recordedAt  DateTime  @default(now())
+
+  @@index([propertyId])
+  @@index([propertyId, recordedAt])
+}
+
+// ==================== SCRAPING MODELS ====================
+
+model ScrapeJob {
+  id            String          @id @default(cuid())
+  type          ScrapeJobType
+  status        ScrapeJobStatus @default(PENDING)
+  createdById   String?
+  createdBy     User?           @relation("CreatedBy", fields: [createdById], references: [id])
+
+  siteIds       String[]
+  sites         Site[]
+  parameters    Json?
+
+  searchQuery   String?
+  parsedFilters Json?
+
+  totalListings   Int           @default(0)
+  newListings     Int           @default(0)
+  updatedListings Int           @default(0)
+  duplicates      Int           @default(0)
+  errors          Int           @default(0)
+
+  startedAt     DateTime?
+  completedAt   DateTime?
+  durationMs    Int?
+
+  logs          ScrapeLog[]
+
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model ScrapeLog {
+  id          String    @id @default(cuid())
+  jobId       String
+  job         ScrapeJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  siteId      String?
+  site        Site?     @relation(fields: [siteId], references: [id])
+  level       String
+  message     String
+  details     Json?
+  timestamp   DateTime  @default(now())
+
+  @@index([jobId])
+  @@index([siteId])
+  @@index([level])
+  @@index([timestamp])
+}
+
+// ==================== SAVED SEARCHES & NOTIFICATIONS ====================
+
+model SavedSearch {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String
+  description   String?
+
+  filters       Json
+  naturalQuery  String?
+
+  isActive      Boolean   @default(true)
+  lastCheckedAt DateTime?
+  matchCount    Int       @default(0)
+  newSinceCheck Int       @default(0)
+
+  notifyEmail   Boolean   @default(false)
+  notifyInApp   Boolean   @default(true)
+
+  matches       SavedSearchMatch[]
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([isActive])
+}
+
+model SavedSearchMatch {
+  id            String      @id @default(cuid())
+  savedSearchId String
+  savedSearch   SavedSearch @relation(fields: [savedSearchId], references: [id], onDelete: Cascade)
+  propertyId    String
+  property      Property    @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  matchedAt     DateTime    @default(now())
+  seen          Boolean     @default(false)
+
+  @@unique([savedSearchId, propertyId])
+  @@index([savedSearchId])
+  @@index([propertyId])
+  @@index([matchedAt])
+}
+
+model Notification {
+  id        String            @id @default(cuid())
+  userId    String
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  message   String
+  data      Json?
+  read      Boolean           @default(false)
+  readAt    DateTime?
+  createdAt DateTime          @default(now())
+
+  @@index([userId])
+  @@index([userId, read])
+  @@index([createdAt])
+}
+
+// ==================== AUDIT & SYSTEM ====================
+
+model AuditLog {
+  id          String    @id @default(cuid())
+  userId      String?
+  user        User?     @relation(fields: [userId], references: [id])
+  action      String
+  entity      String
+  entityId    String?
+  details     Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([entity, entityId])
+  @@index([createdAt])
+}
+
+model SystemSetting {
+  id        String    @id @default(cuid())
+  key       String    @unique
+  value     Json
+  category  String
+  updatedAt DateTime  @updatedAt
+
+  @@index([category])
+}

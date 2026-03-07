@@ -1,0 +1,44 @@
+import dotenv from "dotenv";
+import path from "path";
+
+dotenv.config({ path: path.resolve(process.cwd(), ".env") });
+
+if (!process.env.DATABASE_URL) {
+  throw new Error("DATABASE_URL environment variable is required");
+}
+
+if (!process.env.SUPABASE_URL) {
+  throw new Error("SUPABASE_URL environment variable is required");
+}
+
+if (!process.env.SUPABASE_ANON_KEY) {
+  throw new Error("SUPABASE_ANON_KEY environment variable is required");
+}
+
+export const config = {
+  env: process.env.NODE_ENV || "development",
+  port: parseInt(process.env.PORT || "5000", 10),
+  databaseUrl: process.env.DATABASE_URL,
+  supabase: {
+    url: process.env.SUPABASE_URL,
+    anonKey: process.env.SUPABASE_ANON_KEY,
+    serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+  },
+  cors: {
+    origin: process.env.CORS_ORIGIN || "http://localhost:3000",
+  },
+  meilisearch: {
+    url: process.env.MEILISEARCH_URL || "http://localhost:7700",
+    masterKey: process.env.MEILISEARCH_MASTER_KEY || "",
+  },
+  scraper: {
+    url: process.env.SCRAPER_URL || "http://localhost:8000",
+    internalKey: process.env.INTERNAL_API_KEY || "dev-internal-key",
+  },
+  resend: {
+    apiKey: process.env.RESEND_API_KEY || "",
+  },
+  exchangeRate: {
+    apiKey: process.env.EXCHANGERATE_API_KEY || "",
+  },
+};
