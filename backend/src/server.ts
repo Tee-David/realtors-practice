@@ -1,6 +1,8 @@
+import http from "http";
 import app from "./app";
 import { config } from "./config/env";
 import prisma from "./prismaClient";
+import { createSocketServer } from "./socketServer";
 import { Logger } from "./utils/logger.util";
 
 const PORT = config.port;
@@ -30,10 +32,15 @@ async function startServer() {
       }
     }
 
-    app.listen(PORT, () => {
+    // Create HTTP server and attach Socket.io
+    const httpServer = http.createServer(app);
+    createSocketServer(httpServer);
+
+    httpServer.listen(PORT, () => {
       Logger.info(`Server is running on port ${PORT}`);
       Logger.info(`Environment: ${config.env}`);
       Logger.info(`Health check: http://localhost:${PORT}/health`);
+      Logger.info(`Socket.io: ws://localhost:${PORT}/ws`);
     });
   } catch (error) {
     Logger.error("Failed to start server:", error);
@@ -55,3 +62,4 @@ process.on("SIGTERM", async () => {
 });
 
 startServer();
+

@@ -2,6 +2,7 @@
 
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "leaflet/dist/leaflet.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -104,6 +105,53 @@
   --chart-5: #ec4899;
 }
 
+/* Dark mode */
+.dark {
+  --primary: #4d4eff;
+  --primary-foreground: #ffffff;
+
+  --accent: #ff8533;
+  --accent-foreground: #ffffff;
+
+  --success: #22c55e;
+
+  --background: #0f0f13;
+  --foreground: #f0f0f0;
+
+  --card: #1a1a22;
+  --card-foreground: #f0f0f0;
+
+  --popover: #1a1a22;
+  --popover-foreground: #f0f0f0;
+
+  --secondary: #252530;
+  --secondary-foreground: #f0f0f0;
+
+  --muted: #252530;
+  --muted-foreground: #9ca3af;
+
+  --destructive: #ef4444;
+
+  --border: #2d2d3a;
+  --input: #2d2d3a;
+  --ring: #4d4eff;
+
+  --sidebar: #141418;
+  --sidebar-foreground: #f0f0f0;
+  --sidebar-primary: #4d4eff;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #1e1e2e;
+  --sidebar-accent-foreground: #4d4eff;
+  --sidebar-border: #2d2d3a;
+  --sidebar-ring: #4d4eff;
+
+  --chart-1: #4d4eff;
+  --chart-2: #ff8533;
+  --chart-3: #22c55e;
+  --chart-4: #a78bfa;
+  --chart-5: #f472b6;
+}
+
 /* Font utility classes */
 .font-display {
   font-family: "Space Grotesk", sans-serif;
@@ -128,4 +176,19 @@ h1, h2, h3, h4, h5, h6 {
 .price {
   color: var(--accent);
   font-weight: 600;
+}
+
+/* Leaflet custom price markers */
+.custom-price-marker {
+  background: none !important;
+  border: none !important;
+}
+
+/* Hide scrollbar utility */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }

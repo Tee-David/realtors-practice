@@ -5,7 +5,7 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatPrice(price: number | null | undefined): string {
+export function formatPrice(price?: number | null): string {
   if (price == null) return "N/A";
   return new Intl.NumberFormat("en-NG", {
     style: "currency",
@@ -19,7 +19,7 @@ export function formatNumber(num: number): string {
   return new Intl.NumberFormat("en-NG").format(num);
 }
 
-export function truncate(str: string, length: number): string {
-  if (str.length <= length) return str;
-  return str.slice(0, length) + "...";
+/** Pluralize: "1 property" vs "2 properties" */
+export function pluralize(count: number, singular: string, plural?: string): string {
+  return count === 1 ? singular : (plural || singular + "s");
 }

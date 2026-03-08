@@ -54,7 +54,23 @@ export const analytics = {
 export const properties = {
   list: (params?: Record<string, unknown>) => api.get("/properties", { params }),
   get: (id: string) => api.get(`/properties/${id}`),
+  create: (data: Record<string, unknown>) => api.post("/properties", data),
   update: (id: string, data: Record<string, unknown>) => api.put(`/properties/${id}`, data),
+  delete: (id: string) => api.delete(`/properties/${id}`),
+  versions: (id: string, params?: Record<string, unknown>) => api.get(`/properties/${id}/versions`, { params }),
+  priceHistory: (id: string) => api.get(`/properties/${id}/price-history`),
+  enrich: (id: string, data: Record<string, unknown>) => api.patch(`/properties/${id}/enrich`, data),
+  bulkAction: (data: { ids: string[]; action: string }) => api.post("/properties/bulk-action", data),
+  stats: () => api.get("/properties/stats"),
+};
+
+export const sites = {
+  list: (params?: Record<string, unknown>) => api.get("/sites", { params }),
+  get: (id: string) => api.get(`/sites/${id}`),
+  create: (data: Record<string, unknown>) => api.post("/sites", data),
+  update: (id: string, data: Record<string, unknown>) => api.put(`/sites/${id}`, data),
+  toggle: (id: string) => api.patch(`/sites/${id}/toggle`),
+  delete: (id: string) => api.delete(`/sites/${id}`),
 };
 
 export default api;

@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/lib/supabase";
+import { ThemeSwitch } from "@/components/ui/theme-switch";
 import {
   LayoutDashboard,
   Building2,
@@ -18,6 +20,7 @@ import {
   ScrollText,
   Menu,
   X,
+  LogOut,
 } from "lucide-react";
 
 interface NavItem {
@@ -47,28 +50,103 @@ const navItems: NavItem[] = [
   { label: "Settings", href: "/settings", icon: Settings, section: "SYSTEM" },
 ];
 
-function SidebarContent({ expanded }: { expanded: boolean }) {
+const sections = [...new Set(navItems.map((item) => item.section))];
+
+function UserAvatar({ expanded }: { expanded: boolean }) {
+  const initials = "AD";
+  const name = "Admin";
+
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-3 px-3 py-2 rounded-lg",
+        !expanded && "justify-center px-0"
+      )}
+    >
+      <div
+        className="flex items-center justify-center shrink-0 rounded-full font-semibold text-xs select-none"
+        style={{
+          width: 32,
+          height: 32,
+          backgroundColor: "var(--primary)",
+          color: "var(--primary-foreground)",
+        }}
+      >
+        {initials}
+      </div>
+      {expanded && (
+        <span
+          className="text-sm font-medium truncate"
+          style={{ color: "var(--sidebar-foreground)" }}
+        >
+          {name}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function SidebarContent({
+  expanded,
+  onNavClick,
+}: {
+  expanded: boolean;
+  onNavClick?: () => void;
+}) {
   const pathname = usePathname();
-  const sections = [...new Set(navItems.map((item) => item.section))];
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push("/login");
+  };
 
   return (
     <div className="flex flex-col h-full">
       {/* Logo */}
-      <div className="flex items-center h-16 px-4 border-b" style={{ borderColor: "var(--sidebar-border)" }}>
-        <Image
-          src="/logo.png"
-          alt="RP"
-          width={32}
-          height={32}
-          className="shrink-0"
-        />
-        {expanded && (
-          <span
-            className="ml-3 font-display font-bold text-sm whitespace-nowrap overflow-hidden"
-            style={{ color: "var(--sidebar-foreground)" }}
-          >
-            Realtors&apos; Practice
-          </span>
+      <div
+        className={cn(
+          "flex items-center justify-center border-b px-3",
+          !expanded ? "h-20" : "h-16"
+        )}
+        style={{ borderColor: "var(--sidebar-border)" }}
+      >
+        {!expanded ? (
+          <>
+            <Image
+              src="/logo-icon-blue.png"
+              alt="RP"
+              width={40}
+              height={40}
+              className="shrink-0 dark:hidden"
+            />
+            <Image
+              src="/logo-icon-white.png"
+              alt="RP"
+              width={40}
+              height={40}
+              className="shrink-0 hidden dark:block"
+            />
+          </>
+        ) : (
+          <>
+            <Image
+              src="/favicon-blue.png"
+              alt="Realtors' Practice"
+              width={130}
+              height={34}
+              className="shrink-0 dark:hidden"
+              style={{ objectFit: "contain" }}
+            />
+            <Image
+              src="/favicon-white.png"
+              alt="Realtors' Practice"
+              width={130}
+              height={34}
+              className="shrink-0 hidden dark:block"
+              style={{ objectFit: "contain" }}
+            />
+          </>
         )}
       </div>
 
@@ -98,18 +176,23 @@ function SidebarContent({ expanded }: { expanded: boolean }) {
                     <Link
                       key={item.href}
                       href={item.href}
+                      onClick={onNavClick}
                       className={cn(
                         "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                        !expanded && "justify-center px-0",
                         isActive
                           ? "font-medium"
                           : "hover:bg-[var(--sidebar-accent)]"
                       )}
                       style={{
-                        backgroundColor: isActive ? "var(--sidebar-accent)" : undefined,
+                        backgroundColor: isActive
+                          ? "var(--sidebar-accent)"
+                          : undefined,
                         color: isActive
                           ? "var(--sidebar-accent-foreground)"
                           : "var(--sidebar-foreground)",
                       }}
+                      title={!expanded ? item.label : undefined}
                     >
                       <Icon className="h-4 w-4 shrink-0" />
                       {expanded && (
@@ -124,6 +207,41 @@ function SidebarContent({ expanded }: { expanded: boolean }) {
           </div>
         ))}
       </nav>
+
+      {/* Bottom section */}
+      <div
+        className="border-t px-2 py-3 space-y-2"
+        style={{ borderColor: "var(--sidebar-border)" }}
+      >
+        {/* Theme Switch */}
+        <div
+          className={cn(
+            "flex items-center rounded-lg px-3 py-2",
+            !expanded && "justify-center px-0"
+          )}
+        >
+          <ThemeSwitch />
+        </div>
+
+        {/* Profile */}
+        <UserAvatar expanded={expanded} />
+
+        {/* Logout */}
+        <button
+          onClick={handleLogout}
+          className={cn(
+            "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors w-full hover:bg-[var(--sidebar-accent)]",
+            !expanded && "justify-center px-0"
+          )}
+          style={{ color: "var(--sidebar-foreground)" }}
+          title={!expanded ? "Logout" : undefined}
+        >
+          <LogOut className="h-4 w-4 shrink-0" />
+          {expanded && (
+            <span className="whitespace-nowrap overflow-hidden">Logout</span>
+          )}
+        </button>
+      </div>
     </div>
   );
 }
@@ -148,16 +266,23 @@ export function AppSidebar() {
   );
 }
 
-// Mobile sidebar
-export function MobileSidebar() {
-  const [open, setOpen] = useState(false);
-
+// Mobile sidebar — accepts open/onOpenChange props for external control
+export function MobileSidebar({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   return (
     <>
       <button
-        onClick={() => setOpen(true)}
+        onClick={() => onOpenChange(true)}
         className="md:hidden fixed top-4 left-4 z-50 p-2 rounded-lg"
-        style={{ backgroundColor: "var(--card)", border: "1px solid var(--border)" }}
+        style={{
+          backgroundColor: "var(--card)",
+          border: "1px solid var(--border)",
+        }}
       >
         <Menu className="h-5 w-5" />
       </button>
@@ -166,7 +291,7 @@ export function MobileSidebar() {
         <>
           <div
             className="fixed inset-0 z-50 bg-black/50"
-            onClick={() => setOpen(false)}
+            onClick={() => onOpenChange(false)}
           />
           <aside
             className="fixed left-0 top-0 z-50 h-screen w-[240px] border-r"
@@ -176,12 +301,16 @@ export function MobileSidebar() {
             }}
           >
             <button
-              onClick={() => setOpen(false)}
-              className="absolute top-4 right-4"
+              onClick={() => onOpenChange(false)}
+              className="absolute top-4 right-4 z-10"
+              style={{ color: "var(--sidebar-foreground)" }}
             >
               <X className="h-5 w-5" />
             </button>
-            <SidebarContent expanded={true} />
+            <SidebarContent
+              expanded={true}
+              onNavClick={() => onOpenChange(false)}
+            />
           </aside>
         </>
       )}

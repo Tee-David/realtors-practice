@@ -1,0 +1,558 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { cn } from "@/lib/utils";
+import type { LucideIcon } from "lucide-react";
+import { useCompany } from "@/contexts/CompanyContext";
+import { getSafeImageUrl } from "@/lib/image-utils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
+import {
+  BarChart3,
+  Users,
+  Key,
+  User,
+  Building2,
+  ChevronRight,
+  ChevronDown,
+  Clipboard,
+  Receipt,
+  CreditCard,
+  Settings,
+  FileType,
+  Folder,
+  Menu,
+  X,
+  HandCoins,
+  Banknote,
+  Activity,
+  ArrowRightLeft,
+  MessageSquare,
+  TrendingUp,
+  UserCheck,
+  FileSpreadsheet,
+  Upload,
+  Download,
+  Target,
+  FileText,
+  LayoutDashboard,
+  UsersRound,
+  Briefcase,
+  PieChart,
+  Cog,
+  PanelLeftClose,
+  PanelLeft,
+} from "lucide-react";
+import Image from "next/image";
+import { UserRole } from "@/lib/enum";
+
+export interface NavItem {
+  name: string;
+  href: string;
+  icon: LucideIcon;
+  children?: NavItem[];
+  roles?: UserRole[];
+  badge?: string;
+  badgeVariant?: "default" | "success" | "warning" | "danger";
+}
+
+export interface NavigationData {
+  main: NavItem[];
+  sections: { title: string; items: NavItem[]; icon?: LucideIcon }[];
+}
+
+const navigationData: NavigationData = {
+  main: [
+    {
+      name: "Dashboard",
+      href: "/dashboard",
+      icon: LayoutDashboard,
+      roles: [UserRole.CREDIT_OFFICER, UserRole.ADMIN, UserRole.SUPERVISOR],
+    },
+  ],
+  sections: [
+    {
+      title: "Staff",
+      icon: UsersRound,
+      items: [
+        {
+          name: "Users & Roles",
+          href: "/dashboard/staff-management/users",
+          icon: Users,
+          roles: [UserRole.ADMIN, UserRole.SUPERVISOR],
+        },
+      ],
+    },
+    {
+      title: "Business",
+      icon: Briefcase,
+      items: [
+        {
+          name: "Unions",
+          href: "/dashboard/business-management/union",
+          icon: Building2,
+          roles: [UserRole.ADMIN, UserRole.SUPERVISOR],
+        },
+        {
+          name: "Union Assignment",
+          href: "/dashboard/business-management/union-assignment",
+          icon: UserCheck,
+          roles: [UserRole.ADMIN, UserRole.SUPERVISOR],
+        },
+        {
+          name: "Members",
+          href: "/dashboard/business-management/customer",
+          icon: User,
+          roles: [UserRole.CREDIT_OFFICER, UserRole.ADMIN, UserRole.SUPERVISOR],
+        },
+        {
+          name: "Loans",
+          href: "/dashboard/business-management/loan",
+          icon: Banknote,
+          roles: [UserRole.CREDIT_OFFICER, UserRole.ADMIN, UserRole.SUPERVISOR],
+        },
+        {
+          name: "Repayments",
+          href: "/dashboard/business-management/loan-payment/repayment",
+          icon: Receipt,
+          roles: [UserRole.CREDIT_OFFICER, UserRole.ADMIN, UserRole.SUPERVISOR],
+        },
+        {
+          name: "Schedules",
+          href: "/dashboard/business-management/loan-payment/repayment-schedules",
+          icon: Clipboard,
+          roles: [UserRole.CREDIT_OFFICER, UserRole.ADMIN, UserRole.SUPERVISOR],
+        },
+      ],
+    },
+    {
+      title: "Analytics",
+      icon: PieChart,
+      items: [
+        {
+          name: "Supervisor Reports",
+          href: "/dashboard/supervisor-reports",
+          icon: Target,
+          roles: [UserRole.ADMIN, UserRole.SUPERVISOR],
+        },
+        // {
+        //   name: "Analytics Dashboard",
+        //   href: "/dashboard/analytics",
+        //   icon: TrendingUp,
+        //   roles: [UserRole.ADMIN, UserRole.SUPERVISOR],
+        // },
+      ],
+    },
+    {
+      title: "Configuration",
+      icon: Cog,
+      items: [
+        {
+          name: "Loan Types",
+          href: "/dashboard/system-configuration/loan-type",
+          icon: FileType,
+          roles: [UserRole.ADMIN],
+        },
+        {
+          name: "Document Types",
+          href: "/dashboard/system-configuration/document-type",
+          icon: Folder,
+          roles: [UserRole.ADMIN],
+        },
+        {
+          name: "Audit Logs",
+          href: "/dashboard/system-configuration/audit-logs",
+          icon: Activity,
+          roles: [UserRole.ADMIN, UserRole.SUPERVISOR],
+        },
+        {
+          name: "Settings",
+          href: "/dashboard/settings",
+          icon: Settings,
+          roles: [UserRole.ADMIN],
+        },
+      ],
+    },
+  ],
+};
+
+interface SidebarProps {
+  isCollapsed: boolean;
+  onToggle: () => void;
+  isMobile?: boolean;
+  isOpen?: boolean;
+  userRoles?: UserRole[] | UserRole;
+  onNavigation?: () => void;
+}
+
+function normalizeUserRoles(userRoles?: UserRole[] | UserRole): UserRole[] {
+  if (!userRoles) return [];
+  return Array.isArray(userRoles) ? userRoles : [userRoles];
+}
+
+function filterNavItemsByRoles(
+  items: NavItem[],
+  userRoles: UserRole[]
+): NavItem[] {
+  return items
+    .filter((item) => {
+      if (!item.roles) return true;
+      return item.roles.some((role) => userRoles.includes(role));
+    })
+    .map((item) => ({
+      ...item,
+      children: item.children
+        ? filterNavItemsByRoles(item.children, userRoles)
+        : undefined,
+    }))
+    .filter((item) => !(item.children && item.children.length === 0));
+}
+
+export function Sidebar({
+  isCollapsed,
+  onToggle,
+  isMobile = false,
+  isOpen = false,
+  userRoles,
+  onNavigation,
+}: SidebarProps) {
+  const pathname = usePathname();
+  const [expandedSections, setExpandedSections] = useState<string[]>([]);
+  const [hoveredSection, setHoveredSection] = useState<string | null>(null);
+  const { logo } = useCompany();
+
+  const rolesArray = normalizeUserRoles(userRoles);
+
+  // Auto-expand section containing active item
+  useEffect(() => {
+    const activeSection = navigationData.sections.find((section) =>
+      section.items.some(
+        (item) =>
+          pathname === item.href ||
+          pathname.startsWith(item.href + "/") ||
+          item.children?.some(
+            (child) =>
+              pathname === child.href || pathname.startsWith(child.href + "/")
+          )
+      )
+    );
+    if (activeSection && !expandedSections.includes(activeSection.title)) {
+      setExpandedSections((prev) => [...prev, activeSection.title]);
+    }
+  }, [pathname]);
+
+  const toggleSection = (sectionTitle: string) => {
+    setExpandedSections((prev) =>
+      prev.includes(sectionTitle)
+        ? prev.filter((t) => t !== sectionTitle)
+        : [...prev, sectionTitle]
+    );
+  };
+
+  const isActive = (href: string) =>
+    pathname === href || pathname.startsWith(href + "/");
+
+  const filteredMain = filterNavItemsByRoles(navigationData.main, rolesArray);
+  const filteredSections = navigationData.sections
+    .map((section) => ({
+      ...section,
+      items: filterNavItemsByRoles(section.items, rolesArray),
+    }))
+    .filter((section) => section.items.length > 0);
+
+  const renderNavItem = (item: NavItem, isNested = false) => {
+    const IconComponent = item.icon;
+    const active = isActive(item.href);
+
+    const linkContent = (
+      <Link
+        href={item.href}
+        onClick={() => {
+          if (isMobile && onNavigation) {
+            onNavigation();
+          }
+        }}
+        className={cn(
+          "group relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200",
+          isNested ? "py-2" : "",
+          active
+            ? "bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-lg shadow-green-500/25"
+            : "text-gray-600 hover:text-gray-900 hover:bg-gray-100/80"
+        )}
+      >
+        {/* Active indicator line */}
+        {active && (
+          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-white/40 rounded-full" />
+        )}
+        <div
+          className={cn(
+            "flex items-center justify-center transition-all duration-200",
+            active ? "text-white" : "text-gray-500 group-hover:text-green-600"
+          )}
+        >
+          <IconComponent className={cn(isNested ? "w-4 h-4" : "w-5 h-5")} />
+        </div>
+        {(!isCollapsed || isMobile) && (
+          <span className="flex-1 truncate">{item.name}</span>
+        )}
+        {item.badge && (!isCollapsed || isMobile) && (
+          <span
+            className={cn(
+              "px-2 py-0.5 text-xs font-semibold rounded-full",
+              item.badgeVariant === "success" && "bg-green-100 text-green-700",
+              item.badgeVariant === "warning" && "bg-amber-100 text-amber-700",
+              item.badgeVariant === "danger" && "bg-red-100 text-red-700",
+              (!item.badgeVariant || item.badgeVariant === "default") &&
+                "bg-gray-100 text-gray-700"
+            )}
+          >
+            {item.badge}
+          </span>
+        )}
+      </Link>
+    );
+
+    // Wrap in tooltip when collapsed
+    if (isCollapsed && !isMobile) {
+      return (
+        <TooltipProvider key={item.name} delayDuration={0}>
+          <Tooltip>
+            <TooltipTrigger asChild>{linkContent}</TooltipTrigger>
+            <TooltipContent
+              side="right"
+              className="font-medium bg-gray-900 text-white border-0"
+            >
+              {item.name}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    }
+
+    return <div key={item.name}>{linkContent}</div>;
+  };
+
+  const renderSection = (section: {
+    title: string;
+    items: NavItem[];
+    icon?: LucideIcon;
+  }) => {
+    const SectionIcon = section.icon || Folder;
+    const isExpanded = expandedSections.includes(section.title);
+    const isHovered = hoveredSection === section.title;
+    const hasActiveItem = section.items.some((item) => isActive(item.href));
+
+    if (isCollapsed && !isMobile) {
+      // Collapsed view - show only icons with tooltips
+      return (
+        <div key={section.title} className="space-y-1 mb-3">
+          {/* Section divider with icon */}
+          <TooltipProvider delayDuration={0}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex justify-center py-2">
+                  <div
+                    className={cn(
+                      "p-1.5 rounded-lg transition-colors",
+                      hasActiveItem ? "bg-green-50" : "bg-gray-100"
+                    )}
+                  >
+                    <SectionIcon
+                      className={cn(
+                        "w-4 h-4",
+                        hasActiveItem ? "text-green-600" : "text-gray-400"
+                      )}
+                    />
+                  </div>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent
+                side="right"
+                className="font-semibold bg-gray-900 text-white border-0"
+              >
+                {section.title}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          {section.items.map((item) => renderNavItem(item))}
+        </div>
+      );
+    }
+
+    return (
+      <div
+        key={section.title}
+        className="mb-3"
+        onMouseEnter={() => setHoveredSection(section.title)}
+        onMouseLeave={() => setHoveredSection(null)}
+      >
+        {/* Section Header */}
+        <button
+          onClick={() => toggleSection(section.title)}
+          className={cn(
+            "w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all duration-200 mb-1",
+            hasActiveItem || isExpanded
+              ? "text-gray-900 bg-gray-100/60"
+              : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+          )}
+        >
+          <div
+            className={cn(
+              "flex items-center justify-center p-1 rounded-lg transition-all duration-200",
+              hasActiveItem
+                ? "bg-green-100"
+                : isHovered
+                ? "bg-gray-200"
+                : "bg-transparent"
+            )}
+          >
+            <SectionIcon
+              className={cn(
+                "w-4 h-4 transition-colors",
+                hasActiveItem ? "text-green-600" : "text-gray-400"
+              )}
+            />
+          </div>
+          <span className="flex-1 text-left uppercase tracking-wider text-xs">
+            {section.title}
+          </span>
+          <ChevronDown
+            className={cn(
+              "w-4 h-4 text-gray-400 transition-transform duration-200",
+              isExpanded ? "rotate-180" : ""
+            )}
+          />
+        </button>
+
+        {/* Section Items with animation */}
+        <div
+          className={cn(
+            "overflow-hidden transition-all duration-300 ease-in-out",
+            isExpanded ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"
+          )}
+        >
+          <div className="pl-2 space-y-1 pt-1">
+            {section.items.map((item) => renderNavItem(item, true))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <TooltipProvider>
+      <aside
+        className={cn(
+          "bg-white/95 backdrop-blur-sm border-r border-gray-200/80 transition-all duration-300 flex flex-col h-screen relative",
+          isMobile ? "w-72" : isCollapsed ? "w-[72px]" : "w-64",
+          "max-w-[85vw] sm:max-w-none shadow-sm"
+        )}
+      >
+        {/* Header */}
+        <div className="p-5 border-b border-gray-200/80 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3 min-h-[120px]">
+              {/* Logo */}
+              <Image
+                src={(logo ? getSafeImageUrl(logo) : null) || "/logo.png"}
+                alt="Company Logo"
+                width={isCollapsed && !isMobile ? 56 : 240}
+                height={120}
+                className={cn(
+                  "object-contain transition-all duration-300",
+                  isCollapsed && !isMobile ? "h-14 w-14" : "h-28 w-full"
+                )}
+                priority
+                key={logo}
+                style={{
+                  width: isCollapsed && !isMobile ? "56px" : "100%",
+                  height: isCollapsed && !isMobile ? "56px" : "112px",
+                  maxWidth: "100%",
+                }}
+                onError={(e) => {
+                  e.currentTarget.src = "/logo.png";
+                }}
+              />
+            </div>
+
+            {isMobile && (
+              <button
+                onClick={onToggle}
+                className="p-2 rounded-xl hover:bg-gray-100 transition-colors"
+                aria-label="Close sidebar"
+              >
+                <X className="w-5 h-5 text-gray-600" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 py-4 px-3 overflow-y-auto overscroll-contain scrollbar-thin scrollbar-thumb-gray-200 scrollbar-track-transparent">
+          {/* Main Navigation */}
+          <div className="space-y-1 mb-4">
+            {filteredMain.map((item) => renderNavItem(item))}
+          </div>
+
+          {/* Divider */}
+          {filteredMain.length > 0 && filteredSections.length > 0 && (
+            <div className="mx-2 mb-4">
+              <div className="h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent" />
+            </div>
+          )}
+
+          {/* Sections */}
+          <div className="space-y-1">
+            {filteredSections.map((section) => renderSection(section))}
+          </div>
+        </nav>
+
+        {/* Footer - Collapse toggle */}
+        {!isMobile && (
+          <div className="p-3 border-t border-gray-200/80">
+            <TooltipProvider delayDuration={0}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={onToggle}
+                    className={cn(
+                      "w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200",
+                      "text-gray-500 hover:text-gray-700 hover:bg-gray-100 active:scale-95"
+                    )}
+                    aria-label={
+                      isCollapsed ? "Expand sidebar" : "Collapse sidebar"
+                    }
+                  >
+                    {isCollapsed ? (
+                      <PanelLeft className="w-5 h-5" />
+                    ) : (
+                      <>
+                        <PanelLeftClose className="w-5 h-5" />
+                        <span>Collapse</span>
+                      </>
+                    )}
+                  </button>
+                </TooltipTrigger>
+                {isCollapsed && (
+                  <TooltipContent
+                    side="right"
+                    className="font-medium bg-gray-900 text-white border-0"
+                  >
+                    Expand sidebar
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+        )}
+      </aside>
+    </TooltipProvider>
+  );
+}

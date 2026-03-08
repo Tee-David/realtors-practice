@@ -1,0 +1,394 @@
+"use client";
+
+import { useState, useCallback, useMemo } from "react";
+import { PropertyGrid } from "@/components/property/property-grid";
+import { PropertyListCard } from "@/components/property/property-list-card";
+import { CategoryPills } from "@/components/property/category-pills";
+import { DynamicPropertyMap } from "@/components/property/property-map-dynamic";
+import { PropertyDetailPanel } from "@/components/property/property-detail-panel";
+import { PropertyFilterSheet } from "@/components/property/property-filter-sheet";
+import { Pagination } from "@/components/property/pagination";
+import { useProperties } from "@/hooks/useProperties";
+import {
+  LayoutGrid,
+  List,
+  Map,
+  SlidersHorizontal,
+  Search,
+  ChevronDown,
+  X,
+  Grid2x2,
+  Grid3x3,
+} from "lucide-react";
+import {
+  SideSheet,
+  SideSheetContent,
+} from "@/components/ui/side-sheet";
+import type { PropertyFilters, Property } from "@/types/property";
+
+const DEFAULT_FILTERS: PropertyFilters = {
+  page: 1,
+  limit: 24,
+  sortBy: "createdAt",
+  sortOrder: "desc",
+};
+
+const SORT_OPTIONS = [
+  { value: "createdAt", label: "Newest" },
+  { value: "price", label: "Price" },
+  { value: "qualityScore", label: "Quality" },
+  { value: "bedrooms", label: "Bedrooms" },
+];
+
+const GRID_OPTIONS = [2, 3, 4, 5, 6] as const;
+const PER_PAGE_OPTIONS = [12, 24, 48, 96] as const;
+
+/** Pluralize a word: "property" -> "properties", with correct singular */
+function pluralize(count: number, singular: string, plural?: string): string {
+  return count === 1 ? singular : (plural || singular + "s");
+}
+
+export default function PropertiesPage() {
+  const [filters, setFilters] = useState<PropertyFilters>(DEFAULT_FILTERS);
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [gridCols, setGridCols] = useState(4);
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
+  const [hoveredPropertyId, setHoveredPropertyId] = useState<string | null>(null);
+  const [showMap, setShowMap] = useState(true);
+
+  const { data, isLoading } = useProperties(filters);
+
+  const properties = data?.data || [];
+  const total = data?.meta?.total || 0;
+  const totalPages = data?.meta?.totalPages || 1;
+
+  const selectedProperty = useMemo(
+    () => properties.find((p: Property) => p.id === selectedPropertyId) || null,
+    [properties, selectedPropertyId]
+  );
+
+  const handleFilterChange = useCallback((newFilters: PropertyFilters) => {
+    setFilters(newFilters);
+  }, []);
+
+  const handleCardClick = useCallback((id: string) => {
+    setSelectedPropertyId(id);
+  }, []);
+
+  const handleMarkerClick = useCallback((id: string) => {
+    setSelectedPropertyId(id);
+  }, []);
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (filters.listingType) count++;
+    if (filters.category) count++;
+    if (filters.minPrice || filters.maxPrice) count++;
+    if (filters.minBedrooms) count++;
+    if (filters.area) count++;
+    if (filters.search) count++;
+    if (filters.state) count++;
+    return count;
+  }, [filters]);
+
+  return (
+    <div className="space-y-4">
+      {/* Category pills */}
+      <CategoryPills
+        value={filters.category}
+        onChange={(category) => handleFilterChange({ ...filters, category, page: 1 })}
+      />
+
+      {/* Toolbar */}
+      <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+        {/* Search input */}
+        <div
+          className="flex items-center gap-2 px-3 py-2 rounded-xl flex-1 min-w-[180px]"
+          style={{ backgroundColor: "var(--card)", border: "1px solid var(--border)" }}
+        >
+          <Search size={16} style={{ color: "var(--muted-foreground)" }} />
+          <input
+            type="text"
+            placeholder="Search properties..."
+            value={filters.search || ""}
+            onChange={(e) => handleFilterChange({ ...filters, search: e.target.value || undefined, page: 1 })}
+            className="bg-transparent text-sm w-full outline-none placeholder:text-[var(--muted-foreground)]"
+            style={{ color: "var(--foreground)" }}
+          />
+          {filters.search && (
+            <button onClick={() => handleFilterChange({ ...filters, search: undefined, page: 1 })}>
+              <X size={14} style={{ color: "var(--muted-foreground)" }} />
+            </button>
+          )}
+        </div>
+
+        {/* Results count */}
+        <span className="text-sm font-medium hidden lg:block" style={{ color: "var(--muted-foreground)" }}>
+          {total > 0 ? `${total.toLocaleString()} ${pluralize(total, "property", "properties")}` : ""}
+        </span>
+
+        {/* Sort dropdown */}
+        <div className="relative">
+          <select
+            value={filters.sortBy}
+            onChange={(e) => handleFilterChange({ ...filters, sortBy: e.target.value, page: 1 })}
+            className="text-xs px-3 py-2 pr-7 rounded-xl border outline-none font-medium appearance-none cursor-pointer"
+            style={{
+              backgroundColor: "var(--card)",
+              color: "var(--foreground)",
+              borderColor: "var(--border)",
+            }}
+          >
+            {SORT_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          <ChevronDown
+            size={12}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
+            style={{ color: "var(--muted-foreground)" }}
+          />
+        </div>
+
+        {/* Sort order */}
+        <button
+          onClick={() =>
+            handleFilterChange({
+              ...filters,
+              sortOrder: filters.sortOrder === "asc" ? "desc" : "asc",
+            })
+          }
+          className="text-xs px-3 py-2 rounded-xl font-medium border"
+          style={{
+            backgroundColor: "var(--card)",
+            color: "var(--foreground)",
+            borderColor: "var(--border)",
+          }}
+        >
+          {filters.sortOrder === "asc" ? "↑ Asc" : "↓ Desc"}
+        </button>
+
+        {/* View mode toggle */}
+        <div
+          className="flex rounded-xl overflow-hidden border"
+          style={{ borderColor: "var(--border)" }}
+        >
+          <button
+            onClick={() => setViewMode("grid")}
+            className="p-2 transition-colors"
+            style={{
+              backgroundColor: viewMode === "grid" ? "var(--primary)" : "var(--card)",
+              color: viewMode === "grid" ? "var(--primary-foreground)" : "var(--muted-foreground)",
+            }}
+          >
+            <LayoutGrid size={16} />
+          </button>
+          <button
+            onClick={() => setViewMode("list")}
+            className="p-2 transition-colors"
+            style={{
+              backgroundColor: viewMode === "list" ? "var(--primary)" : "var(--card)",
+              color: viewMode === "list" ? "var(--primary-foreground)" : "var(--muted-foreground)",
+            }}
+          >
+            <List size={16} />
+          </button>
+        </div>
+
+        {/* Grid column selector — only in grid mode */}
+        {viewMode === "grid" && (
+          <div
+            className="hidden sm:flex items-center rounded-xl overflow-hidden border"
+            style={{ borderColor: "var(--border)" }}
+          >
+            {GRID_OPTIONS.map((n) => (
+              <button
+                key={n}
+                onClick={() => setGridCols(n)}
+                className="px-2.5 py-2 text-[10px] font-bold transition-colors"
+                style={{
+                  backgroundColor: gridCols === n ? "var(--primary)" : "var(--card)",
+                  color: gridCols === n ? "var(--primary-foreground)" : "var(--muted-foreground)",
+                }}
+                title={`${n} columns`}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Map toggle */}
+        <button
+          onClick={() => setShowMap(!showMap)}
+          className="p-2 rounded-xl border transition-colors"
+          style={{
+            backgroundColor: showMap ? "var(--primary)" : "var(--card)",
+            color: showMap ? "var(--primary-foreground)" : "var(--muted-foreground)",
+            borderColor: showMap ? "var(--primary)" : "var(--border)",
+          }}
+          title={showMap ? "Hide map" : "Show map"}
+        >
+          <Map size={16} />
+        </button>
+
+        {/* Filter button */}
+        <button
+          onClick={() => setFilterSheetOpen(true)}
+          className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium border transition-colors"
+          style={{
+            backgroundColor: activeFilterCount > 0 ? "var(--primary)" : "var(--card)",
+            color: activeFilterCount > 0 ? "var(--primary-foreground)" : "var(--foreground)",
+            borderColor: activeFilterCount > 0 ? "var(--primary)" : "var(--border)",
+          }}
+        >
+          <SlidersHorizontal size={16} />
+          <span className="hidden sm:inline">Filters</span>
+          {activeFilterCount > 0 && (
+            <span
+              className="w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center"
+              style={{
+                backgroundColor: "var(--primary-foreground)",
+                color: "var(--primary)",
+              }}
+            >
+              {activeFilterCount}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Main content: Cards + Map split */}
+      <div className="flex gap-4">
+        {/* Cards panel — scrollable */}
+        <div
+          className="flex-1 min-w-0 overflow-y-auto scrollbar-none"
+          style={{ maxHeight: "calc(100vh - 180px)" }}
+        >
+          {viewMode === "grid" ? (
+            <PropertyGrid
+              properties={properties}
+              isLoading={isLoading}
+              selectedId={selectedPropertyId}
+              onHover={setHoveredPropertyId}
+              onClick={handleCardClick}
+              columns={showMap ? Math.min(gridCols, 3) : gridCols}
+              emptyMessage="No properties match your filters. Try adjusting your search criteria."
+            />
+          ) : (
+            <div className="space-y-3">
+              {isLoading ? (
+                <div className="flex items-center justify-center py-20">
+                  <div
+                    className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin"
+                    style={{ borderColor: "var(--primary)", borderTopColor: "transparent" }}
+                  />
+                </div>
+              ) : properties.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 gap-3">
+                  <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+                    No properties match your filters.
+                  </p>
+                </div>
+              ) : (
+                properties.map((property: Property) => (
+                  <PropertyListCard
+                    key={property.id}
+                    property={property}
+                    isActive={selectedPropertyId === property.id}
+                    onHover={setHoveredPropertyId}
+                    onClick={handleCardClick}
+                  />
+                ))
+              )}
+            </div>
+          )}
+
+          {/* Pagination + per-page selector */}
+          <div className="flex items-center justify-between flex-wrap gap-3 pt-4">
+            <div className="flex items-center gap-2">
+              <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>Show</span>
+              <select
+                value={filters.limit || 24}
+                onChange={(e) => handleFilterChange({ ...filters, limit: Number(e.target.value), page: 1 })}
+                className="text-xs px-2 py-1 rounded-lg border outline-none font-medium appearance-none cursor-pointer"
+                style={{
+                  backgroundColor: "var(--card)",
+                  color: "var(--foreground)",
+                  borderColor: "var(--border)",
+                }}
+              >
+                {PER_PAGE_OPTIONS.map((n) => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+              <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>per page</span>
+            </div>
+
+            <Pagination
+              page={filters.page || 1}
+              totalPages={totalPages}
+              onPageChange={(p) => handleFilterChange({ ...filters, page: p })}
+            />
+          </div>
+        </div>
+
+        {/* Map panel — responsive, full height, toggleable */}
+        {showMap && (
+          <div className="hidden md:block w-[38%] lg:w-[42%] shrink-0">
+            <div
+              className="sticky top-0 rounded-xl overflow-hidden"
+              style={{ height: "calc(100vh - 180px)" }}
+            >
+              <DynamicPropertyMap
+                properties={properties}
+                hoveredId={hoveredPropertyId}
+                onMarkerClick={handleMarkerClick}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Mobile map — full width below cards when toggled on small screens */}
+      {showMap && (
+        <div className="md:hidden rounded-xl overflow-hidden" style={{ height: "50vh" }}>
+          <DynamicPropertyMap
+            properties={properties}
+            hoveredId={hoveredPropertyId}
+            onMarkerClick={handleMarkerClick}
+          />
+        </div>
+      )}
+
+      {/* Left side-sheet: Filters */}
+      <PropertyFilterSheet
+        open={filterSheetOpen}
+        onOpenChange={setFilterSheetOpen}
+        filters={filters}
+        onChange={handleFilterChange}
+        total={total}
+      />
+
+      {/* Right side-sheet: Property detail */}
+      <SideSheet
+        open={!!selectedProperty}
+        onOpenChange={(open) => { if (!open) setSelectedPropertyId(null); }}
+        side="right"
+        width="420px"
+      >
+        <SideSheetContent>
+          {selectedProperty && (
+            <PropertyDetailPanel
+              property={selectedProperty}
+              onClose={() => setSelectedPropertyId(null)}
+            />
+          )}
+        </SideSheetContent>
+      </SideSheet>
+    </div>
+  );
+}
