@@ -1,14 +1,11 @@
-FROM python:3.11-slim
+# Use official Playwright Python image which includes all OS dependencies + browsers out of the box
+FROM mcr.microsoft.com/playwright/python:v1.52.0-jammy
 
 WORKDIR /app
 
-# Install Python dependencies first (they change less often)
+# Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-
-# Install Playwright browsers and their OS dependencies
-RUN playwright install chromium
-RUN playwright install-deps chromium
 
 COPY . .
 
