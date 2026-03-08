@@ -946,10 +946,10 @@ export default function DashboardPage() {
       <div>
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6 relative">
           <h2
-            className="font-display font-semibold text-lg sm:text-xl"
+            className="font-display font-semibold text-lg sm:text-xl whitespace-nowrap"
             style={{ color: "var(--foreground)" }}
           >
-            Recently <br className="hidden sm:block" /> Listed
+            Recently Listed
           </h2>
           
           {/* Tabs - Centered Absolute on Desktop, Flow on Mobile */}
