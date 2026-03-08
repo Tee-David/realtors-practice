@@ -7,6 +7,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Eye, EyeOff, ArrowRight, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { ThemeSwitch } from "@/components/ui/theme-switch";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -42,15 +43,29 @@ export default function LoginPage() {
   return (
     <div className="w-full max-w-[400px] flex flex-col min-h-[calc(100vh-80px)] lg:min-h-0">
       <div className="flex-1 flex flex-col justify-center">
-        {/* Mobile logo — only visible on small screens */}
-        <div className="flex items-center justify-start mb-10 lg:hidden">
-          <Image 
-            src="/logo-mobile-new.png" 
-            alt="Realtors' Practice" 
-            width={140} 
-            height={36} 
-            style={{ objectFit: "contain" }}
-          />
+        {/* Mobile logo & Theme switch — only visible on small screens */}
+        <div className="flex items-center justify-between mb-10 lg:hidden w-full">
+          <div className="relative">
+            <Image 
+              src="/favicon-blue.png" 
+              alt="Realtors' Practice" 
+              width={140} 
+              height={40} 
+              style={{ objectFit: "contain" }}
+              className="dark:hidden"
+            />
+            <Image 
+              src="/favicon-white.png" 
+              alt="Realtors' Practice" 
+              width={140} 
+              height={40} 
+              style={{ objectFit: "contain" }}
+              className="hidden dark:block"
+            />
+          </div>
+          <div className="scale-75 origin-right">
+            <ThemeSwitch />
+          </div>
         </div>
 
         {/* Header */}
