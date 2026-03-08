@@ -6,7 +6,7 @@ export default function AuthLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen grid lg:grid-cols-2" style={{ backgroundColor: "var(--background)" }}>
+    <div className="min-h-screen grid lg:grid-cols-[65fr_35fr]" style={{ backgroundColor: "var(--background)" }}>
       {/* Left: Visual panel — hidden on mobile */}
       <AuthVisualPanel />
 

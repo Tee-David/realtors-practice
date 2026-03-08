@@ -713,7 +713,7 @@ export default function DashboardPage() {
       
       {/* Header */}
       <motion.div 
-        className="flex items-center justify-between flex-wrap gap-4"
+        className="flex items-center justify-between flex-wrap gap-4 mt-2"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.2 }}
@@ -742,7 +742,7 @@ export default function DashboardPage() {
       </motion.div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div data-tour="kpi-cards" className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {[
           {
             label: "Total Properties",
@@ -847,6 +847,7 @@ export default function DashboardPage() {
       >
         {/* Category Distribution */}
         <div
+          data-tour="category-chart"
           className="rounded-xl p-6 shadow-sm"
           style={{ backgroundColor: "var(--card)" }}
         >
@@ -1026,7 +1027,7 @@ export default function DashboardPage() {
       />
 
       {/* Recently Listed */}
-      <div>
+      <div data-tour="explore-section">
         <div className="flex flex-row items-center justify-between w-full mb-6 relative gap-2 sm:gap-4 overflow-x-auto no-scrollbar">
           <h2
             className="font-display font-semibold text-[15px] sm:text-xl shrink-0 whitespace-nowrap"

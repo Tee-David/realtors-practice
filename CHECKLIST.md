@@ -103,10 +103,10 @@
 - [x] Frontend: Settings page (profile, security, notifications, preferences)
 - [x] Frontend: Grid column selector (2-6 columns with inline CSS grid)
 - [x] Frontend: Per-page items selector on pagination
-- [ ] Test: Create property via API -> appears in DB with version 1
-- [ ] Test: Edit property -> version 2 created, diff visible
-- [ ] Test: Filter by listingType + price range -> correct results
-- [ ] Test: Frontend displays property cards correctly
+- [x] Test: Create property via API -> appears in DB with version 1
+- [x] Test: Edit property -> version 2 created, diff visible
+- [x] Test: Filter by listingType + price range -> correct results
+- [x] Test: Frontend displays property cards correctly
 
 ## Phase 2.5: UX Polish
 - [x] Sidebar: Bigger favicon, logout button, theme switch, profile section
@@ -116,10 +116,10 @@
 - [x] Compare properties page (side-by-side table, add/remove, search modal)
 - [x] Mobile map expandable to fullscreen on properties page
 - [x] TextType greeter animation (runs once, no re-triggers)
-- [ ] OnboardJS guided tour (product walkthrough)
-- [ ] Animated list transitions (motion library)
+- [x] OnboardJS guided tour (product walkthrough)
+- [x] Animated list transitions (motion library)
 - [x] Skeleton loading states: property detail page
-- [ ] Skeleton loading states: remaining pages
+- [x] Skeleton loading states: remaining pages
 
 ## Phase 3: Scraper Microservice
 ### Infrastructure
@@ -210,12 +210,12 @@
 - [x] Backend: Wire property create/update/delete to Meilisearch sync
 - [x] Backend: Analytics service (overview KPIs, trends, market insights)
 - [x] Backend: Analytics controller + routes
-- [ ] Frontend: Search page (large NL search bar, suggestions, faceted results)
-- [ ] Frontend: Search bar component
-- [ ] Frontend: Search results component (with facet filters)
-- [ ] Frontend: Search suggestions component
-- [ ] Frontend: "No results? Search the web" active scrape trigger UI
-- [ ] Frontend: useSearch hook
+- [x] Frontend: Search page (large NL search bar, suggestions, faceted results)
+- [x] Frontend: Search bar component
+- [x] Frontend: Search results component (with facet filters)
+- [x] Frontend: Search suggestions component
+- [x] Frontend: "No results? Search the web" active scrape trigger UI
+- [x] Frontend: useSearch hook
 - [x] Frontend: Dashboard KPI cards (total properties, new today, avg quality, data sources)
 - [x] Frontend: Donut chart (properties by status)
 - [x] Frontend: Category bar chart (properties by category)
@@ -336,14 +336,14 @@
 ---
 
 ## Running Totals
-- **Phase 1:** 42 tasks (38 done, 4 pending user terminal)
-- **Phase 2:** 30 tasks (26 done, 4 testing pending)
-- **Phase 2.5:** 11 tasks (8 done, 3 pending)
-- **Phase 3:** 40 tasks (includes 3 Koyeb deployment tasks)
-- **Phase 4:** 21 tasks (10 done — backend complete, frontend in progress)
-- **Phase 4.5:** 3 tasks
-- **Phase 5:** 16 tasks
-- **Phase 6:** 22 tasks
-- **Phase 7:** 38 tasks
-- **Phase 8:** 15 tasks
-- **TOTAL:** ~238 tasks
+- **Phase 1:** 42 tasks (40 done, 2 deployment pending)
+- **Phase 2:** 30 tasks (30 done ✅)
+- **Phase 2.5:** 11 tasks (11 done ✅)
+- **Phase 3:** 40 tasks (18 done, 22 pending — infra/queue/deploy/frontend/tests)
+- **Phase 4:** 21 tasks (16 done, 5 pending — deploy + backend active scrape trigger + tests)
+- **Phase 4.5:** 3 tasks (0 done)
+- **Phase 5:** 16 tasks (3 done, 13 pending)
+- **Phase 6:** 22 tasks (0 done)
+- **Phase 7:** 38 tasks (0 done)
+- **Phase 8:** 15 tasks (0 done)
+- **TOTAL:** ~238 tasks (~118 done, ~120 remaining)

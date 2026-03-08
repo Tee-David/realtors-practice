@@ -36,6 +36,12 @@ export class SearchController {
       return sendSuccess(res, result, "Search successful");
     } catch (error: any) {
       Logger.error(`SearchController.search error: ${error.message}`);
+      
+      // Graceful fallback if Meilisearch is down
+      if (error.message && error.message.includes("failed")) {
+        return sendSuccess(res, { hits: [], nbHits: 0, facets: {} }, "Search unavailable (Meilisearch down)");
+      }
+      
       return sendError(res, "Search failed", 500, error.message);
     }
   }
@@ -53,6 +59,12 @@ export class SearchController {
       return sendSuccess(res, suggestions, "Suggestions fetched");
     } catch (error: any) {
       Logger.error(`SearchController.getSuggestions error: ${error.message}`);
+      
+      // Graceful fallback if Meilisearch is down
+      if (error.message && error.message.includes("failed")) {
+        return sendSuccess(res, [], "Suggestions unavailable (Meilisearch down)");
+      }
+      
       return sendError(res, "Suggestions failed", 500, error.message);
     }
   }

@@ -77,4 +77,9 @@ export const sites = {
   delete: (id: string) => api.delete(`/sites/${id}`),
 };
 
+export const search = {
+  search: (params?: Record<string, unknown>) => api.get("/search", { params }),
+  suggestions: (params?: Record<string, unknown>) => api.get("/search/suggestions", { params }),
+};
+
 export default api;

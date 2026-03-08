@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { AppSidebar, MobileSidebar } from "@/components/layout/app-sidebar";
 import { MobileBottomNav } from "@/components/layout/mobile-bottom-nav";
 import { TopBar } from "@/components/layout/top-bar";
+import { TourProvider } from "@/components/ui/tour-provider";
 
 export default function DashboardLayout({
   children,
@@ -28,7 +29,12 @@ export default function DashboardLayout({
   return (
     <div className="min-h-screen" style={{ backgroundColor: "var(--background)" }}>
       {/* Desktop sidebar — hidden on mobile, shown on md+ */}
-      <AppSidebar />
+      <div data-tour="sidebar">
+        <AppSidebar />
+      </div>
+
+      {/* Guided Tour */}
+      <TourProvider />
 
       {/* Desktop/Mobile top bar */}
       <TopBar title={title} onOpenSidebar={() => setMobileSidebarOpen(true)} />

@@ -1,0 +1,196 @@
+"use client";
+
+import { motion } from "framer-motion";
+import { PropertyCard } from "@/components/property/property-card";
+import { PropertyListCard } from "@/components/property/property-list-card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { SearchX, List, LayoutGrid, SlidersHorizontal, Bookmark } from "lucide-react";
+import { toast } from "sonner";
+import { formatNumber } from "@/lib/utils";
+import type { Property } from "@/types/property";
+
+interface FacetDistribution {
+  [key: string]: { [value: string]: number };
+}
+
+interface SearchResultsProps {
+  hits: Property[];
+  totalHits: number;
+  query: string;
+  facets?: FacetDistribution;
+  isLoading?: boolean;
+  onPropertyClick?: (id: string) => void;
+  onPropertyHover?: (id: string | null) => void;
+  onFacetChange?: (facetKey: string, facetValue: string) => void;
+  activeFilters?: string[];
+}
+
+const containerVariants = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.05 } },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 12 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.25 } },
+};
+
+export function SearchResults({
+  hits,
+  totalHits,
+  query,
+  facets,
+  isLoading,
+  onPropertyClick,
+  onPropertyHover,
+  onFacetChange,
+  activeFilters = [],
+}: SearchResultsProps) {
+  const [viewMode, setViewMode] = React.useState<"grid" | "list">("grid");
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-6 w-48" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }, (_, i) => (
+            <div key={i} className="rounded-2xl overflow-hidden" style={{ backgroundColor: "var(--card)" }}>
+              <Skeleton className="aspect-[4/3] w-full" />
+              <div className="p-4 space-y-3">
+                <Skeleton className="h-4 w-4/5" />
+                <Skeleton className="h-5 w-1/2" />
+                <Skeleton className="h-3 w-3/5" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Results header */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <h2 className="font-display font-bold text-lg" style={{ color: "var(--foreground)" }}>
+            <span style={{ color: "var(--primary)" }}>{formatNumber(totalHits)}</span>{" "}
+            {totalHits === 1 ? "Result" : "Results"}
+          </h2>
+          {query && (
+            <span className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+              for &ldquo;{query}&rdquo;
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-3">
+          {/* Save Search Button */}
+          {query && (
+            <button
+              onClick={() => toast.success(`Saved search: "${query}"`)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+              style={{ color: "var(--primary)" }}
+            >
+              <Bookmark size={15} />
+              Save Search
+            </button>
+          )}
+
+          {/* View toggles */}
+          <div
+            className="flex items-center rounded-lg p-0.5"
+            style={{ backgroundColor: "var(--secondary)" }}
+          >
+            {([
+              { mode: "grid" as const, icon: LayoutGrid },
+              { mode: "list" as const, icon: List },
+            ]).map(({ mode, icon: Icon }) => (
+              <button
+                key={mode}
+                onClick={() => setViewMode(mode)}
+                className="p-1.5 rounded-md transition-colors"
+                style={{
+                  backgroundColor: viewMode === mode ? "var(--card)" : "transparent",
+                  color: viewMode === mode ? "var(--foreground)" : "var(--muted-foreground)",
+                }}
+              >
+                <Icon size={16} />
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Facet pills */}
+      {facets && Object.keys(facets).length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <SlidersHorizontal size={14} style={{ color: "var(--muted-foreground)" }} />
+          {Object.entries(facets).map(([facetKey, facetValues]) =>
+            Object.entries(facetValues)
+              .sort(([, a], [, b]) => b - a)
+              .slice(0, 5)
+              .map(([value, count]) => {
+                const isActive = activeFilters.includes(`${facetKey} = ${value}`);
+                return (
+                  <button
+                    key={`${facetKey}-${value}`}
+                    onClick={() => onFacetChange?.(facetKey, value)}
+                    className="px-3 py-1.5 rounded-full text-xs font-medium transition-colors"
+                    style={{
+                      backgroundColor: isActive ? "var(--primary)" : "var(--secondary)",
+                      color: isActive ? "#fff" : "var(--foreground)",
+                    }}
+                  >
+                    {value.replace("_", " ")} ({count})
+                  </button>
+                );
+              })
+          )}
+        </div>
+      )}
+
+      {/* Results grid / list */}
+      {hits.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 gap-3">
+          <SearchX size={48} strokeWidth={1} style={{ color: "var(--muted-foreground)" }} />
+          <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+            No properties match your search
+          </p>
+        </div>
+      ) : (
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+          className={
+            viewMode === "grid"
+              ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+              : "flex flex-col gap-3"
+          }
+        >
+          {hits.map((property) => (
+            <motion.div key={property.id} variants={itemVariants}>
+              {viewMode === "grid" ? (
+                <PropertyCard
+                  property={property}
+                  onClick={onPropertyClick}
+                  onHover={onPropertyHover}
+                />
+              ) : (
+                <PropertyListCard
+                  property={property}
+                  onClick={onPropertyClick}
+                  onHover={onPropertyHover}
+                />
+              )}
+            </motion.div>
+          ))}
+        </motion.div>
+      )}
+    </div>
+  );
+}
+
+// Need React for useState
+import React from "react";

@@ -47,18 +47,18 @@ export default function LoginPage() {
         <div className="flex items-center justify-between mb-10 lg:hidden w-full -ml-4">
           <div className="relative">
             <Image 
-              src="/favicon-blue.png" 
+              src="/hlogo-blue.png" 
               alt="Realtors' Practice" 
-              width={140} 
-              height={40} 
+              width={180} 
+              height={45} 
               style={{ objectFit: "contain" }}
               className="dark:hidden"
             />
             <Image 
-              src="/favicon-white.png" 
+              src="/hlogo-white.png" 
               alt="Realtors' Practice" 
-              width={140} 
-              height={40} 
+              width={180} 
+              height={45} 
               style={{ objectFit: "contain" }}
               className="hidden dark:block"
             />

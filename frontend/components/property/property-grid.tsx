@@ -1,5 +1,6 @@
 "use client";
 
+import { motion, AnimatePresence } from "framer-motion";
 import { PropertyCard } from "./property-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SearchX } from "lucide-react";
@@ -16,6 +17,26 @@ interface PropertyGridProps {
   /** Number of grid columns (responsive via CSS) or a className string */
   columns?: number | string;
 }
+
+const containerVariants = {
+  hidden: {},
+  visible: {
+    transition: {
+      staggerChildren: 0.04,
+    },
+  },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 16, scale: 0.97 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] as const },
+  },
+  exit: { opacity: 0, y: -8, transition: { duration: 0.15 } },
+};
 
 function getGridStyle(cols: number): React.CSSProperties {
   return {
@@ -57,12 +78,17 @@ export function PropertyGrid({ properties, isLoading, emptyMessage, selectedId, 
 
   if (!properties || properties.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 gap-3">
+      <motion.div
+        className="flex flex-col items-center justify-center py-20 gap-3"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+      >
         <SearchX size={48} strokeWidth={1} style={{ color: "var(--muted-foreground)" }} />
         <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
           {emptyMessage || "No properties found"}
         </p>
-      </div>
+      </motion.div>
     );
   }
 
@@ -70,17 +96,27 @@ export function PropertyGrid({ properties, isLoading, emptyMessage, selectedId, 
   const gridClass = typeof columns === "string" ? columns : undefined;
 
   return (
-    <div className={gridClass} style={gridStyle}>
-      {properties.map((property) => (
-        <PropertyCard
-          key={property.id}
-          property={property}
-          isActive={selectedId === property.id}
-          onFavorite={onFavorite}
-          onHover={onHover}
-          onClick={onClick}
-        />
-      ))}
-    </div>
+    <AnimatePresence mode="wait">
+      <motion.div
+        className={gridClass}
+        style={gridStyle}
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+        key={properties.map((p) => p.id).join(",")}
+      >
+        {properties.map((property) => (
+          <motion.div key={property.id} variants={itemVariants} layout>
+            <PropertyCard
+              property={property}
+              isActive={selectedId === property.id}
+              onFavorite={onFavorite}
+              onHover={onHover}
+              onClick={onClick}
+            />
+          </motion.div>
+        ))}
+      </motion.div>
+    </AnimatePresence>
   );
 }
