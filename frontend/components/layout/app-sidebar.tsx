@@ -106,8 +106,8 @@ function SidebarContent({
       {/* Logo */}
       <div
         className={cn(
-          "flex items-center justify-center border-b",
-          !expanded ? "h-20 px-0.5" : "h-16 px-3"
+          "flex items-center border-b",
+          !expanded ? "h-20 px-0.5 justify-center" : "h-16 px-4 justify-start"
         )}
         style={{ borderColor: "var(--sidebar-border)" }}
       >
@@ -133,16 +133,16 @@ function SidebarContent({
             <Image
               src="/favicon-blue.png"
               alt="Realtors' Practice"
-              width={130}
-              height={34}
+              width={112}
+              height={29}
               className="shrink-0 dark:hidden"
               style={{ objectFit: "contain" }}
             />
             <Image
               src="/favicon-white.png"
               alt="Realtors' Practice"
-              width={130}
-              height={34}
+              width={112}
+              height={29}
               className="shrink-0 hidden dark:block"
               style={{ objectFit: "contain" }}
             />
@@ -281,8 +281,9 @@ export function MobileSidebar({
           >
             <button
               onClick={() => onOpenChange(false)}
-              className="absolute top-4 right-4 z-10"
+              className="absolute top-3 right-3 z-10 p-2 rounded-full transition-colors hover:bg-black/5 dark:hover:bg-white/10"
               style={{ color: "var(--sidebar-foreground)" }}
+              aria-label="Close sidebar"
             >
               <X className="h-5 w-5" />
             </button>
