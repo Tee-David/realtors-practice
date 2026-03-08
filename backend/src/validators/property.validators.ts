@@ -6,8 +6,14 @@ export const listPropertiesSchema = z.object({
   sortBy: z.enum(["createdAt", "updatedAt", "price", "qualityScore", "bedrooms", "daysOnMarket"]).default("createdAt"),
   sortOrder: z.enum(["asc", "desc"]).default("desc"),
   // Filters
-  listingType: z.enum(["SALE", "RENT", "LEASE", "SHORTLET"]).optional(),
-  category: z.enum(["RESIDENTIAL", "COMMERCIAL", "LAND", "SHORTLET", "INDUSTRIAL"]).optional(),
+  listingType: z.union([
+    z.enum(["SALE", "RENT", "LEASE", "SHORTLET"]),
+    z.array(z.enum(["SALE", "RENT", "LEASE", "SHORTLET"]))
+  ]).optional().transform(val => val ? (Array.isArray(val) ? val : [val]) : undefined),
+  category: z.union([
+    z.enum(["RESIDENTIAL", "COMMERCIAL", "LAND", "SHORTLET", "INDUSTRIAL"]),
+    z.array(z.enum(["RESIDENTIAL", "COMMERCIAL", "LAND", "SHORTLET", "INDUSTRIAL"]))
+  ]).optional().transform(val => val ? (Array.isArray(val) ? val : [val]) : undefined),
   status: z.enum(["AVAILABLE", "SOLD", "RENTED", "UNDER_OFFER", "WITHDRAWN", "EXPIRED"]).optional(),
   verificationStatus: z.enum(["UNVERIFIED", "VERIFIED", "FLAGGED", "REJECTED"]).optional(),
   minPrice: z.coerce.number().min(0).optional(),
@@ -16,7 +22,7 @@ export const listPropertiesSchema = z.object({
   maxBedrooms: z.coerce.number().int().min(0).optional(),
   minBathrooms: z.coerce.number().int().min(0).optional(),
   state: z.string().optional(),
-  area: z.string().optional(),
+  area: z.union([z.string(), z.array(z.string())]).optional().transform(val => val ? (Array.isArray(val) ? val : [val]) : undefined),
   lga: z.string().optional(),
   siteId: z.string().optional(),
   propertyType: z.string().optional(),

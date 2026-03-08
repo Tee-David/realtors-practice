@@ -116,15 +116,15 @@ function SidebarContent({
             <Image
               src="/logo-icon-blue.png"
               alt="RP"
-              width={56}
-              height={56}
+              width={72}
+              height={72}
               className="shrink-0 dark:hidden"
             />
             <Image
               src="/logo-icon-white.png"
               alt="RP"
-              width={56}
-              height={56}
+              width={72}
+              height={72}
               className="shrink-0 hidden dark:block"
             />
           </>
@@ -290,11 +290,11 @@ export function MobileSidebar({
       {open && (
         <>
           <div
-            className="fixed inset-0 z-50 bg-black/50"
+            className="fixed inset-0 z-[60] bg-black/50"
             onClick={() => onOpenChange(false)}
           />
           <aside
-            className="fixed left-0 top-0 z-50 h-screen w-[240px] border-r"
+            className="fixed left-0 top-0 z-[60] h-screen w-[240px] border-r"
             style={{
               backgroundColor: "var(--sidebar)",
               borderColor: "var(--sidebar-border)",

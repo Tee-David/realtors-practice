@@ -19,12 +19,14 @@ export class PropertyService {
 
     const where: Prisma.PropertyWhereInput = { deletedAt: null };
 
-    if (listingType) where.listingType = listingType;
-    if (category) where.category = category;
+    if (listingType && listingType.length > 0) where.listingType = { in: listingType as any };
+    if (category && category.length > 0) where.category = { in: category as any };
     if (status) where.status = status;
     if (verificationStatus) where.verificationStatus = verificationStatus;
     if (state) where.state = state;
-    if (area) where.area = { contains: area, mode: "insensitive" };
+    if (area && area.length > 0) {
+      where.OR = area.map(a => ({ area: { contains: a, mode: "insensitive" } }));
+    }
     if (lga) where.lga = { contains: lga, mode: "insensitive" };
     if (siteId) where.siteId = siteId;
     if (propertyType) where.propertyType = { contains: propertyType, mode: "insensitive" };

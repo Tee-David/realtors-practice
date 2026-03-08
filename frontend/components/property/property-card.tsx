@@ -56,7 +56,7 @@ export function PropertyCard({ property, isActive, onFavorite, onHover, onClick 
   const {
     id, title, category, listingType, price, rentFrequency,
     bedrooms, bathrooms, area, state, locationText,
-    images, qualityScore, isPremium, isHotDeal, promoTags,
+    images, qualityScore, isPremium, isHotDeal, promoTags = [],
   } = property;
 
   const imageUrl = Array.isArray(images) && images.length > 0
@@ -122,7 +122,7 @@ export function PropertyCard({ property, isActive, onFavorite, onHover, onClick 
           </div>
 
           {/* Promo tags row */}
-          {(isPremium || isHotDeal || promoTags.length > 0) && (
+          {(isPremium || isHotDeal || (promoTags && promoTags.length > 0)) && (
             <div className="absolute top-12 left-3 flex flex-wrap gap-1.5">
               {isPremium && (
                 <span
@@ -140,7 +140,7 @@ export function PropertyCard({ property, isActive, onFavorite, onHover, onClick 
                   Hot Deal
                 </span>
               )}
-              {promoTags.slice(0, 2).map((tag) => (
+              {(promoTags || []).slice(0, 2).map((tag) => (
                 <span
                   key={tag}
                   className="flex items-center gap-0.5 px-2 py-0.5 rounded text-[10px] font-medium backdrop-blur-md"
@@ -196,16 +196,16 @@ export function PropertyCard({ property, isActive, onFavorite, onHover, onClick 
           </h3>
 
           {/* Price */}
-          <div className="flex items-baseline gap-1.5">
+          <div className="flex items-baseline flex-wrap gap-x-1.5 gap-y-0.5">
             <span
-              className="font-display font-bold text-lg"
+              className="font-display font-bold text-base sm:text-lg"
               style={{ color: "var(--accent)" }}
             >
               {formatPrice(price)}
             </span>
             {rentFrequency && (
               <span
-                className="text-xs font-medium"
+                className="text-[10px] sm:text-xs font-medium"
                 style={{ color: "var(--muted-foreground)" }}
               >
                 /{rentFrequency}
@@ -218,28 +218,28 @@ export function PropertyCard({ property, isActive, onFavorite, onHover, onClick 
 
           {/* Details footer */}
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4 text-xs" style={{ color: "var(--muted-foreground)" }}>
+            <div className="flex items-center gap-2 sm:gap-4 text-[10px] sm:text-xs" style={{ color: "var(--muted-foreground)" }}>
               {bedrooms != null && (
                 <span className="flex items-center gap-1">
-                  <BedDouble size={14} strokeWidth={1.5} />
+                  <BedDouble size={14} strokeWidth={1.5} className="shrink-0" />
                   <span className="font-medium" style={{ color: "var(--foreground)" }}>{bedrooms}</span>
-                  Bed{bedrooms !== 1 ? "s" : ""}
+                  <span className="hidden xs:inline">Beds</span>
                 </span>
               )}
               {bathrooms != null && (
                 <span className="flex items-center gap-1">
-                  <Bath size={14} strokeWidth={1.5} />
+                  <Bath size={14} strokeWidth={1.5} className="shrink-0" />
                   <span className="font-medium" style={{ color: "var(--foreground)" }}>{bathrooms}</span>
-                  Bath
+                  <span className="hidden xs:inline">Baths</span>
                 </span>
               )}
               {(property.landSizeSqm || property.buildingSizeSqm) && (
                 <span className="flex items-center gap-1">
-                  <Maximize2 size={13} strokeWidth={1.5} />
+                  <Maximize2 size={13} strokeWidth={1.5} className="shrink-0" />
                   <span className="font-medium" style={{ color: "var(--foreground)" }}>
                     {Math.round(property.landSizeSqm || property.buildingSizeSqm || 0)}
                   </span>
-                  sqm
+                  <span className="hidden xs:inline">sqm</span>
                 </span>
               )}
             </div>

@@ -42,7 +42,8 @@ const SORT_OPTIONS = [
   { value: "bedrooms", label: "Bedrooms" },
 ];
 
-const GRID_OPTIONS = [2, 3, 4, 5, 6] as const;
+const DESKTOP_GRID_OPTIONS = [2, 3, 4, 5, 6] as const;
+const MOBILE_GRID_OPTIONS = [1, 2, 3] as const;
 const PER_PAGE_OPTIONS = [12, 24, 48, 96] as const;
 
 /** Pluralize a word: "property" -> "properties", with correct singular */
@@ -53,7 +54,7 @@ function pluralize(count: number, singular: string, plural?: string): string {
 export default function PropertiesPage() {
   const [filters, setFilters] = useState<PropertyFilters>(DEFAULT_FILTERS);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [gridCols, setGridCols] = useState(4);
+  const [gridCols, setGridCols] = useState(3);
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
   const [hoveredPropertyId, setHoveredPropertyId] = useState<string | null>(null);
@@ -85,11 +86,11 @@ export default function PropertiesPage() {
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
-    if (filters.listingType) count++;
-    if (filters.category) count++;
+    if (filters.listingType && filters.listingType.length > 0) count++;
+    if (filters.category && filters.category.length > 0) count++;
     if (filters.minPrice || filters.maxPrice) count++;
     if (filters.minBedrooms) count++;
-    if (filters.area) count++;
+    if (filters.area && filters.area.length > 0) count++;
     if (filters.search) count++;
     if (filters.state) count++;
     return count;
@@ -105,6 +106,31 @@ export default function PropertiesPage() {
 
       {/* Toolbar */}
       <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+        {/* Filter button - Moved to start */}
+        <button
+          onClick={() => setFilterSheetOpen(true)}
+          className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium border transition-colors shrink-0"
+          style={{
+            backgroundColor: activeFilterCount > 0 ? "var(--primary)" : "var(--card)",
+            color: activeFilterCount > 0 ? "var(--primary-foreground)" : "var(--foreground)",
+            borderColor: activeFilterCount > 0 ? "var(--primary)" : "var(--border)",
+          }}
+        >
+          <SlidersHorizontal size={16} />
+          <span className="hidden sm:inline">Filters</span>
+          {activeFilterCount > 0 && (
+            <span
+              className="w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center"
+              style={{
+                backgroundColor: "var(--primary-foreground)",
+                color: "var(--primary)",
+              }}
+            >
+              {activeFilterCount}
+            </span>
+          )}
+        </button>
+
         {/* Search input */}
         <div
           className="flex items-center gap-2 px-3 py-2 rounded-xl flex-1 min-w-[180px]"
@@ -201,17 +227,40 @@ export default function PropertiesPage() {
           </button>
         </div>
 
-        {/* Grid column selector — only in grid mode */}
+        {/* Grid column selector — Desktop */}
         {viewMode === "grid" && (
           <div
             className="hidden sm:flex items-center rounded-xl overflow-hidden border"
             style={{ borderColor: "var(--border)" }}
           >
-            {GRID_OPTIONS.map((n) => (
+            {DESKTOP_GRID_OPTIONS.map((n) => (
               <button
                 key={n}
                 onClick={() => setGridCols(n)}
                 className="px-2.5 py-2 text-[10px] font-bold transition-colors"
+                style={{
+                  backgroundColor: gridCols === n ? "var(--primary)" : "var(--card)",
+                  color: gridCols === n ? "var(--primary-foreground)" : "var(--muted-foreground)",
+                }}
+                title={`${n} columns`}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Grid column selector — Mobile */}
+        {viewMode === "grid" && (
+          <div
+            className="flex sm:hidden items-center rounded-xl overflow-hidden border"
+            style={{ borderColor: "var(--border)" }}
+          >
+            {MOBILE_GRID_OPTIONS.map((n) => (
+              <button
+                key={n}
+                onClick={() => setGridCols(n)}
+                className="px-3 py-2 text-[11px] font-bold transition-colors"
                 style={{
                   backgroundColor: gridCols === n ? "var(--primary)" : "var(--card)",
                   color: gridCols === n ? "var(--primary-foreground)" : "var(--muted-foreground)",
@@ -237,31 +286,6 @@ export default function PropertiesPage() {
         >
           <Map size={16} />
         </button>
-
-        {/* Filter button */}
-        <button
-          onClick={() => setFilterSheetOpen(true)}
-          className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium border transition-colors"
-          style={{
-            backgroundColor: activeFilterCount > 0 ? "var(--primary)" : "var(--card)",
-            color: activeFilterCount > 0 ? "var(--primary-foreground)" : "var(--foreground)",
-            borderColor: activeFilterCount > 0 ? "var(--primary)" : "var(--border)",
-          }}
-        >
-          <SlidersHorizontal size={16} />
-          <span className="hidden sm:inline">Filters</span>
-          {activeFilterCount > 0 && (
-            <span
-              className="w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center"
-              style={{
-                backgroundColor: "var(--primary-foreground)",
-                color: "var(--primary)",
-              }}
-            >
-              {activeFilterCount}
-            </span>
-          )}
-        </button>
       </div>
 
       {/* Main content: Cards + Map split */}
@@ -278,7 +302,7 @@ export default function PropertiesPage() {
               selectedId={selectedPropertyId}
               onHover={setHoveredPropertyId}
               onClick={handleCardClick}
-              columns={showMap ? Math.min(gridCols, 3) : gridCols}
+              columns={showMap ? Math.min(gridCols, 2) : gridCols}
               emptyMessage="No properties match your filters. Try adjusting your search criteria."
             />
           ) : (

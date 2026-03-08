@@ -401,13 +401,6 @@ async function main() {
     const listingUrl = `${site.baseUrl}/listing/${count + 1}`;
     const propHash = hash(prop.title, listingUrl, site.key);
 
-    const existing = await prisma.property.findUnique({ where: { hash: propHash } });
-    if (existing) {
-      console.log(`  Skip (exists): ${prop.title}`);
-      count++;
-      continue;
-    }
-
     // Quality score calculation
     let qs = 0;
     if (prop.title.length > 20) qs += 10;
@@ -421,8 +414,14 @@ async function main() {
     if (prop.features && prop.features.length >= 3) qs += 5;
     if (prop.landSizeSqm || prop.buildingSizeSqm) qs += 4;
 
-    const property = await prisma.property.create({
-      data: {
+    const property = await prisma.property.upsert({
+      where: { hash: propHash },
+      update: {
+        images: prop.images || [],
+        videos: (prop as any).videos || [],
+        qualityScore: Math.min(qs, 100),
+      },
+      create: {
         hash: propHash,
         title: prop.title,
         listingUrl,
@@ -442,6 +441,8 @@ async function main() {
         buildingSizeSqm: prop.buildingSizeSqm,
         rentFrequency: prop.rentFrequency,
         locationText: `${prop.area}, ${prop.state}`,
+        images: prop.images || [],
+        videos: (prop as any).videos || [],
         qualityScore: Math.min(qs, 100),
         scrapeTimestamp: new Date(),
         daysOnMarket: Math.floor(Math.random() * 90),

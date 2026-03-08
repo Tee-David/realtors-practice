@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { MapPin, BedDouble, Bath, Maximize2, Phone, Mail, User, ExternalLink, X } from "lucide-react";
 import { formatPrice } from "@/lib/utils";
 import type { Property } from "@/types/property";
+import AnimatedCounter from "@/components/ui/animated-counter";
 
 const STATUS_STYLES: Record<string, { bg: string; color: string }> = {
   AVAILABLE: { bg: "#dcfce7", color: "#166534" },
@@ -74,11 +75,15 @@ export function PropertyDetailPanel({ property, onClose }: PropertyDetailPanelPr
         </div>
       </div>
 
-      {/* Price */}
       <div className="rounded-xl p-4" style={{ backgroundColor: "var(--secondary)" }}>
-        <span className="font-display font-bold text-2xl" style={{ color: "var(--accent)" }}>
-          {formatPrice(property.price)}
-        </span>
+        <AnimatedCounter
+          value={property.price || 0}
+          fontSize={24}
+          fontWeight={700}
+          textColor="var(--accent)"
+          compact={true}
+          prefix="₦"
+        />
         {property.rentFrequency && (
           <span className="text-sm ml-1" style={{ color: "var(--muted-foreground)" }}>/{property.rentFrequency}</span>
         )}
@@ -89,23 +94,32 @@ export function PropertyDetailPanel({ property, onClose }: PropertyDetailPanelPr
         {property.bedrooms != null && (
           <div className="text-center rounded-xl p-3" style={{ backgroundColor: "var(--secondary)" }}>
             <BedDouble size={18} className="mx-auto mb-1" style={{ color: "var(--primary)" }} />
-            <p className="font-display font-bold" style={{ color: "var(--foreground)" }}>{property.bedrooms}</p>
+            <div className="flex justify-center">
+              <AnimatedCounter value={property.bedrooms} fontSize={16} fontWeight={700} textColor="var(--foreground)" />
+            </div>
             <p className="text-[10px]" style={{ color: "var(--muted-foreground)" }}>Beds</p>
           </div>
         )}
         {property.bathrooms != null && (
           <div className="text-center rounded-xl p-3" style={{ backgroundColor: "var(--secondary)" }}>
             <Bath size={18} className="mx-auto mb-1" style={{ color: "var(--primary)" }} />
-            <p className="font-display font-bold" style={{ color: "var(--foreground)" }}>{property.bathrooms}</p>
+            <div className="flex justify-center">
+              <AnimatedCounter value={property.bathrooms} fontSize={16} fontWeight={700} textColor="var(--foreground)" />
+            </div>
             <p className="text-[10px]" style={{ color: "var(--muted-foreground)" }}>Baths</p>
           </div>
         )}
         {(property.landSizeSqm || property.buildingSizeSqm) && (
           <div className="text-center rounded-xl p-3" style={{ backgroundColor: "var(--secondary)" }}>
             <Maximize2 size={18} className="mx-auto mb-1" style={{ color: "var(--primary)" }} />
-            <p className="font-display font-bold" style={{ color: "var(--foreground)" }}>
-              {Math.round(property.landSizeSqm || property.buildingSizeSqm || 0)}
-            </p>
+            <div className="flex justify-center">
+              <AnimatedCounter 
+                value={Math.round(property.landSizeSqm || property.buildingSizeSqm || 0)} 
+                fontSize={16} 
+                fontWeight={700} 
+                textColor="var(--foreground)" 
+              />
+            </div>
             <p className="text-[10px]" style={{ color: "var(--muted-foreground)" }}>Sqm</p>
           </div>
         )}
@@ -122,11 +136,11 @@ export function PropertyDetailPanel({ property, onClose }: PropertyDetailPanelPr
       )}
 
       {/* Features */}
-      {property.features.length > 0 && (
+      {property.features && property.features.length > 0 && (
         <div>
           <h4 className="font-display font-semibold text-sm mb-2" style={{ color: "var(--foreground)" }}>Features</h4>
           <div className="flex flex-wrap gap-1.5">
-            {property.features.slice(0, 8).map((f: string) => (
+            {(property.features || []).slice(0, 8).map((f: string) => (
               <span
                 key={f}
                 className="px-2.5 py-1 rounded-lg text-xs"

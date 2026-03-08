@@ -500,11 +500,13 @@ function PropertyOverviewTable({
                     ? property.images[0]
                     : null;
                 const statusColor = STATUS_COLORS[property.status] || "#9ca3af";
-                const createdDate = new Date(property.createdAt).toLocaleDateString("en-NG", {
-                  day: "numeric",
-                  month: "short",
-                  year: "numeric",
-                });
+                const createdDate = property.createdAt && !isNaN(new Date(property.createdAt).getTime())
+                  ? new Date(property.createdAt).toLocaleDateString("en-NG", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })
+                  : "Recently";
 
                 return (
                   <tr
@@ -631,8 +633,8 @@ export default function DashboardPage() {
   // MERGE API Data with MOCK Data for demonstration if API is empty
   const allProperties = apiProperties.length > 0 ? apiProperties : MOCK_PROPERTIES;
 
-  const recentProperties = allProperties.filter(
-    (p) => p.listingType === recentTab
+  const recentProperties = (allProperties || []).filter(
+    (p) => p && p.listingType === recentTab
   );
 
   const total = stats?.total || (apiProperties.length === 0 ? MOCK_PROPERTIES.length : 0);
@@ -926,7 +928,7 @@ export default function DashboardPage() {
 
       {/* Property Overview Table */}
       <PropertyOverviewTable
-        properties={allProperties.slice(0, 10)}
+        properties={(allProperties || []).slice(0, 10)}
         isLoading={recentLoading}
       />
 
@@ -998,8 +1000,8 @@ export default function DashboardPage() {
                 </div>
               </div>
             ))
-          ) : recentProperties.length > 0 ? (
-            recentProperties
+          ) : (recentProperties || []).length > 0 ? (
+            (recentProperties || [])
               .slice(0, 4)
               .map((property) => (
                 <PropertyCard key={property.id} property={property} />

@@ -131,8 +131,8 @@ export interface PropertyFilters {
   limit?: number;
   sortBy?: string;
   sortOrder?: "asc" | "desc";
-  listingType?: ListingType;
-  category?: PropertyCategory;
+  listingType?: ListingType[];
+  category?: PropertyCategory[];
   status?: PropertyStatus;
   verificationStatus?: VerificationStatus;
   minPrice?: number;
@@ -141,7 +141,7 @@ export interface PropertyFilters {
   maxBedrooms?: number;
   minBathrooms?: number;
   state?: string;
-  area?: string;
+  area?: string[];
   lga?: string;
   siteId?: string;
   propertyType?: string;

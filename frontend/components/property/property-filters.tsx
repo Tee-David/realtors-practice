@@ -79,17 +79,23 @@ function FilterSection({ title, children, defaultOpen = true }: {
 
 function PillGroup({ options, value, onChange }: {
   options: { value: string; label: string }[];
-  value: string;
-  onChange: (val: string) => void;
+  value: string[];
+  onChange: (val: string[]) => void;
 }) {
   return (
     <div className="flex flex-wrap gap-1.5">
       {options.map((opt) => {
-        const active = value === opt.value;
+        if (opt.value === "") return null; // Skip "All" in multi-select pill groups
+        const active = value.includes(opt.value);
         return (
           <button
             key={opt.value}
-            onClick={() => onChange(opt.value)}
+            onClick={() => {
+              const newValue = active
+                ? value.filter((v) => v !== opt.value)
+                : [...value, opt.value];
+              onChange(newValue);
+            }}
             className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
             style={{
               backgroundColor: active ? "var(--primary)" : "var(--secondary)",
@@ -117,8 +123,11 @@ export function PropertyFilterSidebar({ filters, onChange, total }: PropertyFilt
   }, [onChange]);
 
   const hasFilters = !!(
-    filters.listingType || filters.category || filters.minPrice || filters.maxPrice ||
-    filters.minBedrooms || filters.area || filters.search || filters.state
+    (filters.listingType && filters.listingType.length > 0) ||
+    (filters.category && filters.category.length > 0) ||
+    (filters.area && filters.area.length > 0) ||
+    filters.minPrice || filters.maxPrice ||
+    filters.minBedrooms || filters.search || filters.state
   );
 
   return (
@@ -176,8 +185,8 @@ export function PropertyFilterSidebar({ filters, onChange, total }: PropertyFilt
       <FilterSection title="Listing Type">
         <PillGroup
           options={LISTING_TYPES}
-          value={filters.listingType || ""}
-          onChange={(v) => update({ listingType: (v || undefined) as PropertyFilters["listingType"] })}
+          value={filters.listingType || []}
+          onChange={(v) => update({ listingType: v as any })}
         />
       </FilterSection>
 
@@ -185,8 +194,8 @@ export function PropertyFilterSidebar({ filters, onChange, total }: PropertyFilt
       <FilterSection title="Category">
         <PillGroup
           options={CATEGORIES}
-          value={filters.category || ""}
-          onChange={(v) => update({ category: (v || undefined) as PropertyFilters["category"] })}
+          value={filters.category || []}
+          onChange={(v) => update({ category: v as any })}
         />
       </FilterSection>
 
@@ -215,9 +224,9 @@ export function PropertyFilterSidebar({ filters, onChange, total }: PropertyFilt
       {/* Bedrooms */}
       <FilterSection title="Bedrooms">
         <PillGroup
-          options={BEDROOM_OPTIONS}
-          value={filters.minBedrooms?.toString() || ""}
-          onChange={(v) => update({ minBedrooms: v ? parseInt(v) : undefined })}
+          options={BEDROOM_OPTIONS.filter(o => o.value !== "")}
+          value={filters.minBedrooms ? [filters.minBedrooms.toString()] : []}
+          onChange={(v) => update({ minBedrooms: v.length > 0 ? parseInt(v[0]) : undefined })}
         />
       </FilterSection>
 
@@ -235,11 +244,17 @@ export function PropertyFilterSidebar({ filters, onChange, total }: PropertyFilt
             All Areas
           </button>
           {LAGOS_AREAS.map((a) => {
-            const active = filters.area === a;
+            const active = filters.area?.includes(a);
             return (
               <button
                 key={a}
-                onClick={() => update({ area: active ? undefined : a })}
+                onClick={() => {
+                  const area = filters.area || [];
+                  const newArea = active
+                    ? area.filter((v) => v !== a)
+                    : [...area, a];
+                  update({ area: newArea.length > 0 ? newArea : undefined });
+                }}
                 className="block w-full text-left px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
                 style={{
                   backgroundColor: active ? "var(--primary)" : "transparent",

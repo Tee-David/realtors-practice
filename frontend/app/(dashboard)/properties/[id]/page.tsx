@@ -46,8 +46,8 @@ function InfoItem({ icon: Icon, label, value }: {
   );
 }
 
-function VersionTimeline({ versions }: { versions: PropertyVersion[] }) {
-  if (!versions.length) return <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>No version history</p>;
+function VersionTimeline({ versions = [] }: { versions: PropertyVersion[] }) {
+  if (!versions || !versions.length) return <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>No version history</p>;
 
   return (
     <div className="space-y-3">
@@ -70,7 +70,7 @@ function VersionTimeline({ versions }: { versions: PropertyVersion[] }) {
               </span>
             </div>
             <p className="text-xs mt-0.5" style={{ color: "var(--muted-foreground)" }}>
-              {v.changeSummary || v.changedFields.join(", ")}
+              {v.changeSummary || v.changedFields?.join(", ") || "No details"}
             </p>
             <p className="text-[10px] mt-1" style={{ color: "var(--muted-foreground)" }}>
               {new Date(v.createdAt).toLocaleString()}
@@ -205,7 +205,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
           <div className="col-span-2 row-span-2">
             <img src={images[0]} alt="" className="w-full h-full object-cover" />
           </div>
-          {images.slice(1, 5).map((img: string, i: number) => (
+          {(images || []).slice(1, 5).map((img: string, i: number) => (
             <div key={i} className="relative">
               <img src={img} alt="" className="w-full h-full object-cover" />
               {i === 3 && images.length > 5 && (
@@ -303,7 +303,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
           )}
 
           {/* Features */}
-          {property.features.length > 0 && (
+          {property.features && property.features.length > 0 && (
             <div className="rounded-xl p-5" style={{ backgroundColor: "var(--card)" }}>
               <h2 className="font-display font-semibold text-sm mb-3" style={{ color: "var(--foreground)" }}>
                 Features & Amenities
