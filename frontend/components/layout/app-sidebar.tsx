@@ -266,17 +266,6 @@ export function MobileSidebar({
 }) {
   return (
     <>
-      <button
-        onClick={() => onOpenChange(true)}
-        className="md:hidden fixed top-4 left-4 z-50 p-2 rounded-lg"
-        style={{
-          backgroundColor: "var(--card)",
-          border: "1px solid var(--border)",
-        }}
-      >
-        <Menu className="h-5 w-5" />
-      </button>
-
       {open && (
         <>
           <div

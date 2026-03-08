@@ -28,7 +28,7 @@ export function MobileBottomNav({ onOpenSidebar, extraButton }: BottomNavProps) 
 
   return (
     <nav
-      className="md:hidden fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 px-2 py-2 rounded-full shadow-lg backdrop-blur-md"
+      className="md:hidden fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center justify-between w-[90%] px-2 py-2 rounded-full shadow-lg backdrop-blur-md"
       style={{
         backgroundColor: "color-mix(in srgb, var(--card) 85%, transparent)",
         border: "1px solid var(--border)",
