@@ -44,7 +44,7 @@ export default function LoginPage() {
     <div className="w-full max-w-[400px] flex flex-col min-h-[calc(100vh-80px)] lg:min-h-0">
       <div className="flex-1 flex flex-col justify-center">
         {/* Mobile logo & Theme switch — only visible on small screens */}
-        <div className="flex items-center justify-between mb-10 lg:hidden w-full">
+        <div className="flex items-center justify-between mb-10 lg:hidden w-full -ml-2">
           <div className="relative">
             <Image 
               src="/favicon-blue.png" 
@@ -63,7 +63,7 @@ export default function LoginPage() {
               className="hidden dark:block"
             />
           </div>
-          <div className="scale-75 origin-right">
+          <div className="scale-75 origin-right translate-x-2">
             <ThemeSwitch />
           </div>
         </div>
