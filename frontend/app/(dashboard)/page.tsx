@@ -870,10 +870,12 @@ export default function DashboardPage() {
                         const dashArray = `${(pct / 100) * circumference} ${circumference}`;
                         const dashOffset =
                           -(offset / 100) * circumference;
+                        const delay = (item.count / statusTotal) * 0.5; // Stagger slightly based on size
+                        const currentOffset = offset;
                         offset += pct;
 
                         return (
-                          <circle
+                          <motion.circle
                             key={item.status}
                             cx="50"
                             cy="50"
@@ -884,7 +886,10 @@ export default function DashboardPage() {
                             }
                             strokeWidth="14"
                             strokeDasharray={dashArray}
-                            strokeDashoffset={dashOffset}
+                            initial={{ strokeDashoffset: circumference }}
+                            whileInView={{ strokeDashoffset: dashOffset }}
+                            viewport={{ once: true }}
+                            transition={{ duration: 1.5, ease: "easeOut", delay: currentOffset * 0.01 }}
                             strokeLinecap="round"
                           />
                         );
@@ -939,49 +944,49 @@ export default function DashboardPage() {
 
       {/* Recently Listed */}
       <div>
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-4">
-            <h2
-              className="font-display font-semibold text-base"
-              style={{ color: "var(--foreground)" }}
-            >
-              Recently Listed
-            </h2>
-            {/* Tabs */}
-            <div
-              className="flex items-center rounded-lg p-0.5"
-              style={{ backgroundColor: "var(--secondary)" }}
-            >
-              {(["SALE", "RENT"] as const).map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setRecentTab(tab)}
-                  className="px-3 py-1.5 rounded-md text-xs font-semibold transition-all"
-                  style={{
-                    backgroundColor:
-                      recentTab === tab ? "var(--card)" : "transparent",
-                    color:
-                      recentTab === tab
-                        ? "var(--foreground)"
-                        : "var(--muted-foreground)",
-                    boxShadow:
-                      recentTab === tab
-                        ? "0 1px 3px rgba(0,0,0,0.08)"
-                        : "none",
-                  }}
-                >
-                  {tab === "SALE" ? "For Sale" : "For Rent"}
-                </button>
-              ))}
-            </div>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6 relative">
+          <h2
+            className="font-display font-semibold text-lg sm:text-xl"
+            style={{ color: "var(--foreground)" }}
+          >
+            Recently <br className="hidden sm:block" /> Listed
+          </h2>
+          
+          {/* Tabs - Centered Absolute on Desktop, Flow on Mobile */}
+          <div
+            className="sm:absolute sm:left-1/2 sm:-translate-x-1/2 flex items-center rounded-2xl p-1"
+            style={{ backgroundColor: "var(--secondary)" }}
+          >
+            {(["SALE", "RENT"] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setRecentTab(tab)}
+                className="px-5 py-2.5 rounded-xl text-sm font-bold transition-all"
+                style={{
+                  backgroundColor:
+                    recentTab === tab ? "var(--card)" : "transparent",
+                  color:
+                    recentTab === tab
+                      ? "var(--foreground)"
+                      : "var(--muted-foreground)",
+                  boxShadow:
+                    recentTab === tab
+                      ? "0 2px 8px rgba(0,0,0,0.08)"
+                      : "none",
+                }}
+              >
+                {tab === "SALE" ? "For Sale" : "For Rent"}
+              </button>
+            ))}
           </div>
+
           <Link
             href="/properties"
-            className="flex items-center gap-1 text-sm font-medium hover:underline"
-            style={{ color: "var(--primary)" }}
+            className="flex items-center gap-1.5 text-base font-bold hover:underline sm:ml-auto"
+            style={{ color: "#0000ee" }}
           >
             View all
-            <ChevronRight size={14} />
+            <ChevronRight size={18} />
           </Link>
         </div>
 
