@@ -107,7 +107,7 @@ function SidebarContent({
       <div
         className={cn(
           "flex items-center border-b",
-          !expanded ? "h-20 px-0.5 justify-center" : "h-16 px-4 justify-start"
+          !expanded ? "h-14 px-0.5 justify-center" : "h-14 px-4 justify-start"
         )}
         style={{ borderColor: "var(--sidebar-border)" }}
       >
@@ -118,14 +118,14 @@ function SidebarContent({
               alt="RP"
               width={72}
               height={72}
-              className="shrink-0 dark:hidden"
+              className="shrink-0 dark:hidden scale-125"
             />
             <Image
               src="/logo-icon-white.png"
               alt="RP"
               width={72}
               height={72}
-              className="shrink-0 hidden dark:block"
+              className="shrink-0 hidden dark:block scale-125"
             />
           </>
         ) : (
