@@ -97,11 +97,11 @@ export function PropertyCard({ property, isActive, onFavorite, onHover, onClick 
           <div className={`absolute inset-0 bg-gradient-to-t ${gradient}`} />
 
           {/* Top row: Quality stars (left) + Listing badge (right) */}
-          <div className="absolute top-0 left-0 right-0 p-3 flex items-start justify-between">
+          <div className="absolute top-0 left-0 right-0 p-2 sm:p-3 flex items-start justify-between">
             {/* Star rating pill */}
             {qualityScore != null && (
               <div
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full backdrop-blur-md"
+                className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full backdrop-blur-md"
                 style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
               >
                 <StarRating score={qualityScore} />
@@ -110,7 +110,7 @@ export function PropertyCard({ property, isActive, onFavorite, onHover, onClick 
 
             {/* Listing type badge */}
             <div
-              className="px-3 py-1 rounded-full text-xs font-semibold tracking-wide uppercase"
+              className="px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold tracking-wide uppercase"
               style={{
                 backgroundColor: accentColor,
                 color: "#fff",
@@ -154,14 +154,14 @@ export function PropertyCard({ property, isActive, onFavorite, onHover, onClick 
           )}
 
           {/* Bottom: location overlay + image count */}
-          <div className="absolute bottom-0 left-0 right-0 p-3 flex items-end justify-between">
-            <div className="flex items-center gap-1.5 text-white/90 text-xs font-medium max-w-[70%]">
-              <MapPin size={13} className="shrink-0" />
+          <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-3 flex items-end justify-between">
+            <div className="flex items-center gap-1 sm:gap-1.5 text-white/90 text-[10px] sm:text-xs font-medium max-w-[70%]">
+              <MapPin size={11} className="shrink-0 sm:w-[13px] sm:h-[13px]" />
               <span className="truncate">{location}</span>
             </div>
             {imageCount > 1 && (
               <div
-                className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium backdrop-blur-md"
+                className="flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded text-[9px] sm:text-[10px] font-medium backdrop-blur-md"
                 style={{ backgroundColor: "rgba(0,0,0,0.45)", color: "#fff" }}
               >
                 {imageCount} photos
@@ -186,28 +186,28 @@ export function PropertyCard({ property, isActive, onFavorite, onHover, onClick 
         </div>
 
         {/* Content Section */}
-        <div className="p-4 flex-1 flex flex-col">
+        <div className="p-2.5 sm:p-4 flex-1 flex flex-col">
           {/* Top content that should push the footer down */}
-          <div className="flex-1 space-y-2.5 flex flex-col">
+          <div className="flex-1 space-y-1.5 sm:space-y-2.5 flex flex-col">
             {/* Title */}
             <h3
-              className="font-display font-semibold text-sm leading-snug line-clamp-2 transition-colors group-hover:text-[var(--primary)]"
+              className="font-display font-semibold text-xs sm:text-sm leading-snug line-clamp-2 transition-colors group-hover:text-[var(--primary)]"
               style={{ color: "var(--foreground)" }}
             >
               {title}
             </h3>
 
             {/* Price */}
-            <div className="flex items-baseline flex-wrap gap-x-1.5 gap-y-0.5 mt-auto pb-1">
+            <div className="flex items-baseline flex-wrap gap-x-1 sm:gap-x-1.5 gap-y-0.5 mt-auto pb-0.5 sm:pb-1">
               <span
-                className="font-display font-bold text-base sm:text-lg"
+                className="font-display font-bold text-sm sm:text-lg"
                 style={{ color: "var(--accent)" }}
               >
                 {formatPrice(price)}
               </span>
               {rentFrequency && (
                 <span
-                  className="text-[10px] sm:text-xs font-medium"
+                  className="text-[9px] sm:text-xs font-medium"
                   style={{ color: "var(--muted-foreground)" }}
                 >
                   /{rentFrequency}
@@ -217,39 +217,36 @@ export function PropertyCard({ property, isActive, onFavorite, onHover, onClick 
           </div>
 
           {/* Divider */}
-          <div className="mt-3 mb-2 border-t border-dashed" style={{ borderColor: "var(--border)" }} />
+          <div className="mt-2 sm:mt-3 mb-1.5 sm:mb-2 border-t border-dashed" style={{ borderColor: "var(--border)" }} />
 
           {/* Details footer */}
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 sm:gap-4 text-[10px] sm:text-xs" style={{ color: "var(--muted-foreground)" }}>
+            <div className="flex items-center gap-1.5 sm:gap-3 text-[9px] sm:text-xs" style={{ color: "var(--muted-foreground)" }}>
               {bedrooms != null && (
-                <span className="flex items-center gap-1">
-                  <BedDouble size={14} strokeWidth={1.5} className="shrink-0" />
+                <span className="flex items-center gap-0.5 sm:gap-1">
+                  <BedDouble size={12} strokeWidth={1.5} className="shrink-0 sm:w-[14px] sm:h-[14px]" />
                   <span className="font-medium" style={{ color: "var(--foreground)" }}>{bedrooms}</span>
-                  <span className="hidden xs:inline">Beds</span>
                 </span>
               )}
               {bathrooms != null && (
-                <span className="flex items-center gap-1">
-                  <Bath size={14} strokeWidth={1.5} className="shrink-0" />
+                <span className="flex items-center gap-0.5 sm:gap-1">
+                  <Bath size={12} strokeWidth={1.5} className="shrink-0 sm:w-[14px] sm:h-[14px]" />
                   <span className="font-medium" style={{ color: "var(--foreground)" }}>{bathrooms}</span>
-                  <span className="hidden xs:inline">Baths</span>
                 </span>
               )}
               {(property.landSizeSqm || property.buildingSizeSqm) && (
-                <span className="flex items-center gap-1">
-                  <Maximize2 size={13} strokeWidth={1.5} className="shrink-0" />
+                <span className="flex items-center gap-0.5 sm:gap-1">
+                  <Maximize2 size={11} strokeWidth={1.5} className="shrink-0 sm:w-[13px] sm:h-[13px]" />
                   <span className="font-medium" style={{ color: "var(--foreground)" }}>
                     {Math.round(property.landSizeSqm || property.buildingSizeSqm || 0)}
                   </span>
-                  <span className="hidden xs:inline">sqm</span>
                 </span>
               )}
             </div>
 
             <ExternalLink
-              size={14}
-              className="opacity-0 group-hover:opacity-60 transition-opacity"
+              size={12}
+              className="opacity-0 group-hover:opacity-60 transition-opacity shrink-0 sm:w-[14px] sm:h-[14px]"
               style={{ color: "var(--muted-foreground)" }}
             />
           </div>

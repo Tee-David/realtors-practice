@@ -291,11 +291,8 @@ export default function PropertiesPage() {
 
       {/* Main content: Cards + Map split */}
       <div className="flex gap-4">
-        {/* Cards panel — scrollable */}
-        <div
-          className="flex-1 min-w-0 overflow-y-auto scrollbar-none"
-          style={{ maxHeight: "calc(100vh - 180px)" }}
-        >
+        {/* Cards panel — only constrain height on desktop when side-by-side map is shown */}
+        <div className={`flex-1 min-w-0 ${showMap ? "md:overflow-y-auto md:max-h-[calc(100vh-180px)] scrollbar-none" : ""}`}>
           {viewMode === "grid" ? (
             <PropertyGrid
               properties={properties}
