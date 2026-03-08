@@ -71,41 +71,57 @@ export class ScrapeService {
       parameters: parameters || {},
     };
 
-    // Dispatch to Python scraper (fire and forget)
+    // Dispatch to Python scraper via Redis (Celery queue)
     try {
-      const response = await fetch(`${config.scraper.url}/api/jobs`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Internal-Key": config.scraper.internalKey,
-        },
-        body: JSON.stringify(scraperPayload),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        Logger.error(`Scraper dispatch failed: ${response.status} ${errorText}`);
-        await prisma.scrapeJob.update({
-          where: { id: job.id },
-          data: { status: "FAILED" },
-        });
-        throw new Error(`Scraper returned ${response.status}`);
+      if (!config.redis.url) {
+        throw new Error("REDIS_URL is not configured in environment");
       }
+
+      // We instantiate Redis here to avoid breaking tests/startup if Redis isn't used
+      const Redis = require("ioredis");
+      const redis = new Redis(config.redis.url);
+
+      const celeryTask = {
+        id: `job-${job.id}`,
+        task: "tasks.process_job",
+        args: [scraperPayload],
+        kwargs: {},
+      };
+
+      const payload = {
+        body: Buffer.from(JSON.stringify(celeryTask)).toString("base64"),
+        "content-encoding": "utf-8",
+        "content-type": "application/json",
+        headers: {},
+        properties: {
+          correlation_id: celeryTask.id,
+          reply_to: celeryTask.id,
+          delivery_mode: 2,
+          delivery_info: { exchange: "", routing_key: "celery" },
+          priority: 0,
+          body_encoding: "base64",
+          delivery_tag: celeryTask.id,
+        },
+      };
+
+      await redis.lpush("celery", JSON.stringify(payload));
+      
+      // Close connection after dispatching
+      await redis.quit();
 
       await prisma.scrapeJob.update({
         where: { id: job.id },
         data: { status: "RUNNING" },
       });
 
-      Logger.info(`Scrape job ${job.id} dispatched to scraper (${sites.length} sites)`);
+      Logger.info(`Scrape job ${job.id} dispatched to Celery Redis queue (${sites.length} sites)`);
     } catch (err: any) {
-      if (err.message?.includes("Scraper returned")) throw err;
-      Logger.error(`Failed to reach scraper service: ${err.message}`);
+      Logger.error(`Failed to dispatch to Redis: ${err.message}`);
       await prisma.scrapeJob.update({
         where: { id: job.id },
         data: { status: "FAILED" },
       });
-      throw new Error("Scraper service is unreachable");
+      throw new Error(`Failed to dispatch to queue: ${err.message}`);
     }
 
     return job;

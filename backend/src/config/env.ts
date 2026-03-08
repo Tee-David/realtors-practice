@@ -38,7 +38,11 @@ export const config = {
   resend: {
     apiKey: process.env.RESEND_API_KEY || "",
   },
+  redis: {
+    url: process.env.REDIS_URL || "",
+  },
   exchangeRate: {
     apiKey: process.env.EXCHANGERATE_API_KEY || "",
   },
 };
+
