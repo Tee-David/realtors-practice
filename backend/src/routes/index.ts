@@ -5,6 +5,8 @@ import propertyRoutes from "./property.routes";
 import siteRoutes from "./site.routes";
 import scrapeRoutes from "./scrape.routes";
 import internalRoutes from "./internal.routes";
+import searchRoutes from "./search.routes";
+import analyticsRoutes from "./analytics.routes";
 
 const router = Router();
 
@@ -14,10 +16,10 @@ router.use("/properties", propertyRoutes);
 router.use("/sites", siteRoutes);
 router.use("/scrape", scrapeRoutes);
 router.use("/internal", internalRoutes);
+router.use("/search", searchRoutes);
+router.use("/analytics", analyticsRoutes);
 
 // Placeholder routes - will be added in later phases
-// router.use("/search", searchRoutes);
-// router.use("/analytics", analyticsRoutes);
 // router.use("/saved-searches", savedSearchRoutes);
 // router.use("/notifications", notificationRoutes);
 // router.use("/users", userRoutes);

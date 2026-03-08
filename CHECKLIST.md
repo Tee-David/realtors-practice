@@ -195,15 +195,15 @@
 
 ## Phase 4: Search + Dashboard (MVP Complete)
 - [ ] Deploy Meilisearch on Render (private service)
-- [ ] Backend: Meilisearch client setup (utils/meilisearch.ts)
-- [ ] Backend: Meili service (index config, sync, upsert, delete, batch sync, full re-index)
-- [ ] Backend: Search service (NL query parser + Meilisearch integration)
-- [ ] Backend: NL query parser (bedrooms, property type, location, price, features regex)
-- [ ] Backend: Search routes (search, natural, suggestions, facets)
+- [x] Backend: Meilisearch client setup (utils/meili.util.ts)
+- [x] Backend: Meili service (index config, sync, upsert, delete, batch sync, full re-index)
+- [x] Backend: Search service (NL query parser + Meilisearch integration)
+- [x] Backend: NL query parser (bedrooms, property type, location, price, features regex)
+- [x] Backend: Search routes (search, natural, suggestions, facets)
 - [ ] Backend: Active scraping trigger (on zero results)
-- [ ] Backend: Wire property create/update/delete to Meilisearch sync
-- [ ] Backend: Analytics service (overview KPIs, trends, market insights)
-- [ ] Backend: Analytics controller + routes
+- [x] Backend: Wire property create/update/delete to Meilisearch sync
+- [x] Backend: Analytics service (overview KPIs, trends, market insights)
+- [x] Backend: Analytics controller + routes
 - [ ] Frontend: Search page (large NL search bar, suggestions, faceted results)
 - [ ] Frontend: Search bar component
 - [ ] Frontend: Search results component (with facet filters)
