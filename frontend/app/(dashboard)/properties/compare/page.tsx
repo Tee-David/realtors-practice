@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useProperty } from "@/hooks/useProperties";
 import { MOCK_PROPERTIES } from "@/lib/mock-data";
@@ -323,7 +323,7 @@ function AddPropertyModal({
 /*  Main Compare Page                                                  */
 /* ------------------------------------------------------------------ */
 
-export default function ComparePropertiesPage() {
+function ComparePropertiesContent() {
   const searchParams = useSearchParams();
   const idsParam = searchParams.get("ids") || "";
   const initialIds = idsParam.split(",").filter(Boolean).slice(0, 4);
@@ -646,5 +646,22 @@ export default function ComparePropertiesPage() {
         excludeIds={propertyIds}
       />
     </div>
+  );
+}
+
+export default function ComparePropertiesPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center py-20">
+          <div
+            className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin"
+            style={{ borderColor: "var(--primary)", borderTopColor: "transparent" }}
+          />
+        </div>
+      }
+    >
+      <ComparePropertiesContent />
+    </Suspense>
   );
 }
