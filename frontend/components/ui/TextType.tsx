@@ -38,21 +38,25 @@ export default function TextType({
 }: TextTypeProps) {
   const textRef = useRef<HTMLSpanElement>(null);
   const cursorRef = useRef<HTMLSpanElement>(null);
-  const hasStarted = useRef(false);
-  
+  const onCompleteRef = useRef(onComplete);
+  const hasCompleted = useRef(false);
+
+  // Keep callback ref fresh without triggering effect re-runs
+  onCompleteRef.current = onComplete;
+
+  // Stable text key so we only re-run when the actual text content changes
+  const textKey = Array.isArray(text) ? text.join("|||") : text;
+
   useEffect(() => {
-    if (!textRef.current || hasStarted.current) return;
-    hasStarted.current = true;
-    
-    // Convert single string to array for uniform handling
+    if (!textRef.current) return;
+    hasCompleted.current = false;
+
     const texts = Array.isArray(text) ? text : [text];
     let currentIndex = 0;
     let isMounted = true;
-    
-    // Initialize empty text
+
     textRef.current.innerHTML = "";
-    
-    // Start cursor blinking if enabled
+
     let cursorAnim: gsap.core.Tween | null = null;
     if (showCursor && cursorRef.current) {
       cursorAnim = gsap.to(cursorRef.current, {
@@ -71,12 +75,11 @@ export default function TextType({
 
       while (isMounted) {
         const currentText = texts[currentIndex];
-        
-        // Type the text completely
+
         for (let i = 0; i <= currentText.length; i++) {
           if (!textRef.current || !isMounted) return;
           textRef.current.innerHTML = currentText.substring(0, i);
-          
+
           let speed = typingSpeed;
           if (variableSpeedEnabled) {
             speed = Math.floor(Math.random() * (variableSpeedMax - variableSpeedMin + 1) + variableSpeedMin);
@@ -84,42 +87,43 @@ export default function TextType({
           await new Promise(r => setTimeout(r, speed));
         }
 
-        // Check if we should continue
         const isLastText = currentIndex === texts.length - 1;
         if (!loop && isLastText) {
-          if (onComplete) onComplete();
+          if (!hasCompleted.current) {
+            hasCompleted.current = true;
+            onCompleteRef.current?.();
+          }
           break;
         }
 
-        // Pause at the end
         await new Promise(r => setTimeout(r, pauseDuration));
-        
-        // Only delete if we are looping or if there's more text in the array
+
         if (loop || !isLastText) {
-          // Delete
           for (let i = currentText.length; i >= 0; i--) {
             if (!textRef.current || !isMounted) return;
             textRef.current.innerHTML = currentText.substring(0, i);
             await new Promise(r => setTimeout(r, deletingSpeed));
           }
-          // Move to next text
           currentIndex = (currentIndex + 1) % texts.length;
-          // Pause before typing next
           await new Promise(r => setTimeout(r, 500));
         } else {
-          if (onComplete) onComplete();
+          if (!hasCompleted.current) {
+            hasCompleted.current = true;
+            onCompleteRef.current?.();
+          }
           break;
         }
       }
     };
 
     typeWriter();
-    
+
     return () => {
       isMounted = false;
       if (cursorAnim) cursorAnim.kill();
     };
-  }, [text, typingSpeed, pauseDuration, showCursor, deletingSpeed, variableSpeedEnabled, variableSpeedMin, variableSpeedMax, cursorBlinkDuration, loop, initialDelay, onComplete]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [textKey]);
 
   return (
     <div className={`inline-block ${className}`}>

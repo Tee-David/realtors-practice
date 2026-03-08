@@ -111,9 +111,15 @@
 ## Phase 2.5: UX Polish
 - [x] Sidebar: Bigger favicon, logout button, theme switch, profile section
 - [x] Move reusable components from root to frontend/components/ui/
+- [x] Property detail page redesign (image gallery, collapsible sections, skeleton, breadcrumbs)
+- [x] Similar properties carousel on detail page
+- [x] Compare properties page (side-by-side table, add/remove, search modal)
+- [x] Mobile map expandable to fullscreen on properties page
+- [x] TextType greeter animation (runs once, no re-triggers)
 - [ ] OnboardJS guided tour (product walkthrough)
 - [ ] Animated list transitions (motion library)
-- [ ] Skeleton loading states across all pages
+- [x] Skeleton loading states: property detail page
+- [ ] Skeleton loading states: remaining pages
 
 ## Phase 3: Scraper Microservice
 ### Infrastructure
@@ -332,12 +338,12 @@
 ## Running Totals
 - **Phase 1:** 42 tasks (38 done, 4 pending user terminal)
 - **Phase 2:** 30 tasks (26 done, 4 testing pending)
-- **Phase 2.5:** 5 tasks (2 done, 3 pending)
+- **Phase 2.5:** 11 tasks (8 done, 3 pending)
 - **Phase 3:** 40 tasks (includes 3 Koyeb deployment tasks)
-- **Phase 4:** 21 tasks (4 done)
+- **Phase 4:** 21 tasks (10 done — backend complete, frontend in progress)
 - **Phase 4.5:** 3 tasks
 - **Phase 5:** 16 tasks
 - **Phase 6:** 22 tasks
 - **Phase 7:** 38 tasks
 - **Phase 8:** 15 tasks
-- **TOTAL:** ~232 tasks
+- **TOTAL:** ~238 tasks

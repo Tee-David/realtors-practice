@@ -59,6 +59,7 @@ export default function PropertiesPage() {
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
   const [hoveredPropertyId, setHoveredPropertyId] = useState<string | null>(null);
   const [showMap, setShowMap] = useState(true);
+  const [mobileMapExpanded, setMobileMapExpanded] = useState(false);
 
   const { data, isLoading } = useProperties(filters);
 
@@ -302,7 +303,7 @@ export default function PropertiesPage() {
               selectedId={selectedPropertyId}
               onHover={setHoveredPropertyId}
               onClick={handleCardClick}
-              columns={showMap ? Math.min(gridCols, 2) : gridCols}
+              columns={gridCols}
               emptyMessage="No properties match your filters. Try adjusting your search criteria."
             />
           ) : (
@@ -380,14 +381,40 @@ export default function PropertiesPage() {
         )}
       </div>
 
-      {/* Mobile map — full width below cards when toggled on small screens */}
+      {/* Mobile map — expandable, full width below cards */}
       {showMap && (
-        <div className="md:hidden rounded-xl overflow-hidden" style={{ height: "50vh" }}>
+        <div
+          className={`md:hidden rounded-xl overflow-hidden transition-all duration-300 relative ${
+            mobileMapExpanded ? "fixed inset-0 z-50 rounded-none" : ""
+          }`}
+          style={{ height: mobileMapExpanded ? "100vh" : "50vh" }}
+        >
           <DynamicPropertyMap
             properties={properties}
             hoveredId={hoveredPropertyId}
             onMarkerClick={handleMarkerClick}
           />
+          {/* Expand/Collapse button */}
+          <button
+            onClick={() => setMobileMapExpanded(!mobileMapExpanded)}
+            className="absolute top-3 right-3 z-10 flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold shadow-lg backdrop-blur-md"
+            style={{
+              backgroundColor: "rgba(255,255,255,0.95)",
+              color: "var(--foreground)",
+            }}
+          >
+            {mobileMapExpanded ? (
+              <>
+                <X size={14} />
+                Close
+              </>
+            ) : (
+              <>
+                <Map size={14} />
+                Expand
+              </>
+            )}
+          </button>
         </div>
       )}
 

@@ -27,6 +27,7 @@ import { motion } from "motion/react";
 import TextType from "@/components/ui/TextType";
 import { SideSheet, SideSheetContent } from "@/components/ui/side-sheet";
 import { PropertyDetailPanel } from "@/components/property/property-detail-panel";
+import type { Property, PropertyCategory, ListingType } from "@/types/property";
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
