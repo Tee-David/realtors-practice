@@ -24,6 +24,7 @@ import {
 import Link from "next/link";
 import type { Property, PropertyCategory, ListingType } from "@/types/property";
 import { MOCK_PROPERTIES } from "@/lib/mock-data";
+import { motion } from "motion/react";
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -269,9 +270,13 @@ function CategoryBar({
           className="h-2 rounded-full overflow-hidden"
           style={{ backgroundColor: "var(--secondary)" }}
         >
-          <div
-            className="h-full rounded-full transition-all duration-500"
-            style={{ width: `${pct}%`, backgroundColor: color }}
+          <motion.div
+            className="h-full rounded-full"
+            initial={{ width: "0%" }}
+            whileInView={{ width: `${pct}%` }}
+            viewport={{ once: true }}
+            transition={{ duration: 1, ease: "easeOut" }}
+            style={{ backgroundColor: color }}
           />
         </div>
       </div>
