@@ -17,6 +17,7 @@ interface TextTypeProps {
   className?: string;
   loop?: boolean;
   initialDelay?: number;
+  onComplete?: () => void;
 }
 
 export default function TextType({
@@ -33,12 +34,15 @@ export default function TextType({
   className = "",
   loop = true,
   initialDelay = 0,
+  onComplete,
 }: TextTypeProps) {
   const textRef = useRef<HTMLSpanElement>(null);
   const cursorRef = useRef<HTMLSpanElement>(null);
+  const hasStarted = useRef(false);
   
   useEffect(() => {
-    if (!textRef.current) return;
+    if (!textRef.current || hasStarted.current) return;
+    hasStarted.current = true;
     
     // Convert single string to array for uniform handling
     const texts = Array.isArray(text) ? text : [text];
@@ -82,7 +86,10 @@ export default function TextType({
 
         // Check if we should continue
         const isLastText = currentIndex === texts.length - 1;
-        if (!loop && isLastText) break;
+        if (!loop && isLastText) {
+          if (onComplete) onComplete();
+          break;
+        }
 
         // Pause at the end
         await new Promise(r => setTimeout(r, pauseDuration));
@@ -100,6 +107,7 @@ export default function TextType({
           // Pause before typing next
           await new Promise(r => setTimeout(r, 500));
         } else {
+          if (onComplete) onComplete();
           break;
         }
       }
@@ -111,7 +119,7 @@ export default function TextType({
       isMounted = false;
       if (cursorAnim) cursorAnim.kill();
     };
-  }, [text, typingSpeed, pauseDuration, showCursor, deletingSpeed, variableSpeedEnabled, variableSpeedMin, variableSpeedMax, cursorBlinkDuration, loop, initialDelay]);
+  }, [text, typingSpeed, pauseDuration, showCursor, deletingSpeed, variableSpeedEnabled, variableSpeedMin, variableSpeedMax, cursorBlinkDuration, loop, initialDelay, onComplete]);
 
   return (
     <div className={`inline-block ${className}`}>

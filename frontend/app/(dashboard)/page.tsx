@@ -635,6 +635,7 @@ export default function DashboardPage() {
   });
   const [recentTab, setRecentTab] = useState<"SALE" | "RENT">("SALE");
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
+  const [typingDone, setTypingDone] = useState(false);
 
   const apiProperties: Property[] = recentData?.data || [];
   
@@ -694,16 +695,28 @@ export default function DashboardPage() {
             cursorBlinkDuration={0.8}
             loop={false}
             initialDelay={500}
+            onComplete={() => setTypingDone(true)}
           />
         </h1>
-        <div className="flex items-center gap-1.5 text-sm" style={{ color: "var(--muted-foreground)" }}>
+        <motion.div 
+          className="flex items-center gap-1.5 text-sm" 
+          style={{ color: "var(--muted-foreground)" }}
+          initial={{ opacity: 0, y: 10 }}
+          animate={typingDone ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+        >
           <Calendar size={15} />
           <p className="font-medium">{formattedDate}</p>
-        </div>
+        </motion.div>
       </div>
       
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
+      <motion.div 
+        className="flex items-center justify-between flex-wrap gap-4"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.2 }}
+      >
         <div>
           <h1
             className="text-2xl font-display font-bold"
@@ -725,56 +738,72 @@ export default function DashboardPage() {
             View Properties
           </Link>
         </div>
-      </div>
+      </motion.div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <KpiCard
-          label="Total Properties"
-          value={total}
-          icon={Building2}
-          trend={12}
-          trendLabel="Last month"
-          iconBg="rgba(0, 1, 252, 0.08)"
-          iconColor="var(--primary)"
-          isLoading={statsLoading}
-        />
-        <KpiCard
-          label="Properties for Sale"
-          value={saleCount}
-          icon={TrendingUp}
-          trend={8}
-          trendLabel="vs last month"
-          iconBg="rgba(10, 105, 6, 0.08)"
-          iconColor="var(--success)"
-          isLoading={statsLoading}
-        />
-        <KpiCard
-          label="Properties for Rent"
-          value={rentCount}
-          icon={Home}
-          trend={5}
-          trendLabel="vs last month"
-          iconBg="rgba(255, 102, 0, 0.08)"
-          iconColor="var(--accent)"
-          isLoading={statsLoading}
-        />
-        <KpiCard
-          label="Total Value"
-          value={totalValue}
-          icon={DollarSign}
-          trend={15}
-          trendLabel="Portfolio growth"
-          iconBg="rgba(139, 92, 246, 0.08)"
-          iconColor="#8b5cf6"
-          isLoading={statsLoading || recentLoading}
-          prefix="₦"
-          compact
-        />
+        {[
+          {
+            label: "Total Properties",
+            value: total,
+            icon: Building2,
+            trend: 12,
+            trendLabel: "Last month",
+            iconBg: "rgba(0, 1, 252, 0.08)",
+            iconColor: "var(--primary)",
+            isLoading: statsLoading,
+          },
+          {
+            label: "Properties for Sale",
+            value: saleCount,
+            icon: TrendingUp,
+            trend: 8,
+            trendLabel: "vs last month",
+            iconBg: "rgba(10, 105, 6, 0.08)",
+            iconColor: "var(--success)",
+            isLoading: statsLoading,
+          },
+          {
+            label: "Properties for Rent",
+            value: rentCount,
+            icon: Home,
+            trend: 5,
+            trendLabel: "vs last month",
+            iconBg: "rgba(255, 102, 0, 0.08)",
+            iconColor: "var(--accent)",
+            isLoading: statsLoading,
+          },
+          {
+            label: "Total Value",
+            value: totalValue,
+            icon: DollarSign,
+            trend: 15,
+            trendLabel: "Portfolio growth",
+            iconBg: "rgba(139, 92, 246, 0.08)",
+            iconColor: "#8b5cf6",
+            isLoading: statsLoading || recentLoading,
+            prefix: "₦",
+            compact: true,
+          }
+        ].map((card, idx) => (
+          <motion.div
+            key={card.label}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.3 + idx * 0.1 }}
+          >
+            <KpiCard {...card} />
+          </motion.div>
+        ))}
       </div>
 
       {/* Properties Stats Chart + Value Cards */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <motion.div 
+        className="grid grid-cols-1 lg:grid-cols-3 gap-5"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.6 }}
+      >
         <div className="lg:col-span-2">
           <PropertiesStatsChart />
         </div>
@@ -794,10 +823,15 @@ export default function DashboardPage() {
             isLoading={statsLoading || recentLoading}
           />
         </div>
-      </div>
+      </motion.div>
 
       {/* Charts row: Category + Status */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <motion.div 
+        className="grid grid-cols-1 lg:grid-cols-2 gap-5"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.8 }}
+      >
         {/* Category Distribution */}
         <div
           className="rounded-xl p-6 shadow-sm"
@@ -1096,11 +1130,8 @@ export default function DashboardPage() {
         <SideSheetContent className="w-full sm:max-w-md md:max-w-lg lg:max-w-xl p-0 h-full border-l overflow-hidden">
           {selectedPropertyId && (
             <PropertyDetailPanel
-              propertyId={selectedPropertyId}
+              property={allProperties.find(p => p.id === selectedPropertyId)!}
               onClose={() => setSelectedPropertyId(null)}
-              fallbackData={MOCK_PROPERTIES.find(
-                (p) => p.id === selectedPropertyId
-              )}
             />
           )}
         </SideSheetContent>

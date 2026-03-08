@@ -22,6 +22,15 @@ interface PropertyDetailPanelProps {
 
 export function PropertyDetailPanel({ property, onClose }: PropertyDetailPanelProps) {
   const router = useRouter();
+
+  if (!property) {
+    return (
+      <div className="p-8 text-center flex items-center justify-center h-64">
+        <p className="text-sm text-muted-foreground">Property not found</p>
+      </div>
+    );
+  }
+
   const images = Array.isArray(property.images) ? property.images : [];
   const location = property.locationText || [property.area, property.lga, property.state].filter(Boolean).join(", ");
   const statusStyle = STATUS_STYLES[property.status] || STATUS_STYLES.AVAILABLE;
