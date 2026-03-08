@@ -22,7 +22,7 @@ export function CategoryPills({ value, onChange }: CategoryPillsProps) {
   const active = value || "ALL";
 
   return (
-    <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+    <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none pt-3">
       {CATEGORIES.map((cat) => {
         const isActive = active === cat.value;
         const Icon = cat.icon;
