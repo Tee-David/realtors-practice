@@ -217,7 +217,7 @@ export function PropertyCard({ property, isActive, onFavorite, onHover, onClick 
           </div>
 
           {/* Divider */}
-          <div className="h-px mt-3" style={{ backgroundColor: "var(--border)" }} />
+          <div className="mt-3 mb-2 border-t border-dashed" style={{ borderColor: "var(--border)" }} />
 
           {/* Details footer */}
           <div className="flex items-center justify-between">
