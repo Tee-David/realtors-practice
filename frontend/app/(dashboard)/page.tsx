@@ -980,22 +980,22 @@ export default function DashboardPage() {
       <div>
         <div className="flex flex-row items-center justify-between w-full mb-6 relative">
           <h2
-            className="font-display font-semibold text-lg sm:text-xl shrink-0 mr-2 sm:mr-4 whitespace-nowrap"
+            className="font-display font-semibold text-[15px] sm:text-xl shrink-0 mr-1 sm:mr-4 whitespace-nowrap"
             style={{ color: "var(--foreground)" }}
           >
             Recently Listed
           </h2>
           
-          {/* Tabs - Centered Absolute on Desktop, Flow on Mobile */}
+          {/* Tabs - Centered on Desktop, Flow on Mobile */}
           <div
-            className="sm:absolute sm:left-1/2 sm:-translate-x-1/2 flex items-center rounded-xl sm:rounded-2xl p-0.5 sm:p-1 shrink-0"
+            className="sm:absolute sm:left-1/2 sm:-translate-x-1/2 flex items-center rounded-lg sm:rounded-2xl p-0.5 sm:p-1 shrink-0"
             style={{ backgroundColor: "var(--secondary)" }}
           >
             {(["SALE", "RENT"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setRecentTab(tab)}
-                className="px-4 sm:px-5 py-2 sm:py-2.5 rounded-[10px] sm:rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap"
+                className="px-2 sm:px-5 py-1.5 sm:py-2.5 rounded-[6px] sm:rounded-xl text-[11px] sm:text-sm font-bold transition-all whitespace-nowrap"
                 style={{
                   backgroundColor:
                     recentTab === tab ? "var(--card)" : "transparent",
@@ -1016,12 +1016,12 @@ export default function DashboardPage() {
 
           <Link
             href="/properties"
-            className="flex items-center gap-1 sm:gap-1.5 text-sm sm:text-base font-bold hover:underline shrink-0 sm:ml-auto whitespace-nowrap"
+            className="flex items-center gap-0.5 sm:gap-1.5 text-xs sm:text-base font-bold hover:underline shrink-0 sm:ml-auto whitespace-nowrap"
             style={{ color: "#0000ee" }}
           >
-            <span className="hidden min-[380px]:inline">View all</span>
-            <span className="inline min-[380px]:hidden">All</span>
-            <ChevronRight size={16} className="sm:w-[18px] sm:h-[18px]" />
+            <span className="hidden min-[360px]:inline">View all</span>
+            <span className="inline min-[360px]:hidden">All</span>
+            <ChevronRight size={14} className="sm:w-[18px] sm:h-[18px]" />
           </Link>
         </div>
 
