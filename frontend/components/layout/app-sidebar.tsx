@@ -151,7 +151,7 @@ function SidebarContent({
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-6">
+      <nav className="flex-1 overflow-y-auto scrollbar-none py-4 px-2 space-y-6 pb-24">
         {sections.map((section) => (
           <div key={section}>
             {expanded && (
@@ -279,14 +279,6 @@ export function MobileSidebar({
               borderColor: "var(--sidebar-border)",
             }}
           >
-            <button
-              onClick={() => onOpenChange(false)}
-              className="absolute top-3 right-3 z-10 p-1.5 rounded-full shadow-md transition-opacity hover:opacity-90 bg-[var(--primary)]"
-              style={{ color: "var(--primary-foreground)" }}
-              aria-label="Close sidebar"
-            >
-              <X className="h-4 w-4" strokeWidth={3} />
-            </button>
             <SidebarContent
               expanded={true}
               onNavClick={() => onOpenChange(false)}
