@@ -61,7 +61,7 @@ export function TopBar({ title, notificationCount, onOpenSidebar }: TopBarProps)
           </button>
         )}
         <h1
-          className="text-lg font-semibold font-display"
+          className="hidden md:block text-lg font-semibold font-display truncate max-w-[200px] lg:max-w-none"
           style={{ color: "var(--foreground)" }}
         >
           {title}
