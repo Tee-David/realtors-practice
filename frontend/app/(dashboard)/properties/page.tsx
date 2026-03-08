@@ -105,127 +105,126 @@ export default function PropertiesPage() {
       />
 
       {/* Toolbar */}
-      <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-        {/* Filter button - Moved to start */}
-        <button
-          onClick={() => setFilterSheetOpen(true)}
-          className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium border transition-colors shrink-0"
-          style={{
-            backgroundColor: activeFilterCount > 0 ? "var(--primary)" : "var(--card)",
-            color: activeFilterCount > 0 ? "var(--primary-foreground)" : "var(--foreground)",
-            borderColor: activeFilterCount > 0 ? "var(--primary)" : "var(--border)",
-          }}
-        >
-          <SlidersHorizontal size={16} />
-          <span className="hidden sm:inline">Filters</span>
-          {activeFilterCount > 0 && (
-            <span
-              className="w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center"
-              style={{
-                backgroundColor: "var(--primary-foreground)",
-                color: "var(--primary)",
-              }}
-            >
-              {activeFilterCount}
-            </span>
-          )}
-        </button>
+      <div className="flex flex-col sm:flex-row gap-3 w-full">
+        {/* Top/Left Row: Filter and Search */}
+        <div className="flex items-center gap-2 flex-1 w-full">
+          <button
+            onClick={() => setFilterSheetOpen(true)}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium border transition-colors shrink-0"
+            style={{
+              backgroundColor: activeFilterCount > 0 ? "var(--primary)" : "var(--card)",
+              color: activeFilterCount > 0 ? "var(--primary-foreground)" : "var(--foreground)",
+              borderColor: activeFilterCount > 0 ? "var(--primary)" : "var(--border)",
+            }}
+          >
+            <SlidersHorizontal size={16} />
+            <span className="hidden sm:inline">Filters</span>
+            {activeFilterCount > 0 && (
+              <span
+                className="w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center"
+                style={{
+                  backgroundColor: "var(--primary-foreground)",
+                  color: "var(--primary)",
+                }}
+              >
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
 
-        {/* Search input */}
-        <div
-          className="flex items-center gap-2 px-3 py-2 rounded-xl flex-1 min-w-[180px]"
-          style={{ backgroundColor: "var(--card)", border: "1px solid var(--border)" }}
-        >
-          <Search size={16} style={{ color: "var(--muted-foreground)" }} />
-          <input
-            type="text"
-            placeholder="Search properties..."
-            value={filters.search || ""}
-            onChange={(e) => handleFilterChange({ ...filters, search: e.target.value || undefined, page: 1 })}
-            className="bg-transparent text-sm w-full outline-none placeholder:text-[var(--muted-foreground)]"
-            style={{ color: "var(--foreground)" }}
-          />
-          {filters.search && (
-            <button onClick={() => handleFilterChange({ ...filters, search: undefined, page: 1 })}>
-              <X size={14} style={{ color: "var(--muted-foreground)" }} />
-            </button>
-          )}
+          <div
+            className="flex items-center gap-2 px-3 py-2 rounded-xl flex-1 min-w-[180px]"
+            style={{ backgroundColor: "var(--card)", border: "1px solid var(--border)" }}
+          >
+            <Search size={16} style={{ color: "var(--muted-foreground)" }} />
+            <input
+              type="text"
+              placeholder="Search properties..."
+              value={filters.search || ""}
+              onChange={(e) => handleFilterChange({ ...filters, search: e.target.value || undefined, page: 1 })}
+              className="bg-transparent text-sm w-full outline-none placeholder:text-[var(--muted-foreground)]"
+              style={{ color: "var(--foreground)" }}
+            />
+            {filters.search && (
+              <button onClick={() => handleFilterChange({ ...filters, search: undefined, page: 1 })}>
+                <X size={14} style={{ color: "var(--muted-foreground)" }} />
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* Results count */}
-        <span className="text-sm font-medium hidden lg:block" style={{ color: "var(--muted-foreground)" }}>
-          {total > 0 ? `${total.toLocaleString()} ${pluralize(total, "property", "properties")}` : ""}
-        </span>
+        {/* Right/Bottom Row: Sorting and View Toggles */}
+        <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0 scrollbar-none justify-between sm:justify-end">
+          <span className="text-sm font-medium hidden lg:block shrink-0 px-2" style={{ color: "var(--muted-foreground)" }}>
+            {total > 0 ? `${total.toLocaleString()} ${pluralize(total, "property", "properties")}` : ""}
+          </span>
 
-        {/* Sort dropdown */}
-        <div className="relative">
-          <select
-            value={filters.sortBy}
-            onChange={(e) => handleFilterChange({ ...filters, sortBy: e.target.value, page: 1 })}
-            className="text-xs px-3 py-2 pr-7 rounded-xl border outline-none font-medium appearance-none cursor-pointer"
+          <div className="relative shrink-0">
+            <select
+              value={filters.sortBy}
+              onChange={(e) => handleFilterChange({ ...filters, sortBy: e.target.value, page: 1 })}
+              className="text-xs px-3 py-2 pr-7 rounded-xl border outline-none font-medium appearance-none cursor-pointer"
+              style={{
+                backgroundColor: "var(--card)",
+                color: "var(--foreground)",
+                borderColor: "var(--border)",
+              }}
+            >
+              {SORT_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown
+              size={12}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
+              style={{ color: "var(--muted-foreground)" }}
+            />
+          </div>
+
+          <button
+            onClick={() =>
+              handleFilterChange({
+                ...filters,
+                sortOrder: filters.sortOrder === "asc" ? "desc" : "asc",
+              })
+            }
+            className="text-xs px-3 py-2 rounded-xl font-medium border shrink-0"
             style={{
               backgroundColor: "var(--card)",
               color: "var(--foreground)",
               borderColor: "var(--border)",
             }}
           >
-            {SORT_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-          <ChevronDown
-            size={12}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
-            style={{ color: "var(--muted-foreground)" }}
-          />
-        </div>
-
-        {/* Sort order */}
-        <button
-          onClick={() =>
-            handleFilterChange({
-              ...filters,
-              sortOrder: filters.sortOrder === "asc" ? "desc" : "asc",
-            })
-          }
-          className="text-xs px-3 py-2 rounded-xl font-medium border"
-          style={{
-            backgroundColor: "var(--card)",
-            color: "var(--foreground)",
-            borderColor: "var(--border)",
-          }}
-        >
-          {filters.sortOrder === "asc" ? "↑ Asc" : "↓ Desc"}
-        </button>
-
-        {/* View mode toggle */}
-        <div
-          className="flex rounded-xl overflow-hidden border"
-          style={{ borderColor: "var(--border)" }}
-        >
-          <button
-            onClick={() => setViewMode("grid")}
-            className="p-2 transition-colors"
-            style={{
-              backgroundColor: viewMode === "grid" ? "var(--primary)" : "var(--card)",
-              color: viewMode === "grid" ? "var(--primary-foreground)" : "var(--muted-foreground)",
-            }}
-          >
-            <LayoutGrid size={16} />
+            {filters.sortOrder === "asc" ? "Asc" : "Desc"}
           </button>
-          <button
-            onClick={() => setViewMode("list")}
-            className="p-2 transition-colors"
-            style={{
-              backgroundColor: viewMode === "list" ? "var(--primary)" : "var(--card)",
-              color: viewMode === "list" ? "var(--primary-foreground)" : "var(--muted-foreground)",
-            }}
+
+          <div
+            className="flex rounded-xl overflow-hidden border shrink-0"
+            style={{ borderColor: "var(--border)" }}
           >
-            <List size={16} />
-          </button>
-        </div>
+            <button
+              onClick={() => setViewMode("grid")}
+              className="p-2 transition-colors"
+              style={{
+                backgroundColor: viewMode === "grid" ? "var(--primary)" : "var(--card)",
+                color: viewMode === "grid" ? "var(--primary-foreground)" : "var(--muted-foreground)",
+              }}
+            >
+              <LayoutGrid size={16} />
+            </button>
+            <button
+              onClick={() => setViewMode("list")}
+              className="p-2 transition-colors"
+              style={{
+                backgroundColor: viewMode === "list" ? "var(--primary)" : "var(--card)",
+                color: viewMode === "list" ? "var(--primary-foreground)" : "var(--muted-foreground)",
+              }}
+            >
+              <List size={16} />
+            </button>
+          </div>
 
         {/* Grid column selector — Desktop */}
         {viewMode === "grid" && (
@@ -276,7 +275,7 @@ export default function PropertiesPage() {
         {/* Map toggle */}
         <button
           onClick={() => setShowMap(!showMap)}
-          className="p-2 rounded-xl border transition-colors"
+          className="p-2 rounded-xl border transition-colors shrink-0"
           style={{
             backgroundColor: showMap ? "var(--primary)" : "var(--card)",
             color: showMap ? "var(--primary-foreground)" : "var(--muted-foreground)",
@@ -286,6 +285,7 @@ export default function PropertiesPage() {
         >
           <Map size={16} />
         </button>
+      </div>
       </div>
 
       {/* Main content: Cards + Map split */}
