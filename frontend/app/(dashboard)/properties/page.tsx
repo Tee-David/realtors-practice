@@ -9,6 +9,7 @@ import { PropertyDetailPanel } from "@/components/property/property-detail-panel
 import { PropertyFilterSheet } from "@/components/property/property-filter-sheet";
 import { Pagination } from "@/components/property/pagination";
 import { useProperties } from "@/hooks/useProperties";
+import { MOCK_PROPERTIES } from "@/lib/mock-data";
 import {
   LayoutGrid,
   List,
@@ -19,6 +20,7 @@ import {
   X,
   Grid2x2,
   Grid3x3,
+  Building2,
 } from "lucide-react";
 import {
   SideSheet,
@@ -59,9 +61,10 @@ export default function PropertiesPage() {
 
   const { data, isLoading } = useProperties(filters);
 
-  const properties = data?.data || [];
-  const total = data?.meta?.total || 0;
-  const totalPages = data?.meta?.totalPages || 1;
+  const apiProperties = data?.data || [];
+  const properties = apiProperties.length > 0 ? apiProperties : MOCK_PROPERTIES;
+  const total = data?.meta?.total || (apiProperties.length === 0 ? MOCK_PROPERTIES.length : 0);
+  const totalPages = data?.meta?.totalPages || (apiProperties.length === 0 ? 1 : 1);
 
   const selectedProperty = useMemo(
     () => properties.find((p: Property) => p.id === selectedPropertyId) || null,

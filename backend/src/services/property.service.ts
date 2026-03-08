@@ -4,6 +4,7 @@ import { ListPropertiesInput, CreatePropertyInput, UpdatePropertyInput } from ".
 import { VersionService } from "./version.service";
 import { QualityService } from "./quality.service";
 import { DedupService } from "./dedup.service";
+import { MeiliService } from "./meili.service";
 import { Logger } from "../utils/logger.util";
 
 export class PropertyService {
@@ -128,6 +129,9 @@ export class PropertyService {
       });
     }
 
+    // Sync to Meilisearch
+    MeiliService.upsertProperty(property.id);
+
     Logger.info(`Property created: ${property.id} (quality: ${qualityScore})`);
     return { property, duplicate: false };
   }
@@ -166,6 +170,9 @@ export class PropertyService {
       },
     });
 
+    // Sync to Meilisearch
+    MeiliService.upsertProperty(updated.id);
+
     Logger.info(`Property updated: ${id} (version ${updated.currentVersion})`);
     return updated;
   }
@@ -177,17 +184,27 @@ export class PropertyService {
 
     if (!property) return null;
 
-    return prisma.property.update({
+    const result = await prisma.property.update({
       where: { id },
       data: { deletedAt: new Date() },
     });
+
+    // Remove from Meilisearch
+    MeiliService.deleteProperty(id);
+
+    return result;
   }
 
   static async restore(id: string) {
-    return prisma.property.update({
+    const result = await prisma.property.update({
       where: { id },
       data: { deletedAt: null },
     });
+
+    // Restore to Meilisearch
+    MeiliService.upsertProperty(id);
+
+    return result;
   }
 
   static async bulkAction(ids: string[], action: string, changedBy?: string) {
@@ -206,6 +223,15 @@ export class PropertyService {
       where: { id: { in: ids }, deletedAt: action === "restore" ? { not: null } : null },
       data: updateData,
     });
+
+    // Sync changes to Meilisearch
+    for (const id of ids) {
+      if (action === "delete") {
+        MeiliService.deleteProperty(id);
+      } else {
+        MeiliService.upsertProperty(id);
+      }
+    }
 
     Logger.info(`Bulk ${action}: ${result.count} properties affected`);
     return result;

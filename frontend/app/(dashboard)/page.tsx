@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { Property, PropertyCategory, ListingType } from "@/types/property";
+import { MOCK_PROPERTIES } from "@/lib/mock-data";
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -625,12 +626,16 @@ export default function DashboardPage() {
   });
   const [recentTab, setRecentTab] = useState<"SALE" | "RENT">("SALE");
 
-  const allProperties: Property[] = recentData?.data || [];
+  const apiProperties: Property[] = recentData?.data || [];
+  
+  // MERGE API Data with MOCK Data for demonstration if API is empty
+  const allProperties = apiProperties.length > 0 ? apiProperties : MOCK_PROPERTIES;
+
   const recentProperties = allProperties.filter(
     (p) => p.listingType === recentTab
   );
 
-  const total = stats?.total || 0;
+  const total = stats?.total || (apiProperties.length === 0 ? MOCK_PROPERTIES.length : 0);
   const byCategory = stats?.byCategory || [];
   const byStatus = stats?.byStatus || [];
   const byListingType = stats?.byListingType || [];
@@ -638,11 +643,12 @@ export default function DashboardPage() {
   const saleCount =
     byListingType.find(
       (lt: { listingType: ListingType; count: number }) => lt.listingType === "SALE"
-    )?.count || 0;
+    )?.count || MOCK_PROPERTIES.filter(p => p.listingType === "SALE").length;
+    
   const rentCount =
     byListingType.find(
       (lt: { listingType: ListingType; count: number }) => lt.listingType === "RENT"
-    )?.count || 0;
+    )?.count || MOCK_PROPERTIES.filter(p => p.listingType === "RENT").length;
 
   // Estimate total value from recent properties (placeholder — API could return this)
   const saleProperties = allProperties.filter((p) => p.listingType === "SALE");

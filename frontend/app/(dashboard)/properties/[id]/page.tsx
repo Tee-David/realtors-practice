@@ -2,6 +2,7 @@
 
 import { use } from "react";
 import { useProperty, usePropertyVersions, usePropertyPriceHistory } from "@/hooks/useProperties";
+import { MOCK_PROPERTIES } from "@/lib/mock-data";
 import { formatPrice } from "@/lib/utils";
 import {
   ArrowLeft, MapPin, BedDouble, Bath, Maximize2, Calendar, Star, Shield,
@@ -122,9 +123,12 @@ function PriceChart({ history }: { history: PriceHistoryEntry[] }) {
 
 export default function PropertyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { data: property, isLoading } = useProperty(id);
+  const { data: apiProperty, isLoading } = useProperty(id);
   const { data: versionsData } = usePropertyVersions(id);
   const { data: priceHistory } = usePropertyPriceHistory(id);
+
+  const mockProperty = MOCK_PROPERTIES.find(p => p.id === id);
+  const property = apiProperty || mockProperty;
 
   if (isLoading) {
     return (
