@@ -131,18 +131,18 @@ function SidebarContent({
         ) : (
           <>
             <Image
-              src="/logo-blue.png"
+              src="/favicon-blue.png"
               alt="Realtors' Practice"
-              width={112}
-              height={29}
+              width={140}
+              height={38}
               className="shrink-0 dark:hidden"
               style={{ objectFit: "contain" }}
             />
             <Image
-              src="/logo-white.png"
+              src="/favicon-white.png"
               alt="Realtors' Practice"
-              width={112}
-              height={29}
+              width={140}
+              height={38}
               className="shrink-0 hidden dark:block"
               style={{ objectFit: "contain" }}
             />
