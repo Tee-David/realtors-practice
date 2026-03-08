@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { Eye, EyeOff, ArrowRight, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -31,7 +32,11 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/");
+    toast.success("Login successful! Redirecting...");
+    
+    setTimeout(() => {
+      router.push("/");
+    }, 1000);
   }
 
   return (

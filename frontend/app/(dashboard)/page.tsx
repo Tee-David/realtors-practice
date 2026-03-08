@@ -664,8 +664,28 @@ export default function DashboardPage() {
   const rentValue = rentProperties.reduce((sum, p) => sum + (p.price || 0), 0);
   const totalValue = saleValue + rentValue;
 
+  // Greeter logic
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good Morning" : hour < 18 ? "Good Afternoon" : "Good Evening";
+  const dateOptions: Intl.DateTimeFormatOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+  const formattedDate = new Date().toLocaleDateString('en-US', dateOptions);
+
   return (
     <div className="space-y-6">
+      {/* Greeter Section */}
+      <div className="flex flex-col gap-1.5 mb-2">
+        <h1 
+          className="font-display text-2xl sm:text-[28px] font-bold tracking-tight"
+          style={{ color: "var(--foreground)" }}
+        >
+          {greeting}, David
+        </h1>
+        <div className="flex items-center gap-1.5 text-sm" style={{ color: "var(--muted-foreground)" }}>
+          <Calendar size={15} />
+          <p className="font-medium">{formattedDate}</p>
+        </div>
+      </div>
+      
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
