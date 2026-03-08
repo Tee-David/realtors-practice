@@ -978,15 +978,15 @@ export default function DashboardPage() {
 
       {/* Recently Listed */}
       <div>
-        <div className="flex flex-row items-center justify-between w-full gap-2 sm:gap-4 mb-6 relative">
+        <div className="flex flex-row items-center justify-between w-full mb-6 relative">
           <h2
-            className="font-display font-semibold text-base sm:text-xl leading-tight"
+            className="font-display font-semibold text-lg sm:text-xl shrink-0 mr-2 sm:mr-4 whitespace-nowrap"
             style={{ color: "var(--foreground)" }}
           >
-            Recently <br className="sm:hidden" /> Listed
+            Recently Listed
           </h2>
           
-          {/* Tabs - Flow on Mobile, Centered Absolute on Desktop */}
+          {/* Tabs - Centered Absolute on Desktop, Flow on Mobile */}
           <div
             className="sm:absolute sm:left-1/2 sm:-translate-x-1/2 flex items-center rounded-xl sm:rounded-2xl p-0.5 sm:p-1 shrink-0"
             style={{ backgroundColor: "var(--secondary)" }}
@@ -995,7 +995,7 @@ export default function DashboardPage() {
               <button
                 key={tab}
                 onClick={() => setRecentTab(tab)}
-                className="px-3 sm:px-5 py-2 sm:py-2.5 rounded-[10px] sm:rounded-xl text-xs sm:text-sm font-bold transition-all leading-tight"
+                className="px-4 sm:px-5 py-2 sm:py-2.5 rounded-[10px] sm:rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap"
                 style={{
                   backgroundColor:
                     recentTab === tab ? "var(--card)" : "transparent",
@@ -1009,19 +1009,18 @@ export default function DashboardPage() {
                       : "none",
                 }}
               >
-                For <br className="sm:hidden" /> {tab === "SALE" ? "Sale" : "Rent"}
+                {tab === "SALE" ? "For Sale" : "For Rent"}
               </button>
             ))}
           </div>
 
           <Link
             href="/properties"
-            className="flex items-center gap-0.5 sm:gap-1.5 text-sm sm:text-base font-bold hover:underline shrink-0 text-center leading-tight sm:ml-auto"
+            className="flex items-center gap-1 sm:gap-1.5 text-sm sm:text-base font-bold hover:underline shrink-0 sm:ml-auto whitespace-nowrap"
             style={{ color: "#0000ee" }}
           >
-            <span>
-              View <br className="sm:hidden" /> all
-            </span>
+            <span className="hidden min-[380px]:inline">View all</span>
+            <span className="inline min-[380px]:hidden">All</span>
             <ChevronRight size={16} className="sm:w-[18px] sm:h-[18px]" />
           </Link>
         </div>

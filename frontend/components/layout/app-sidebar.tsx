@@ -98,8 +98,13 @@ function SidebarContent({
   const router = useRouter();
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/login");
+    try {
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error("Sign out error:", error);
+    } finally {
+      router.push("/login");
+    }
   };
 
   return (
