@@ -808,20 +808,32 @@ export default function DashboardPage() {
           <PropertiesStatsChart />
         </div>
         <div className="grid grid-rows-2 gap-4">
-          <ValueCard
-            label="Properties for Sale Value"
-            value={saleValue}
-            icon={TrendingUp}
-            iconColor="var(--success)"
-            isLoading={statsLoading || recentLoading}
-          />
-          <ValueCard
-            label="Properties for Rent Value"
-            value={rentValue}
-            icon={Home}
-            iconColor="var(--accent)"
-            isLoading={statsLoading || recentLoading}
-          />
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.7 }}
+          >
+            <ValueCard
+              label="Properties for Sale Value"
+              value={saleValue}
+              icon={TrendingUp}
+              iconColor="var(--success)"
+              isLoading={statsLoading || recentLoading}
+            />
+          </motion.div>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.8 }}
+          >
+            <ValueCard
+              label="Properties for Rent Value"
+              value={rentValue}
+              icon={Home}
+              iconColor="var(--accent)"
+              isLoading={statsLoading || recentLoading}
+            />
+          </motion.div>
         </div>
       </motion.div>
 
