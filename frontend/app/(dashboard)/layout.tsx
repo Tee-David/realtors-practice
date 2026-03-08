@@ -21,7 +21,7 @@ export default function DashboardLayout({
       <TopBar title="Dashboard" />
 
       {/* Main content area */}
-      <main className="md:ml-[60px] md:pt-[56px] p-6 pb-24 md:pb-6 transition-all duration-300">
+      <main className="pt-16 md:ml-[60px] md:pt-[56px] p-6 pb-24 md:pb-6 transition-all duration-300">
         {children}
       </main>
 
