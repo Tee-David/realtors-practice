@@ -49,11 +49,11 @@ export function TopBar({ title, notificationCount, onOpenSidebar }: TopBarProps)
       }}
     >
       {/* Left: Hamburger (mobile) + Page title */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 h-full">
         {onOpenSidebar && (
           <button
             onClick={onOpenSidebar}
-            className="md:hidden p-2 rounded-lg transition-colors hover:bg-[var(--secondary)]"
+            className="md:hidden p-2 rounded-lg transition-colors hover:bg-[var(--secondary)] flex items-center justify-center"
             aria-label="Open Map/Sidebar Menu"
           >
             <Menu className="h-5 w-5" style={{ color: "var(--foreground)" }} />
@@ -73,7 +73,8 @@ export function TopBar({ title, notificationCount, onOpenSidebar }: TopBarProps)
         <button
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 transition-opacity"
         >
-          Tour
+          <span className="sm:hidden">Tour</span>
+          <span className="hidden sm:inline">Take Interactive Tour</span>
         </button>
 
         {/* Theme toggle */}
