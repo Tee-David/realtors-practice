@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
+import { ThemeSwitch } from "@/components/ui/theme-switch";
 import { Bell, Menu } from "lucide-react";
 
 interface TopBarProps {
@@ -49,11 +49,12 @@ export function TopBar({ title, notificationCount, onOpenSidebar }: TopBarProps)
       }}
     >
       {/* Left: Hamburger (mobile) + Page title */}
-      <div className="flex items-center gap-3 h-full">
+      <div className="flex items-center gap-3">
         {onOpenSidebar && (
           <button
             onClick={onOpenSidebar}
-            className="md:hidden p-2 rounded-lg transition-colors hover:bg-[var(--secondary)] flex items-center justify-center"
+            className="md:hidden h-10 w-10 flex items-center justify-center rounded-xl border transition-colors hover:bg-[var(--secondary)] bg-[var(--card)]"
+            style={{ borderColor: "var(--border)" }}
             aria-label="Open Map/Sidebar Menu"
           >
             <Menu className="h-5 w-5" style={{ color: "var(--foreground)" }} />
@@ -78,7 +79,7 @@ export function TopBar({ title, notificationCount, onOpenSidebar }: TopBarProps)
         </button>
 
         {/* Theme toggle */}
-        <AnimatedThemeToggler />
+        <ThemeSwitch />
 
         {/* Notification bell */}
         <button

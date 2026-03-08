@@ -213,16 +213,6 @@ function SidebarContent({
         className="border-t px-2 py-3 space-y-2"
         style={{ borderColor: "var(--sidebar-border)" }}
       >
-        {/* Theme Switch */}
-        <div
-          className={cn(
-            "flex items-center rounded-lg px-3 py-2",
-            !expanded && "justify-center px-0"
-          )}
-        >
-          <ThemeSwitch />
-        </div>
-
         {/* Profile */}
         <UserAvatar expanded={expanded} />
 
