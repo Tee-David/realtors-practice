@@ -673,7 +673,7 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       {/* Greeter Section */}
-      <div className="flex flex-col gap-1.5 mb-2">
+      <div className="flex flex-col gap-1.5 mb-8">
         <h1 
           className="font-display text-2xl sm:text-[28px] font-bold tracking-tight"
           style={{ color: "var(--foreground)" }}
