@@ -202,7 +202,7 @@ export default function PropertiesPage() {
             <select
               value={filters.sortBy}
               onChange={(e) => handleFilterChange({ ...filters, sortBy: e.target.value, page: 1 })}
-              className="text-xs px-3 py-2 pr-7 rounded-xl border outline-none font-medium appearance-none cursor-pointer"
+              className="text-[11px] sm:text-xs px-2 sm:px-3 py-2 pr-6 sm:pr-7 rounded-xl border outline-none font-medium appearance-none cursor-pointer"
               style={{
                 backgroundColor: "var(--card)",
                 color: "var(--foreground)",
@@ -216,8 +216,8 @@ export default function PropertiesPage() {
               ))}
             </select>
             <ChevronDown
-              size={12}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
+              size={10}
+              className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none"
               style={{ color: "var(--muted-foreground)" }}
             />
           </div>
@@ -229,7 +229,7 @@ export default function PropertiesPage() {
                 sortOrder: filters.sortOrder === "asc" ? "desc" : "asc",
               })
             }
-            className="text-xs px-3 py-2 rounded-xl font-medium border shrink-0"
+            className="text-[10px] sm:text-xs px-2 sm:px-3 py-2 rounded-xl font-medium border shrink-0"
             style={{
               backgroundColor: "var(--card)",
               color: "var(--foreground)",
@@ -245,23 +245,23 @@ export default function PropertiesPage() {
           >
             <button
               onClick={() => setViewMode("grid")}
-              className="p-2 transition-colors"
+              className="p-1.5 sm:p-2 transition-colors"
               style={{
                 backgroundColor: viewMode === "grid" ? "var(--primary)" : "var(--card)",
                 color: viewMode === "grid" ? "var(--primary-foreground)" : "var(--muted-foreground)",
               }}
             >
-              <LayoutGrid size={16} />
+              <LayoutGrid size={15} className="sm:size-4" />
             </button>
             <button
               onClick={() => setViewMode("list")}
-              className="p-2 transition-colors"
+              className="p-1.5 sm:p-2 transition-colors"
               style={{
                 backgroundColor: viewMode === "list" ? "var(--primary)" : "var(--card)",
                 color: viewMode === "list" ? "var(--primary-foreground)" : "var(--muted-foreground)",
               }}
             >
-              <List size={16} />
+              <List size={15} className="sm:size-4" />
             </button>
           </div>
 
@@ -291,14 +291,14 @@ export default function PropertiesPage() {
         {/* Grid column selector — Mobile */}
         {viewMode === "grid" && (
           <div
-            className="flex sm:hidden items-center rounded-xl overflow-hidden border"
+            className="flex sm:hidden items-center rounded-xl overflow-hidden border shrink-0"
             style={{ borderColor: "var(--border)" }}
           >
             {MOBILE_GRID_OPTIONS.map((n) => (
               <button
                 key={n}
                 onClick={() => setGridCols(n)}
-                className="px-3 py-2 text-[11px] font-bold transition-colors"
+                className="px-2.5 py-2 text-[10px] font-bold transition-colors"
                 style={{
                   backgroundColor: gridCols === n ? "var(--primary)" : "var(--card)",
                   color: gridCols === n ? "var(--primary-foreground)" : "var(--muted-foreground)",
@@ -327,7 +327,7 @@ export default function PropertiesPage() {
               ease: "easeInOut"
             }
           } : { scale: 1 }}
-          className="p-2 rounded-xl border transition-colors shrink-0"
+          className="p-1.5 sm:p-2 rounded-xl border transition-colors shrink-0"
           style={{
             backgroundColor: showMap ? "var(--primary)" : "var(--card)",
             color: showMap ? "var(--primary-foreground)" : "var(--muted-foreground)",
@@ -335,7 +335,7 @@ export default function PropertiesPage() {
           }}
           title={showMap ? "Hide map" : "Show map"}
         >
-          <Map size={16} />
+          <Map size={15} className="sm:size-4" />
         </motion.button>
       </div>
       </div>

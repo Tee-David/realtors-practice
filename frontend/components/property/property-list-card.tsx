@@ -41,8 +41,8 @@ export function PropertyListCard({ property, isActive, onHover, onClick }: Prope
       onMouseLeave={() => onHover?.(null)}
       onClick={() => onClick?.(id)}
     >
-      {/* Image — wider, with overlay badges */}
-      <div className="relative w-[220px] sm:w-[260px] shrink-0 aspect-[4/3]">
+      {/* Image — more compact on mobile */}
+      <div className="relative w-[130px] sm:w-[260px] shrink-0 aspect-[4/3] sm:aspect-auto sm:h-auto">
         <img
           src={imageUrl}
           alt={title}
@@ -54,7 +54,7 @@ export function PropertyListCard({ property, isActive, onHover, onClick }: Prope
 
         {/* Listing type badge */}
         <span
-          className="absolute top-3 left-3 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider text-white"
+          className="absolute top-2 left-2 px-1.5 py-0.5 rounded-md text-[9px] sm:text-[10px] sm:px-2.5 sm:py-1 sm:rounded-lg font-bold uppercase tracking-wider text-white"
           style={{ backgroundColor: "var(--primary)" }}
         >
           {LISTING_LABELS[listingType] || listingType}
@@ -63,33 +63,23 @@ export function PropertyListCard({ property, isActive, onHover, onClick }: Prope
         {/* Quality rating */}
         {stars > 0 && (
           <div
-            className="absolute top-3 right-3 flex items-center gap-1 px-2 py-0.5 rounded-lg backdrop-blur-sm"
+            className="absolute top-2 right-2 flex items-center gap-1 px-1.5 py-0.5 rounded-md backdrop-blur-sm sm:px-2 sm:rounded-lg"
             style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
           >
-            <Star size={10} fill="#facc15" stroke="#facc15" />
-            <span className="text-[10px] font-bold text-white">{(qualityScore! / 20).toFixed(1)}</span>
-          </div>
-        )}
-
-        {/* Image count */}
-        {imageCount > 1 && (
-          <div
-            className="absolute bottom-2 right-2 px-2 py-0.5 rounded text-[10px] font-medium backdrop-blur-sm"
-            style={{ backgroundColor: "rgba(0,0,0,0.45)", color: "#fff" }}
-          >
-            {imageCount} photos
+            <Star size={8} fill="#facc15" stroke="#facc15" className="sm:size-2.5" />
+            <span className="text-[9px] sm:text-[10px] font-bold text-white">{(qualityScore! / 20).toFixed(1)}</span>
           </div>
         )}
 
         {/* Location overlay on image */}
-        <div className="absolute bottom-2 left-2 flex items-center gap-1 text-white/90 text-[11px] max-w-[60%]">
-          <MapPin size={11} className="shrink-0" />
+        <div className="absolute bottom-2 left-2 flex items-center gap-1 text-white/90 text-[9px] sm:text-[11px] max-w-[85%] sm:max-w-[60%]">
+          <MapPin size={10} className="shrink-0 sm:size-[11px]" />
           <span className="truncate">{location}</span>
         </div>
       </div>
 
       {/* Content */}
-      <div className="flex-1 p-4 flex flex-col justify-between min-w-0">
+      <div className="flex-1 p-3 sm:p-4 flex flex-col justify-between min-w-0">
         <div>
           {/* Category tag */}
           <span
@@ -108,24 +98,26 @@ export function PropertyListCard({ property, isActive, onHover, onClick }: Prope
         </div>
 
         {/* Details row */}
-        <div className="flex items-center gap-4 mt-3 text-xs" style={{ color: "var(--muted-foreground)" }}>
+        <div className="flex items-center gap-2 sm:gap-4 mt-2 sm:mt-3 text-[11px] sm:text-xs" style={{ color: "var(--muted-foreground)" }}>
           {bedrooms != null && (
             <span className="flex items-center gap-1">
-              <BedDouble size={14} strokeWidth={1.5} />
+              <BedDouble size={12} className="sm:size-[14px]" strokeWidth={1.5} />
               <span className="font-medium" style={{ color: "var(--foreground)" }}>{bedrooms}</span>
-              Bed{bedrooms !== 1 ? "s" : ""}
+              <span className="hidden xs:inline">Bed{bedrooms !== 1 ? "s" : ""}</span>
+              <span className="inline xs:hidden">br</span>
             </span>
           )}
           {bathrooms != null && (
             <span className="flex items-center gap-1">
-              <Bath size={14} strokeWidth={1.5} />
+              <Bath size={12} className="sm:size-[14px]" strokeWidth={1.5} />
               <span className="font-medium" style={{ color: "var(--foreground)" }}>{bathrooms}</span>
-              Bath
+              <span className="hidden xs:inline">Bath</span>
+              <span className="inline xs:hidden">ba</span>
             </span>
           )}
           {(property.landSizeSqm || property.buildingSizeSqm) && (
             <span className="flex items-center gap-1">
-              <Maximize2 size={13} strokeWidth={1.5} />
+              <Maximize2 size={11} className="sm:size-[13px]" strokeWidth={1.5} />
               <span className="font-medium" style={{ color: "var(--foreground)" }}>
                 {Math.round(property.landSizeSqm || property.buildingSizeSqm || 0)}
               </span>
@@ -135,23 +127,23 @@ export function PropertyListCard({ property, isActive, onHover, onClick }: Prope
         </div>
 
         {/* Price + actions row */}
-        <div className="flex items-center justify-between mt-3 pt-3" style={{ borderTop: "1px solid var(--border)" }}>
-          <div>
-            <span className="font-display font-bold text-lg" style={{ color: "var(--accent)" }}>
+        <div className="flex items-center justify-between mt-2 sm:mt-3 pt-2 sm:pt-3" style={{ borderTop: "1px solid var(--border)" }}>
+          <div className="min-w-0">
+            <span className="font-display font-bold text-base sm:text-lg truncate block" style={{ color: "var(--accent)" }}>
               {formatPrice(price)}
             </span>
             {rentFrequency && (
-              <span className="text-xs font-normal ml-1" style={{ color: "var(--muted-foreground)" }}>
+              <span className="text-[10px] sm:text-xs font-normal" style={{ color: "var(--muted-foreground)" }}>
                 /{rentFrequency}
               </span>
             )}
           </div>
           <button
             onClick={(e) => { e.stopPropagation(); }}
-            className="p-2 rounded-full transition-colors hover:bg-[var(--secondary)]"
+            className="p-1.5 sm:p-2 rounded-full transition-colors hover:bg-[var(--secondary)] shrink-0"
             style={{ color: "var(--muted-foreground)" }}
           >
-            <Heart size={16} />
+            <Heart size={14} className="sm:size-[16px]" />
           </button>
         </div>
       </div>
