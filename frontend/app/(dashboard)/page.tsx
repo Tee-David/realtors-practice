@@ -978,24 +978,24 @@ export default function DashboardPage() {
 
       {/* Recently Listed */}
       <div>
-        <div className="flex flex-row items-center justify-between w-full mb-6 relative">
+        <div className="flex flex-row items-center justify-between w-full mb-6 relative gap-2 sm:gap-4 overflow-x-auto no-scrollbar">
           <h2
-            className="font-display font-semibold text-[15px] sm:text-xl shrink-0 mr-1 sm:mr-4 whitespace-nowrap"
+            className="font-display font-semibold text-[15px] sm:text-xl shrink-0 whitespace-nowrap"
             style={{ color: "var(--foreground)" }}
           >
             Recently Listed
           </h2>
           
-          {/* Tabs - Centered on Desktop, Flow on Mobile */}
+          {/* Tabs - Flow on all sizes to prevent overlap */}
           <div
-            className="sm:absolute sm:left-1/2 sm:-translate-x-1/2 flex items-center rounded-lg sm:rounded-2xl p-0.5 sm:p-1 shrink-0"
+            className="flex items-center rounded-[8px] sm:rounded-2xl p-0.5 sm:p-1 shrink-0"
             style={{ backgroundColor: "var(--secondary)" }}
           >
             {(["SALE", "RENT"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setRecentTab(tab)}
-                className="px-2 sm:px-5 py-1.5 sm:py-2.5 rounded-[6px] sm:rounded-xl text-[11px] sm:text-sm font-bold transition-all whitespace-nowrap"
+                className="px-2 sm:px-5 py-1.5 sm:py-2.5 rounded-[6px] sm:rounded-xl text-[12px] sm:text-sm font-bold transition-all whitespace-nowrap"
                 style={{
                   backgroundColor:
                     recentTab === tab ? "var(--card)" : "transparent",
@@ -1016,7 +1016,7 @@ export default function DashboardPage() {
 
           <Link
             href="/properties"
-            className="flex items-center gap-0.5 sm:gap-1.5 text-xs sm:text-base font-bold hover:underline shrink-0 sm:ml-auto whitespace-nowrap"
+            className="flex items-center gap-0.5 sm:gap-1.5 text-xs sm:text-base font-bold hover:underline shrink-0 whitespace-nowrap"
             style={{ color: "#0000ee" }}
           >
             <span className="hidden min-[360px]:inline">View all</span>
