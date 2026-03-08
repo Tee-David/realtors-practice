@@ -70,13 +70,13 @@ export function PropertyCard({ property, isActive, onFavorite, onHover, onClick 
 
   return (
     <div
-      className="group block cursor-pointer"
+      className="group block cursor-pointer h-full"
       onClick={() => onClick?.(id)}
       onMouseEnter={() => onHover?.(id)}
       onMouseLeave={() => onHover?.(null)}
     >
       <div
-        className="relative rounded-2xl overflow-hidden transition-all duration-300 group-hover:-translate-y-1"
+        className="relative rounded-2xl overflow-hidden transition-all duration-300 group-hover:-translate-y-1 flex flex-col h-full"
         style={{
           backgroundColor: "var(--card)",
           boxShadow: "0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.04)",
@@ -84,7 +84,7 @@ export function PropertyCard({ property, isActive, onFavorite, onHover, onClick 
         }}
       >
         {/* Image Section */}
-        <div className="relative aspect-[4/3] overflow-hidden">
+        <div className="relative aspect-[4/3] w-full shrink-0 overflow-hidden">
           {/* Property Image */}
           <img
             src={imageUrl}
@@ -186,35 +186,38 @@ export function PropertyCard({ property, isActive, onFavorite, onHover, onClick 
         </div>
 
         {/* Content Section */}
-        <div className="p-4 space-y-2.5">
-          {/* Title */}
-          <h3
-            className="font-display font-semibold text-sm leading-snug line-clamp-2 transition-colors group-hover:text-[var(--primary)]"
-            style={{ color: "var(--foreground)" }}
-          >
-            {title}
-          </h3>
-
-          {/* Price */}
-          <div className="flex items-baseline flex-wrap gap-x-1.5 gap-y-0.5">
-            <span
-              className="font-display font-bold text-base sm:text-lg"
-              style={{ color: "var(--accent)" }}
+        <div className="p-4 flex-1 flex flex-col">
+          {/* Top content that should push the footer down */}
+          <div className="flex-1 space-y-2.5 flex flex-col">
+            {/* Title */}
+            <h3
+              className="font-display font-semibold text-sm leading-snug line-clamp-2 transition-colors group-hover:text-[var(--primary)]"
+              style={{ color: "var(--foreground)" }}
             >
-              {formatPrice(price)}
-            </span>
-            {rentFrequency && (
+              {title}
+            </h3>
+
+            {/* Price */}
+            <div className="flex items-baseline flex-wrap gap-x-1.5 gap-y-0.5 mt-auto pb-1">
               <span
-                className="text-[10px] sm:text-xs font-medium"
-                style={{ color: "var(--muted-foreground)" }}
+                className="font-display font-bold text-base sm:text-lg"
+                style={{ color: "var(--accent)" }}
               >
-                /{rentFrequency}
+                {formatPrice(price)}
               </span>
-            )}
+              {rentFrequency && (
+                <span
+                  className="text-[10px] sm:text-xs font-medium"
+                  style={{ color: "var(--muted-foreground)" }}
+                >
+                  /{rentFrequency}
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Divider */}
-          <div className="h-px" style={{ backgroundColor: "var(--border)" }} />
+          <div className="h-px mt-3" style={{ backgroundColor: "var(--border)" }} />
 
           {/* Details footer */}
           <div className="flex items-center justify-between">

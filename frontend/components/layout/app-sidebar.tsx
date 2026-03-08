@@ -279,6 +279,12 @@ export function MobileSidebar({
               borderColor: "var(--sidebar-border)",
             }}
           >
+            <div className="absolute top-1/2 -right-1.5 -translate-y-1/2 flex items-center pr-2 pointer-events-none">
+              <div
+                className="w-1.5 h-12 rounded-full opacity-30"
+                style={{ backgroundColor: "var(--foreground)" }}
+              />
+            </div>
             <SidebarContent
               expanded={true}
               onNavClick={() => onOpenChange(false)}

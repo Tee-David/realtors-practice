@@ -22,6 +22,7 @@ function getGridStyle(cols: number): React.CSSProperties {
     display: "grid",
     gap: cols >= 5 ? "0.75rem" : "1rem",
     gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+    alignItems: "stretch",
   };
 }
 
