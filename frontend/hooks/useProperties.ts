@@ -17,13 +17,50 @@ export function useProperties(filters: PropertyFilters = {}) {
         return data;
       } catch (err) {
         console.warn("Using mock properties due to API fetch failure:", err);
+        
+        // Client-side filtering of mock data
+        let result = [...MOCK_PROPERTIES];
+        
+        if (filters.category && filters.category.length > 0) {
+          result = result.filter(p => filters.category!.includes(p.category));
+        }
+        
+        if (filters.listingType && filters.listingType.length > 0) {
+          result = result.filter(p => filters.listingType!.includes(p.listingType));
+        }
+
+        if (filters.minPrice) {
+          result = result.filter(p => (p.price || 0) >= filters.minPrice!);
+        }
+
+        if (filters.maxPrice) {
+          result = result.filter(p => (p.price || 0) <= filters.maxPrice!);
+        }
+
+        if (filters.search) {
+          const s = filters.search.toLowerCase();
+          result = result.filter(p => 
+            p.title.toLowerCase().includes(s) || 
+            (p.description && p.description.toLowerCase().includes(s)) ||
+            (p.area && p.area.toLowerCase().includes(s)) ||
+            (p.state && p.state.toLowerCase().includes(s)) ||
+            (p.locationText && p.locationText.toLowerCase().includes(s))
+          );
+        }
+
+        // Apply pagination
+        const page = filters.page || 1;
+        const limit = filters.limit || 24;
+        const startIndex = (page - 1) * limit;
+        const paginatedData = result.slice(startIndex, startIndex + limit);
+
         return {
-          data: MOCK_PROPERTIES,
+          data: paginatedData,
           meta: {
-            total: MOCK_PROPERTIES.length,
-            page: filters.page || 1,
-            limit: filters.limit || 24,
-            totalPages: 1,
+            total: result.length,
+            page,
+            limit,
+            totalPages: Math.ceil(result.length / limit) || 1,
           },
         };
       }
