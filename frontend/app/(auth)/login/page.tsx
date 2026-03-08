@@ -37,11 +37,14 @@ export default function LoginPage() {
   return (
     <div className="w-full max-w-[400px]">
       {/* Mobile logo — only visible on small screens */}
-      <div className="flex items-center gap-3 mb-10 lg:hidden">
-        <Image src="/logo-icon-blue.png" alt="RP" width={36} height={36} />
-        <span className="font-display font-bold text-lg" style={{ color: "var(--foreground)" }}>
-          Realtors&apos; Practice
-        </span>
+      <div className="flex items-center justify-center mb-10 lg:hidden">
+        <Image 
+          src="/logo-mobile-new.png" 
+          alt="Realtors' Practice" 
+          width={140} 
+          height={36} 
+          style={{ objectFit: "contain" }}
+        />
       </div>
 
       {/* Header */}
