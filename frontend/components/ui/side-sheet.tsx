@@ -392,8 +392,8 @@ const SideSheetContent = ({
           animate={controls}
           initial={{ x: getInitialX() }}
           className={cn(
-            'absolute bg-white dark:bg-[#0A0A0A] shadow-2xl',
-            side === 'left' ? 'rounded-r-lg' : 'rounded-l-lg',
+            'absolute bg-white dark:bg-[#0A0A0A] shadow-2xl border-zinc-200 dark:border-white/10',
+            side === 'left' ? 'rounded-r-lg border-r' : 'rounded-l-lg border-l',
             className,
           )}
           style={{

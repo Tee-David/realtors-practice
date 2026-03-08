@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { PropertyGrid } from "@/components/property/property-grid";
 import { PropertyListCard } from "@/components/property/property-list-card";
 import { CategoryPills } from "@/components/property/category-pills";
@@ -69,6 +70,16 @@ export default function PropertiesPage() {
   const [mobileMapExpanded, setMobileMapExpanded] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const [hasToggledMap, setHasToggledMap] = useState(false);
+
+  // Initialize for mobile
+  useEffect(() => {
+    const isMobile = window.innerWidth < 640;
+    if (isMobile) {
+      setGridCols(2);
+      setShowMap(false);
+    }
+  }, []);
 
   const { data, isLoading } = useProperties(filters);
 
@@ -301,8 +312,21 @@ export default function PropertiesPage() {
         )}
 
         {/* Map toggle */}
-        <button
-          onClick={() => setShowMap(!showMap)}
+        <motion.button
+          onClick={() => {
+            setShowMap(!showMap);
+            setHasToggledMap(true);
+          }}
+          initial={false}
+          animate={(!hasToggledMap && !showMap) ? {
+            scale: [1, 1.1, 1],
+            transition: {
+              duration: 0.5,
+              repeat: Infinity,
+              repeatDelay: 2.5,
+              ease: "easeInOut"
+            }
+          } : { scale: 1 }}
           className="p-2 rounded-xl border transition-colors shrink-0"
           style={{
             backgroundColor: showMap ? "var(--primary)" : "var(--card)",
@@ -312,7 +336,7 @@ export default function PropertiesPage() {
           title={showMap ? "Hide map" : "Show map"}
         >
           <Map size={16} />
-        </button>
+        </motion.button>
       </div>
       </div>
 

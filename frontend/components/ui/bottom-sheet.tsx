@@ -270,7 +270,7 @@ const BottomSheetContent = ({
           animate={controls}
           initial={{ y: sheetHeight + 100 }}
           className={cn(
-            'absolute bottom-0 left-0 right-0 w-full bg-background border-t shadow-2xl rounded-t-3xl overflow-hidden',
+            'absolute bottom-0 left-0 right-0 w-full bg-background border-t border-zinc-200 dark:border-white/10 shadow-2xl rounded-t-3xl overflow-hidden',
             className,
           )}
           style={{ height: sheetHeight, y }}

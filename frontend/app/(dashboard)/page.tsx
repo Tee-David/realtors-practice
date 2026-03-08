@@ -1140,7 +1140,7 @@ export default function DashboardPage() {
           if (!open) setSelectedPropertyId(null);
         }}
       >
-        <SideSheetContent className="w-full sm:max-w-md md:max-w-lg lg:max-w-xl p-0 h-full border-l overflow-hidden">
+        <SideSheetContent className="w-full sm:max-w-md md:max-w-lg lg:max-w-xl p-0 h-full border-l border-zinc-200 dark:border-white/10 overflow-hidden">
           {selectedPropertyId && (
             <PropertyDetailPanel
               property={allProperties.find(p => p.id === selectedPropertyId)!}
