@@ -281,11 +281,11 @@ export function MobileSidebar({
           >
             <button
               onClick={() => onOpenChange(false)}
-              className="absolute top-3 right-3 z-10 p-2 rounded-full transition-colors hover:bg-black/5 dark:hover:bg-white/10"
-              style={{ color: "var(--sidebar-foreground)" }}
+              className="absolute top-3 right-3 z-10 p-1.5 rounded-full shadow-md transition-opacity hover:opacity-90 bg-[var(--primary)]"
+              style={{ color: "var(--primary-foreground)" }}
               aria-label="Close sidebar"
             >
-              <X className="h-5 w-5" />
+              <X className="h-4 w-4" strokeWidth={3} />
             </button>
             <SidebarContent
               expanded={true}
