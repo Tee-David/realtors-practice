@@ -26,6 +26,7 @@
     "clsx": "^2.1.1",
     "cobe": "^0.6.5",
     "framer-motion": "^12.35.1",
+    "gsap": "^3.14.2",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.541.0",
     "motion": "^12.35.1",

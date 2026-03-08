@@ -22,9 +22,11 @@ import {
   ImageIcon,
 } from "lucide-react";
 import Link from "next/link";
-import type { Property, PropertyCategory, ListingType } from "@/types/property";
 import { MOCK_PROPERTIES } from "@/lib/mock-data";
 import { motion } from "motion/react";
+import TextType from "@/components/ui/TextType";
+import { SideSheet, SideSheetContent } from "@/components/ui/side-sheet";
+import { PropertyDetailPanel } from "@/components/property/property-detail-panel";
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -632,6 +634,7 @@ export default function DashboardPage() {
     sortOrder: "desc",
   });
   const [recentTab, setRecentTab] = useState<"SALE" | "RENT">("SALE");
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
 
   const apiProperties: Property[] = recentData?.data || [];
   
@@ -675,10 +678,21 @@ export default function DashboardPage() {
       {/* Greeter Section */}
       <div className="flex flex-col gap-1.5 mb-8">
         <h1 
-          className="font-display text-2xl sm:text-[28px] font-bold tracking-tight"
+          className="font-display text-2xl sm:text-[28px] font-bold tracking-tight min-h-[36px] sm:min-h-[42px]"
           style={{ color: "var(--foreground)" }}
         >
-          {greeting}, David
+          <TextType
+            text={[`${greeting}, David`]}
+            typingSpeed={75}
+            pauseDuration={1500}
+            showCursor
+            cursorCharacter="|"
+            deletingSpeed={50}
+            variableSpeedEnabled={true}
+            variableSpeedMin={50}
+            variableSpeedMax={100}
+            cursorBlinkDuration={0.8}
+          />
         </h1>
         <div className="flex items-center gap-1.5 text-sm" style={{ color: "var(--muted-foreground)" }}>
           <Calendar size={15} />
@@ -1035,8 +1049,19 @@ export default function DashboardPage() {
           ) : (recentProperties || []).length > 0 ? (
             (recentProperties || [])
               .slice(0, 4)
-              .map((property) => (
-                <PropertyCard key={property.id} property={property} />
+              .map((property, index) => (
+                <motion.div
+                  key={property.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, delay: index * 0.1 }}
+                  className="h-full"
+                >
+                  <PropertyCard 
+                    property={property} 
+                    onClick={(id) => setSelectedPropertyId(id)}
+                  />
+                </motion.div>
               ))
           ) : (
             <div
@@ -1059,6 +1084,26 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* Detail Right-Side Sheet */}
+      <SideSheet
+        open={!!selectedPropertyId}
+        onOpenChange={(open) => {
+          if (!open) setSelectedPropertyId(null);
+        }}
+      >
+        <SideSheetContent className="w-full sm:max-w-md md:max-w-lg lg:max-w-xl p-0 h-full border-l overflow-hidden">
+          {selectedPropertyId && (
+            <PropertyDetailPanel
+              propertyId={selectedPropertyId}
+              onClose={() => setSelectedPropertyId(null)}
+              fallbackData={MOCK_PROPERTIES.find(
+                (p) => p.id === selectedPropertyId
+              )}
+            />
+          )}
+        </SideSheetContent>
+      </SideSheet>
     </div>
   );
 }
