@@ -131,7 +131,7 @@ function SidebarContent({
         ) : (
           <>
             <Image
-              src="/favicon-blue.png"
+              src="/logo-blue.png"
               alt="Realtors' Practice"
               width={112}
               height={29}
@@ -139,7 +139,7 @@ function SidebarContent({
               style={{ objectFit: "contain" }}
             />
             <Image
-              src="/favicon-white.png"
+              src="/logo-white.png"
               alt="Realtors' Practice"
               width={112}
               height={29}
