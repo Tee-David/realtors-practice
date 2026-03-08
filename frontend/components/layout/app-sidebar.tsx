@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { ThemeSwitch } from "@/components/ui/theme-switch";
+import { motion, useAnimation, PanInfo, useMotionValue, useTransform } from "motion/react";
 import {
   LayoutDashboard,
   Building2,
@@ -264,34 +265,94 @@ export function MobileSidebar({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const controls = useAnimation();
+  const x = useMotionValue(0);
+  const sheetWidth = 240; // Hardcoded w-[240px]
+  
+  useEffect(() => {
+    if (open) {
+      document.body.style.overflow = "hidden";
+      controls.start({
+        x: 0,
+        transition: {
+          type: "spring",
+          stiffness: 400,
+          damping: 40,
+          mass: 0.8,
+        },
+      });
+    } else {
+      document.body.style.overflow = "";
+      controls.start({
+        x: -sheetWidth - 50,
+        transition: {
+          type: "tween",
+          ease: [0.25, 0.46, 0.45, 0.94],
+          duration: 0.3,
+        },
+      });
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [open, controls]);
+
+  const handleDragEnd = (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+    const threshold = sheetWidth * 0.3; // 30% of width
+    const shouldClose = info.offset.x < -threshold || info.velocity.x < -800;
+
+    if (shouldClose) {
+      onOpenChange(false);
+    } else {
+      controls.start({
+        x: 0,
+        transition: {
+          type: "spring",
+          stiffness: 500,
+          damping: 40,
+        },
+      });
+    }
+  };
+
   return (
     <>
-      {open && (
-        <>
+      {/* Background overlay */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: open ? 1 : 0 }}
+        transition={{ duration: 0.2, ease: "easeOut" }}
+        className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-xs"
+        onClick={() => onOpenChange(false)}
+        style={{ pointerEvents: open ? "auto" : "none" }}
+      />
+      
+      {/* Sidebar surface */}
+      <motion.aside
+        drag="x"
+        dragConstraints={{ left: -sheetWidth, right: 0 }}
+        dragElastic={0}
+        dragMomentum={false}
+        onDragEnd={handleDragEnd}
+        animate={controls}
+        initial={{ x: -sheetWidth - 50 }}
+        className="fixed left-0 top-0 z-[60] h-screen w-[240px] border-r shadow-2xl"
+        style={{
+          backgroundColor: "var(--sidebar)",
+          borderColor: "var(--sidebar-border)",
+        }}
+      >
+        <div className="absolute top-1/2 -right-1.5 -translate-y-1/2 flex items-center pr-2">
           <div
-            className="fixed inset-0 z-[60] bg-black/50"
-            onClick={() => onOpenChange(false)}
+            className="w-1.5 h-12 rounded-full opacity-30 cursor-grab active:cursor-grabbing"
+            style={{ backgroundColor: "var(--foreground)" }}
           />
-          <aside
-            className="fixed left-0 top-0 z-[60] h-screen w-[240px] border-r"
-            style={{
-              backgroundColor: "var(--sidebar)",
-              borderColor: "var(--sidebar-border)",
-            }}
-          >
-            <div className="absolute top-1/2 -right-1.5 -translate-y-1/2 flex items-center pr-2 pointer-events-none">
-              <div
-                className="w-1.5 h-12 rounded-full opacity-30"
-                style={{ backgroundColor: "var(--foreground)" }}
-              />
-            </div>
-            <SidebarContent
-              expanded={true}
-              onNavClick={() => onOpenChange(false)}
-            />
-          </aside>
-        </>
-      )}
+        </div>
+        <SidebarContent
+          expanded={true}
+          onNavClick={() => onOpenChange(false)}
+        />
+      </motion.aside>
     </>
   );
 }
