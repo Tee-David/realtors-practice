@@ -964,7 +964,7 @@ export default function DashboardPage() {
 
       {/* Recently Listed */}
       <div>
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6 relative">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5 sm:gap-4 mb-6 relative justify-between">
           <h2
             className="font-display font-semibold text-lg sm:text-xl whitespace-nowrap"
             style={{ color: "var(--foreground)" }}
@@ -974,7 +974,7 @@ export default function DashboardPage() {
           
           {/* Tabs - Centered Absolute on Desktop, Flow on Mobile */}
           <div
-            className="sm:absolute sm:left-1/2 sm:-translate-x-1/2 flex items-center rounded-2xl p-1"
+            className="sm:absolute sm:left-1/2 sm:-translate-x-1/2 flex items-center rounded-2xl p-1 w-fit"
             style={{ backgroundColor: "var(--secondary)" }}
           >
             {(["SALE", "RENT"] as const).map((tab) => (
@@ -1002,7 +1002,7 @@ export default function DashboardPage() {
 
           <Link
             href="/properties"
-            className="flex items-center gap-1.5 text-base font-bold hover:underline sm:ml-auto"
+            className="flex items-center gap-1.5 text-base font-bold hover:underline mt-1 sm:mt-0 sm:ml-auto"
             style={{ color: "#0000ee" }}
           >
             View all
