@@ -116,15 +116,15 @@ function SidebarContent({
             <Image
               src="/logo-icon-blue.png"
               alt="RP"
-              width={40}
-              height={40}
+              width={48}
+              height={48}
               className="shrink-0 dark:hidden"
             />
             <Image
               src="/logo-icon-white.png"
               alt="RP"
-              width={40}
-              height={40}
+              width={48}
+              height={48}
               className="shrink-0 hidden dark:block"
             />
           </>
