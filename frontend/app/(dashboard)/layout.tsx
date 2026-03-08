@@ -17,11 +17,11 @@ export default function DashboardLayout({
       {/* Desktop sidebar — hidden on mobile, shown on md+ */}
       <AppSidebar />
 
-      {/* Desktop top bar — hidden on mobile, shown on md+ */}
-      <TopBar title="Dashboard" />
+      {/* Desktop/Mobile top bar */}
+      <TopBar title="Dashboard" onOpenSidebar={() => setMobileSidebarOpen(true)} />
 
       {/* Main content area */}
-      <main className="pt-16 md:ml-[60px] md:pt-[56px] p-6 pb-24 md:pb-6 transition-all duration-300">
+      <main className="pt-[76px] md:ml-[60px] md:pt-[56px] p-6 pb-24 md:pb-6 transition-all duration-300">
         {children}
       </main>
 

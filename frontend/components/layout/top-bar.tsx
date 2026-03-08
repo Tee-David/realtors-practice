@@ -1,11 +1,12 @@
 "use client";
 
 import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
-import { Bell } from "lucide-react";
+import { Bell, Menu } from "lucide-react";
 
 interface TopBarProps {
   title: string;
   notificationCount?: number;
+  onOpenSidebar?: () => void;
 }
 
 function UserProfileDropdown() {
@@ -28,7 +29,7 @@ function UserProfileDropdown() {
         {initials}
       </div>
       <span
-        className="text-sm font-medium"
+        className="hidden sm:inline text-sm font-medium"
         style={{ color: "var(--foreground)" }}
       >
         {name}
@@ -37,27 +38,44 @@ function UserProfileDropdown() {
   );
 }
 
-export function TopBar({ title, notificationCount }: TopBarProps) {
+export function TopBar({ title, notificationCount, onOpenSidebar }: TopBarProps) {
   return (
     <header
-      className="hidden md:flex fixed top-0 right-0 items-center justify-between px-6 z-30 border-b"
+      className="flex fixed top-0 right-0 left-0 md:left-[60px] items-center justify-between px-4 sm:px-6 z-30 border-b"
       style={{
         height: 56,
-        left: 60,
         backgroundColor: "var(--card)",
         borderColor: "var(--border)",
       }}
     >
-      {/* Left: Page title */}
-      <h1
-        className="text-lg font-semibold font-display"
-        style={{ color: "var(--foreground)" }}
-      >
-        {title}
-      </h1>
+      {/* Left: Hamburger (mobile) + Page title */}
+      <div className="flex items-center gap-3">
+        {onOpenSidebar && (
+          <button
+            onClick={onOpenSidebar}
+            className="md:hidden p-2 rounded-lg transition-colors hover:bg-[var(--secondary)]"
+            aria-label="Open Map/Sidebar Menu"
+          >
+            <Menu className="h-5 w-5" style={{ color: "var(--foreground)" }} />
+          </button>
+        )}
+        <h1
+          className="text-lg font-semibold font-display"
+          style={{ color: "var(--foreground)" }}
+        >
+          {title}
+        </h1>
+      </div>
 
       {/* Right: Actions */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3">
+        {/* Tour button */}
+        <button
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 transition-opacity"
+        >
+          Tour
+        </button>
+
         {/* Theme toggle */}
         <AnimatedThemeToggler />
 
