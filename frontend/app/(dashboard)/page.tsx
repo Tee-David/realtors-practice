@@ -692,6 +692,8 @@ export default function DashboardPage() {
             variableSpeedMin={50}
             variableSpeedMax={100}
             cursorBlinkDuration={0.8}
+            loop={false}
+            initialDelay={500}
           />
         </h1>
         <div className="flex items-center gap-1.5 text-sm" style={{ color: "var(--muted-foreground)" }}>

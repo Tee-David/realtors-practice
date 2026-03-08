@@ -15,6 +15,8 @@ interface TextTypeProps {
   variableSpeedMax?: number;
   cursorBlinkDuration?: number;
   className?: string;
+  loop?: boolean;
+  initialDelay?: number;
 }
 
 export default function TextType({
@@ -29,6 +31,8 @@ export default function TextType({
   variableSpeedMax = 120,
   cursorBlinkDuration = 0.5,
   className = "",
+  loop = true,
+  initialDelay = 0,
 }: TextTypeProps) {
   const textRef = useRef<HTMLSpanElement>(null);
   const cursorRef = useRef<HTMLSpanElement>(null);
@@ -39,6 +43,7 @@ export default function TextType({
     // Convert single string to array for uniform handling
     const texts = Array.isArray(text) ? text : [text];
     let currentIndex = 0;
+    let isMounted = true;
     
     // Initialize empty text
     textRef.current.innerHTML = "";
@@ -56,12 +61,16 @@ export default function TextType({
     }
 
     const typeWriter = async () => {
-      while (true) {
+      if (initialDelay > 0) {
+        await new Promise(r => setTimeout(r, initialDelay));
+      }
+
+      while (isMounted) {
         const currentText = texts[currentIndex];
         
         // Type the text completely
         for (let i = 0; i <= currentText.length; i++) {
-          if (!textRef.current) return;
+          if (!textRef.current || !isMounted) return;
           textRef.current.innerHTML = currentText.substring(0, i);
           
           let speed = typingSpeed;
@@ -71,14 +80,18 @@ export default function TextType({
           await new Promise(r => setTimeout(r, speed));
         }
 
+        // Check if we should continue
+        const isLastText = currentIndex === texts.length - 1;
+        if (!loop && isLastText) break;
+
         // Pause at the end
         await new Promise(r => setTimeout(r, pauseDuration));
         
-        // Only delete if there's multiple texts to loop
-        if (texts.length > 1) {
+        // Only delete if we are looping or if there's more text in the array
+        if (loop || !isLastText) {
           // Delete
           for (let i = currentText.length; i >= 0; i--) {
-            if (!textRef.current) return;
+            if (!textRef.current || !isMounted) return;
             textRef.current.innerHTML = currentText.substring(0, i);
             await new Promise(r => setTimeout(r, deletingSpeed));
           }
@@ -87,7 +100,6 @@ export default function TextType({
           // Pause before typing next
           await new Promise(r => setTimeout(r, 500));
         } else {
-          // If only 1 text, stop typing loops
           break;
         }
       }
@@ -96,9 +108,10 @@ export default function TextType({
     typeWriter();
     
     return () => {
+      isMounted = false;
       if (cursorAnim) cursorAnim.kill();
     };
-  }, [text, typingSpeed, pauseDuration, showCursor, deletingSpeed, variableSpeedEnabled, variableSpeedMin, variableSpeedMax, cursorBlinkDuration]);
+  }, [text, typingSpeed, pauseDuration, showCursor, deletingSpeed, variableSpeedEnabled, variableSpeedMin, variableSpeedMax, cursorBlinkDuration, loop, initialDelay]);
 
   return (
     <div className={`inline-block ${className}`}>
