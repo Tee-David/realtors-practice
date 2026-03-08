@@ -15,6 +15,7 @@ interface TextTypeProps {
   variableSpeedMax?: number;
   cursorBlinkDuration?: number;
   className?: string;
+  style?: React.CSSProperties;
   loop?: boolean;
   initialDelay?: number;
   onComplete?: () => void;
@@ -32,6 +33,7 @@ export default function TextType({
   variableSpeedMax = 120,
   cursorBlinkDuration = 0.5,
   className = "",
+  style,
   loop = true,
   initialDelay = 0,
   onComplete,
@@ -126,7 +128,7 @@ export default function TextType({
   }, [textKey]);
 
   return (
-    <div className={`inline-block ${className}`}>
+    <div className={`inline-block ${className}`} style={style}>
       <span ref={textRef}></span>
       {showCursor && (
         <span ref={cursorRef} className="ml-0.5">{cursorCharacter}</span>

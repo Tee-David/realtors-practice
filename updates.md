@@ -1,4 +1,4 @@
-Here's what's changed (changes i've made) since our last session. Review them for potential issues or improvements and adjust if necessary, don't break my code and continue with checklist.md
+Here's what's changed (changes i've made) since our last session. Review them for potential issues or improvements and adjust if necessary, don't break my code and continue with checklist.md:
 
 In this session, we have successfully resolved the deployment blockers and completed the entire Backend Implementation for Phase 4 (Search & Analytics).
 

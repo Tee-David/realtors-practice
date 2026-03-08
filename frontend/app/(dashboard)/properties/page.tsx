@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import { PropertyGrid } from "@/components/property/property-grid";
 import { PropertyListCard } from "@/components/property/property-list-card";
 import { CategoryPills } from "@/components/property/category-pills";
@@ -8,6 +8,7 @@ import { DynamicPropertyMap } from "@/components/property/property-map-dynamic";
 import { PropertyDetailPanel } from "@/components/property/property-detail-panel";
 import { PropertyFilterSheet } from "@/components/property/property-filter-sheet";
 import { Pagination } from "@/components/property/pagination";
+import TextType from "@/components/ui/TextType";
 import { useProperties } from "@/hooks/useProperties";
 import { MOCK_PROPERTIES } from "@/lib/mock-data";
 import {
@@ -18,8 +19,6 @@ import {
   Search,
   ChevronDown,
   X,
-  Grid2x2,
-  Grid3x3,
   Building2,
 } from "lucide-react";
 import {
@@ -46,6 +45,14 @@ const DESKTOP_GRID_OPTIONS = [2, 3, 4, 5, 6] as const;
 const MOBILE_GRID_OPTIONS = [1, 2, 3] as const;
 const PER_PAGE_OPTIONS = [12, 24, 48, 96] as const;
 
+const SEARCH_EXAMPLES = [
+  "3 bedroom flat in Lekki under 5M",
+  "Detached duplex in Ikoyi with pool",
+  "2 bed apartment in Abuja under 3M",
+  "Land for sale in Ajah below 20M",
+  "Furnished studio in Victoria Island",
+];
+
 /** Pluralize a word: "property" -> "properties", with correct singular */
 function pluralize(count: number, singular: string, plural?: string): string {
   return count === 1 ? singular : (plural || singular + "s");
@@ -60,6 +67,8 @@ export default function PropertiesPage() {
   const [hoveredPropertyId, setHoveredPropertyId] = useState<string | null>(null);
   const [showMap, setShowMap] = useState(true);
   const [mobileMapExpanded, setMobileMapExpanded] = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const { data, isLoading } = useProperties(filters);
 
@@ -134,18 +143,36 @@ export default function PropertiesPage() {
           </button>
 
           <div
-            className="flex items-center gap-2 px-3 py-2 rounded-xl flex-1 min-w-[180px]"
+            className="flex items-center gap-2 px-3 py-2 rounded-xl flex-1 min-w-[180px] relative"
             style={{ backgroundColor: "var(--card)", border: "1px solid var(--border)" }}
           >
-            <Search size={16} style={{ color: "var(--muted-foreground)" }} />
-            <input
-              type="text"
-              placeholder="Search properties..."
-              value={filters.search || ""}
-              onChange={(e) => handleFilterChange({ ...filters, search: e.target.value || undefined, page: 1 })}
-              className="bg-transparent text-sm w-full outline-none placeholder:text-[var(--muted-foreground)]"
-              style={{ color: "var(--foreground)" }}
-            />
+            <Search size={16} className="shrink-0" style={{ color: "var(--muted-foreground)" }} />
+            <div className="relative flex-1 min-w-0">
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={filters.search || ""}
+                onChange={(e) => handleFilterChange({ ...filters, search: e.target.value || undefined, page: 1 })}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setSearchFocused(false)}
+                className="bg-transparent text-xs sm:text-sm w-full outline-none relative z-10"
+                style={{ color: "var(--foreground)" }}
+              />
+              {!filters.search && !searchFocused && (
+                <div className="absolute inset-0 flex items-center pointer-events-none overflow-hidden">
+                  <TextType
+                    text={SEARCH_EXAMPLES}
+                    typingSpeed={45}
+                    deletingSpeed={30}
+                    pauseDuration={5000}
+                    showCursor={false}
+                    loop={true}
+                    className="text-xs sm:text-sm truncate"
+                    style={{ color: "var(--muted-foreground)" }}
+                  />
+                </div>
+              )}
+            </div>
             {filters.search && (
               <button onClick={() => handleFilterChange({ ...filters, search: undefined, page: 1 })}>
                 <X size={14} style={{ color: "var(--muted-foreground)" }} />
@@ -289,6 +316,42 @@ export default function PropertiesPage() {
       </div>
       </div>
 
+      {/* Mobile map — right after toolbar so it's immediately visible */}
+      {showMap && (
+        <div
+          className={`md:hidden rounded-xl overflow-hidden transition-all duration-300 relative ${
+            mobileMapExpanded ? "fixed inset-0 z-50 rounded-none" : ""
+          }`}
+          style={{ height: mobileMapExpanded ? "100vh" : "50vh" }}
+        >
+          <DynamicPropertyMap
+            properties={properties}
+            hoveredId={hoveredPropertyId}
+            onMarkerClick={handleMarkerClick}
+          />
+          <button
+            onClick={() => setMobileMapExpanded(!mobileMapExpanded)}
+            className="absolute top-3 right-3 z-10 flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold shadow-lg backdrop-blur-md"
+            style={{
+              backgroundColor: "rgba(255,255,255,0.95)",
+              color: "var(--foreground)",
+            }}
+          >
+            {mobileMapExpanded ? (
+              <>
+                <X size={14} />
+                Close
+              </>
+            ) : (
+              <>
+                <Map size={14} />
+                Expand
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
       {/* Main content: Cards + Map split */}
       <div className="flex gap-4">
         {/* Cards panel — only constrain height on desktop when side-by-side map is shown */}
@@ -377,43 +440,6 @@ export default function PropertiesPage() {
           </div>
         )}
       </div>
-
-      {/* Mobile map — expandable, full width below cards */}
-      {showMap && (
-        <div
-          className={`md:hidden rounded-xl overflow-hidden transition-all duration-300 relative ${
-            mobileMapExpanded ? "fixed inset-0 z-50 rounded-none" : ""
-          }`}
-          style={{ height: mobileMapExpanded ? "100vh" : "50vh" }}
-        >
-          <DynamicPropertyMap
-            properties={properties}
-            hoveredId={hoveredPropertyId}
-            onMarkerClick={handleMarkerClick}
-          />
-          {/* Expand/Collapse button */}
-          <button
-            onClick={() => setMobileMapExpanded(!mobileMapExpanded)}
-            className="absolute top-3 right-3 z-10 flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold shadow-lg backdrop-blur-md"
-            style={{
-              backgroundColor: "rgba(255,255,255,0.95)",
-              color: "var(--foreground)",
-            }}
-          >
-            {mobileMapExpanded ? (
-              <>
-                <X size={14} />
-                Close
-              </>
-            ) : (
-              <>
-                <Map size={14} />
-                Expand
-              </>
-            )}
-          </button>
-        </div>
-      )}
 
       {/* Left side-sheet: Filters */}
       <PropertyFilterSheet
