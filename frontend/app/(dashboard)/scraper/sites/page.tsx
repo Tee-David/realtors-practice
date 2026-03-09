@@ -4,7 +4,7 @@ import { useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import { useSites, useToggleSite, useDeleteSite, useAddSite, useBulkToggleSites, useBulkDeleteSites } from "@/hooks/use-sites";
-import { Plus, Search, MoreVertical, Trash2, Power, Globe, RefreshCcw, Database, Code, Zap, X, Copy, CheckSquare, Square, Layers, ListPlus } from "lucide-react";
+import { Plus, Search, MoreVertical, Trash2, Power, Globe, RefreshCcw, Database, Code, Zap, X, Copy, CheckSquare, Square, Layers, ListPlus, Download, Upload } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import {
   DropdownMenu,
@@ -34,7 +34,7 @@ export default function SitesPage() {
 
   const filteredSites = sites?.filter(site => 
     site.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    site.url.toLowerCase().includes(searchQuery.toLowerCase())
+    site.baseUrl.toLowerCase().includes(searchQuery.toLowerCase())
   ) || [];
 
   const handleToggle = (id: string, currentStatus: boolean) => {
@@ -62,8 +62,9 @@ export default function SitesPage() {
       }
       addSite.mutate({
         name: newSiteName,
-        url: newSiteUrl,
-        isActive: true,
+        baseUrl: newSiteUrl,
+        key: new URL(newSiteUrl).hostname.replace(/^www\./, '').replace(/[^a-zA-Z0-9]/g, '-').toLowerCase(),
+        enabled: true,
         selectors: {},
       }, {
         onSuccess: () => {
@@ -91,10 +92,12 @@ export default function SitesPage() {
         try {
           // Attempt to extract a decent name from URL
           const hostname = new URL(url).hostname.replace('www.', '');
+          const key = hostname.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
           await addSite.mutateAsync({
              name: hostname,
-             url: url,
-             isActive: true,
+             baseUrl: url,
+             key: key,
+             enabled: true,
              selectors: {},
           });
           successCount++;
@@ -112,6 +115,32 @@ export default function SitesPage() {
         toast.error("Failed to add sources. Check URLs.");
       }
     }
+  };
+
+  const downloadSampleCsv = () => {
+    const csvContent = "data:text/csv;charset=utf-8,https://example1.com/properties\nhttps://example2.com/real-estate\nhttps://example3.com/homes";
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "sample-sites.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      if (text) {
+        // Append to existing text or replace
+        setBulkUrls(prev => prev ? prev + "\n" + text : text);
+        toast.success("CSV loaded into text area");
+      }
+    };
+    reader.readAsText(file);
   };
 
   const handleSelectAll = () => {
@@ -190,7 +219,7 @@ export default function SitesPage() {
         <span className="w-1.5 h-1.5 rounded-full bg-border" />
         <span className="flex items-center gap-1.5">
            <Zap className="w-3.5 h-3.5 text-accent" />
-           {sites?.filter(s => s.isActive).length || 0} active
+           {sites?.filter(s => s.enabled).length || 0} active
         </span>
       </div>
 
@@ -236,13 +265,13 @@ export default function SitesPage() {
                       {site.name}
                     </p>
                     <a 
-                      href={site.url} 
+                      href={site.baseUrl} 
                       target="_blank" 
                       rel="noopener noreferrer" 
                       className="text-xs text-primary/80 hover:text-primary hover:underline truncate block"
-                      title={site.url}
+                      title={site.baseUrl}
                     >
-                      {site.url.replace(/^https?:\/\//, '')}
+                      {site.baseUrl.replace(/^https?:\/\//, '')}
                     </a>
                   </div>
                 </div>
@@ -259,11 +288,11 @@ export default function SitesPage() {
                          Node Options
                        </div>
                       <DropdownMenuItem 
-                        onClick={() => handleToggle(site.id, site.isActive)}
+                        onClick={() => handleToggle(site.id, site.enabled)}
                         className="flex items-center gap-2 cursor-pointer rounded-md"
                       >
                         <Power className="w-4 h-4" />
-                        {site.isActive ? 'Suspend polling' : 'Resume polling'}
+                        {site.enabled ? 'Suspend polling' : 'Resume polling'}
                       </DropdownMenuItem>
                       <DropdownMenuItem 
                         onClick={() => {
@@ -291,12 +320,12 @@ export default function SitesPage() {
                     <div className="flex items-center justify-between">
                        <span className="text-xs font-semibold text-muted-foreground">POLLING STATUS</span>
                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-sm ${
-                         site.isActive 
+                         site.enabled 
                            ? 'bg-green-500/10 text-green-600 border border-green-500/20' 
                            : 'bg-zinc-500/10 text-zinc-500 border border-zinc-500/20'
                        }`}>
-                         <span className={`w-1.5 h-1.5 rounded-full ${site.isActive ? 'bg-green-500 animate-pulse' : 'bg-zinc-500'}`} />
-                         {site.isActive ? 'Active' : 'Suspended'}
+                         <span className={`w-1.5 h-1.5 rounded-full ${site.enabled ? 'bg-green-500 animate-pulse' : 'bg-zinc-500'}`} />
+                         {site.enabled ? 'Active' : 'Suspended'}
                        </span>
                     </div>
 
@@ -321,7 +350,7 @@ export default function SitesPage() {
                  </div>
               </CardContent>
               {/* Background accent */}
-              <div className={`absolute -bottom-10 -right-10 w-32 h-32 rounded-full blur-[50px] pointer-events-none transition-opacity duration-700 opacity-0 group-hover:opacity-100 ${site.isActive ? 'bg-green-500/10' : 'bg-zinc-500/10'}`} />
+              <div className={`absolute -bottom-10 -right-10 w-32 h-32 rounded-full blur-[50px] pointer-events-none transition-opacity duration-700 opacity-0 group-hover:opacity-100 ${site.enabled ? 'bg-green-500/10' : 'bg-zinc-500/10'}`} />
             </Card>
           ))
         )}
@@ -389,10 +418,25 @@ export default function SitesPage() {
                     </div>
                   </>
                 ) : (
-                  <div className="space-y-2 min-h-32">
-                     <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                       <ListPlus className="w-3.5 h-3.5" /> URL List
-                     </label>
+                  <div className="space-y-3 min-h-32">
+                     <div className="flex items-center justify-between">
+                       <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                         <ListPlus className="w-3.5 h-3.5" /> URL List
+                       </label>
+                       <div className="flex items-center gap-2">
+                         <button 
+                           type="button" 
+                           onClick={downloadSampleCsv}
+                           className="text-[10px] flex items-center gap-1 font-semibold text-primary hover:underline"
+                         >
+                           <Download className="w-3 h-3" /> Sample CSV
+                         </button>
+                         <label className="text-[10px] flex items-center gap-1 font-semibold text-primary cursor-pointer hover:underline">
+                           <Upload className="w-3 h-3" /> Upload CSV
+                           <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
+                         </label>
+                       </div>
+                     </div>
                      <textarea
                        required={addMode === "bulk"}
                        value={bulkUrls}
@@ -400,7 +444,7 @@ export default function SitesPage() {
                        placeholder={"https://site1.com/properties\nhttps://site2.com/real-estate\nhttps://site3.com/homes"}
                        className="w-full h-36 px-4 py-3 rounded-xl border bg-secondary/30 focus:bg-background transition-colors focus:ring-2 focus:ring-primary outline-none text-sm resize-none"
                      />
-                     <p className="text-[10px] text-muted-foreground pl-1">Enter URLs separated by commas or new lines. Site names will be auto-generated.</p>
+                     <p className="text-[10px] text-muted-foreground pl-1">Enter URLs separated by commas or new lines, or upload a CSV file.</p>
                   </div>
                 )}
                 

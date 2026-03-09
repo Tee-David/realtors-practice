@@ -200,7 +200,7 @@ export default function ScraperControlPage() {
               <button type="button" onClick={() => setSelectedSiteIds(allSites?.map(s => s.id) || [])} className="text-primary hover:underline">Select All</button>
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-1 scroller">
-                {allSites?.filter(s => s.isActive).map(site => (
+                {allSites?.filter(s => s.enabled).map(site => (
                   <label key={site.id} className="flex items-center gap-2 p-3 rounded-lg border bg-secondary/10 hover:bg-secondary/50 cursor-pointer transition-colors">
                     <input 
                       type="checkbox" 
@@ -215,7 +215,7 @@ export default function ScraperControlPage() {
                   </label>
                 ))}
             </div>
-            {(!allSites || allSites.filter(s => s.isActive).length === 0) && (
+            {(!allSites || allSites.filter(s => s.enabled).length === 0) && (
                 <p className="text-xs text-red-400 p-3 bg-red-500/10 rounded-lg">No active sources available. Please enable sources in the Data Sources tab.</p>
             )}
           </div>

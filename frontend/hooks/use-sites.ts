@@ -6,8 +6,8 @@ import api from "@/lib/api";
 export interface Site {
   id: string;
   name: string;
-  url: string;
-  isActive: boolean;
+  baseUrl: string;
+  enabled: boolean;
   selectors: Record<string, string>;
   lastScrapedAt: string | null;
   createdAt: string;
