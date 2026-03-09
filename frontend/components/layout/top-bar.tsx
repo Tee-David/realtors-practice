@@ -62,7 +62,7 @@ export function TopBar({ title, notificationCount, onOpenSidebar }: TopBarProps)
             </button>
           )}
           {/* Mobile Logo next to hamburger */}
-          <div className="w-20 h-20 flex items-center justify-center -ml-4 pt-1">
+          <div className="w-20 h-14 flex items-center justify-center -ml-4 pt-1 pointer-events-none">
              <img 
                src="/logo-icon-blue.png" 
                alt="Logo" 
