@@ -61,7 +61,11 @@ export function MobileBottomNav({ onOpenSidebar, extraButton }: BottomNavProps) 
       })}
 
       {/* Extra button slot (e.g. filter toggle on properties page) */}
-      {extraButton}
+      {extraButton && (
+        <div className="flex items-center justify-center border-l pl-2 mr-1" style={{ borderColor: 'var(--border)' }}>
+          {extraButton}
+        </div>
+      )}
 
       {/* More button — opens sidebar */}
       <button

@@ -53,9 +53,33 @@ function useSpeechRecognition(onResult: (text: string, isFinal: boolean) => void
       recognition.maxAlternatives = 1;
 
       recognition.onresult = (event: any) => {
-        const transcript = Array.from(event.results)
+        let transcript = Array.from(event.results)
           .map((result: any) => result[0].transcript)
           .join("");
+
+        // Phonetic fix for common Nigerian terms that Google Speech might botch
+        const NIGERIAN_DICT: Record<string, string> = {
+          "leki": "Lekki",
+          "ikoy": "Ikoyi",
+          "ikeya": "Ikeja",
+          "shurulere": "Surulere",
+          "yava": "Yaba",
+          "aja": "Ajah",
+          "gbaganda": "Gbagada",
+          "ojudu": "Ojodu",
+          "viktor": "Victoria",
+          "makoko": "Makoko",
+          "banana": "Banana",
+          "ilopeju": "Ilupeju",
+          "magodo": "Magodo"
+        };
+
+        // Simple word boundary replacement
+        Object.entries(NIGERIAN_DICT).forEach(([wrong, right]) => {
+          const regex = new RegExp(`\\b${wrong}\\b`, 'gi');
+          transcript = transcript.replace(regex, right);
+        });
+
         const isFinal = event.results[event.results.length - 1].isFinal;
         onResult(transcript, isFinal);
       };

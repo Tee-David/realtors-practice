@@ -22,7 +22,7 @@ export function FullscreenMap({
       viewport={{ center: [3.4, 6.5], zoom: 10 }}
       className="w-full h-full"
     >
-      <MapControls position="bottom-right" />
+      <MapControls position="bottom-right" showCompass={false} />
       {properties.map((p) => (
          <MapMarker 
            key={p.id} 

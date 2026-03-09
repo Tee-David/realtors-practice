@@ -12,6 +12,7 @@ const FullscreenMap = dynamic(
   { ssr: false, loading: () => <div className="w-full h-full bg-secondary animate-pulse" /> }
 );
 import { SideSheet, SideSheetContent } from "@/components/ui/side-sheet";
+import { BottomSheet, BottomSheetContent } from "@/components/ui/bottom-sheet";
 import { PropertyDetailPanel } from "@/components/property/property-detail-panel";
 import { useSearch } from "@/hooks/use-search";
 import { MapPin, ChevronUp, ChevronDown, Sparkles } from "lucide-react";
@@ -41,6 +42,30 @@ export default function SearchPage() {
   const [limit, setLimit] = useState(30);
   const [sort, setSort] = useState("newest");
   const [dynamicPills, setDynamicPills] = useState<string[]>([]);
+  const [isMobile, setIsMobile] = useState(false);
+  const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
+
+  // Listen for mobile nav filter/search toggle
+  useEffect(() => {
+    const handleToggleFilters = () => setMobileSheetOpen(true);
+    document.addEventListener("toggle-mobile-filters", handleToggleFilters);
+    return () => document.removeEventListener("toggle-mobile-filters", handleToggleFilters);
+  }, []);
+
+  // When query becomes truthy on mobile, open the sheet automatically
+  useEffect(() => {
+    if (query && isMobile) {
+      setMobileSheetOpen(true);
+    }
+  }, [query, isMobile]);
 
   // Pick 5 random pills on mount
   useEffect(() => {
@@ -70,6 +95,7 @@ export default function SearchPage() {
 
   const handleSearch = useCallback((q: string, cat?: PropertyCategory | "ALL") => {
     setQuery(q);
+    setHasSearched(true);
     if (cat) setSelectedCategory(cat);
     setActiveFilters([]); // Reset filters on new search
     setLimit(30); // reset limit
@@ -112,7 +138,7 @@ export default function SearchPage() {
         />
         
         {/* Top Search Bar Overlay (Only when results are showing) */}
-        {query && (
+        {hasSearched && (
           <div className="absolute top-4 left-0 right-0 z-10 px-4 md:px-8 pointer-events-none flex justify-center">
              <div className="max-w-3xl w-full pointer-events-auto drop-shadow-xl">
                 <SearchBar onSearch={handleSearch} initialQuery={query} initialCategory={selectedCategory} />
@@ -120,54 +146,102 @@ export default function SearchPage() {
           </div>
         )}
 
-        {/* Side Panel for Results */}
-        {query && (
-           <div className="absolute top-[80px] md:top-[90px] left-4 md:left-8 bottom-4 w-full max-w-[400px] z-[11] pointer-events-none transition-all duration-300">
-              <div className="bg-background/95 backdrop-blur-xl w-full h-full rounded-2xl shadow-2xl border pointer-events-auto flex flex-col overflow-hidden">
-                 
-                 {/* Sidebar Header */}
-                 <div className="p-4 border-b shrink-0 bg-card/80 flex items-center gap-3">
-                   <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                     <Sparkles size={18} className="text-primary" />
-                   </div>
-                   <div className="min-w-0">
-                     <h2 className="font-bold text-lg leading-tight truncate">{totalHits} results</h2>
-                     <p className="text-xs text-muted-foreground truncate">
-                       {parsedInfo ? `Showing ${parsedInfo.bedrooms ? `${parsedInfo.bedrooms} bed ` : ""}${parsedInfo.propertyType || 'properties'}` : query}
-                     </p>
-                   </div>
-                 </div>
-
-                 {/* Scrollable Results List */}
-                 <div className="flex-1 overflow-y-auto p-4 scroller space-y-4">
-                     <SearchResults
-                        hits={hits}
-                        totalHits={totalHits}
-                        query={query}
-                        facets={facets}
-                        isLoading={isLoading}
-                        onPropertyClick={handlePropertyClick}
-                        onPropertyHover={setHoveredId}
-                        onFacetChange={handleFacetChange}
-                        activeFilters={activeFilters}
-                        sort={sort}
-                        onSortChange={setSort}
-                        hasMore={hasMore}
-                        onLoadMore={() => setLimit(l => l + 30)}
-                        onClear={() => handleSearch("")}
-                        compact={true}
-                     />
-                     
-                     <div className="pt-4 border-t border-border/50">
-                       <ActiveScrapeTrigger query={query} onTriggerScrape={handleTriggerScrape} isLoading={scrapeLoading} />
+        {/* Results Panel Container */}
+        {hasSearched && (
+           <>
+             {isMobile ? (
+               <BottomSheet open={mobileSheetOpen} onOpenChange={setMobileSheetOpen} height="85vh">
+                 <BottomSheetContent>
+                   <div className="flex flex-col h-full overflow-hidden">
+                     {/* Sidebar Header */}
+                     <div className="p-4 border-b shrink-0 flex items-center gap-3">
+                       <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                         <Sparkles size={18} className="text-primary" />
+                       </div>
+                       <div className="min-w-0">
+                         <h2 className="font-bold text-lg leading-tight truncate">{totalHits} results</h2>
+                         <p className="text-xs text-muted-foreground truncate">
+                           {parsedInfo ? `Showing ${parsedInfo.bedrooms ? `${parsedInfo.bedrooms} bed ` : ""}${parsedInfo.propertyType || 'properties'}` : query}
+                         </p>
+                       </div>
                      </div>
-                 </div>
-              </div>
-           </div>
+
+                     {/* Scrollable Results List */}
+                     <div className="flex-1 overflow-y-auto p-4 scroller space-y-4">
+                         <SearchResults
+                            hits={hits}
+                            totalHits={totalHits}
+                            query={query}
+                            facets={facets}
+                            isLoading={isLoading}
+                            onPropertyClick={handlePropertyClick}
+                            onPropertyHover={setHoveredId}
+                            onFacetChange={handleFacetChange}
+                            activeFilters={activeFilters}
+                            sort={sort}
+                            onSortChange={setSort}
+                            hasMore={hasMore}
+                            onLoadMore={() => setLimit(l => l + 30)}
+                            onClear={() => handleSearch("")}
+                            compact={true}
+                         />
+                         
+                         <div className="pt-4 border-t border-border/50 pb-8">
+                           <ActiveScrapeTrigger query={query} onTriggerScrape={handleTriggerScrape} isLoading={scrapeLoading} />
+                         </div>
+                     </div>
+                   </div>
+                 </BottomSheetContent>
+               </BottomSheet>
+             ) : (
+               <div className="absolute top-[80px] md:top-[90px] left-4 md:left-8 bottom-4 w-full max-w-[400px] z-[11] pointer-events-none transition-all duration-300">
+                  <div className="bg-background/95 backdrop-blur-xl w-full h-full rounded-2xl shadow-2xl border pointer-events-auto flex flex-col overflow-hidden">
+                     
+                     {/* Sidebar Header */}
+                     <div className="p-4 border-b shrink-0 bg-card/80 flex items-center gap-3">
+                       <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                         <Sparkles size={18} className="text-primary" />
+                       </div>
+                       <div className="min-w-0">
+                         <h2 className="font-bold text-lg leading-tight truncate">{totalHits} results</h2>
+                         <p className="text-xs text-muted-foreground truncate">
+                           {parsedInfo ? `Showing ${parsedInfo.bedrooms ? `${parsedInfo.bedrooms} bed ` : ""}${parsedInfo.propertyType || 'properties'}` : query}
+                         </p>
+                       </div>
+                     </div>
+
+                     {/* Scrollable Results List */}
+                     <div className="flex-1 overflow-y-auto p-4 scroller space-y-4">
+                         <SearchResults
+                            hits={hits}
+                            totalHits={totalHits}
+                            query={query}
+                            facets={facets}
+                            isLoading={isLoading}
+                            onPropertyClick={handlePropertyClick}
+                            onPropertyHover={setHoveredId}
+                            onFacetChange={handleFacetChange}
+                            activeFilters={activeFilters}
+                            sort={sort}
+                            onSortChange={setSort}
+                            hasMore={hasMore}
+                            onLoadMore={() => setLimit(l => l + 30)}
+                            onClear={() => handleSearch("")}
+                            compact={true}
+                         />
+                         
+                         <div className="pt-4 border-t border-border/50">
+                           <ActiveScrapeTrigger query={query} onTriggerScrape={handleTriggerScrape} isLoading={scrapeLoading} />
+                         </div>
+                     </div>
+                  </div>
+               </div>
+             )}
+           </>
         )}
 
         {/* Empty State Overlay */}
-        {!query && (
+        {!hasSearched && (
            <div className="absolute inset-0 z-10 pointer-events-none flex flex-col items-center justify-center bg-background/20 backdrop-blur-sm">
               <div className="bg-background/95 backdrop-blur-md p-8 md:p-10 rounded-3xl shadow-2xl border pointer-events-auto max-w-lg w-full text-center flex flex-col items-center mx-4 transition-all hover:shadow-primary/5">
                  <div className="w-20 h-20 rounded-2xl flex items-center justify-center bg-primary/10 mb-6 rotate-3">

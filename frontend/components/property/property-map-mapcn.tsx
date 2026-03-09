@@ -17,7 +17,7 @@ export function PropertyMapCN({ properties, hoveredId, onMarkerClick }: Property
         viewport={{ center: [3.4, 6.5], zoom: 11 }}
         className="w-full h-full"
       >
-        <MapControls position="bottom-right" />
+        <MapControls position="bottom-right" showCompass={false} />
         {properties.map((p) => {
           if (p.latitude == null || p.longitude == null) return null;
           

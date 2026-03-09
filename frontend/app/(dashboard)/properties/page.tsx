@@ -79,6 +79,11 @@ export default function PropertiesPage() {
       setGridCols(2);
       setShowMap(false);
     }
+    
+    // Listen for mobile nav filter toggle
+    const handleToggleFilters = () => setFilterSheetOpen(true);
+    document.addEventListener("toggle-mobile-filters", handleToggleFilters);
+    return () => document.removeEventListener("toggle-mobile-filters", handleToggleFilters);
   }, []);
 
   const { data, isLoading } = useProperties(filters);
@@ -357,8 +362,9 @@ export default function PropertiesPage() {
             onClick={() => setMobileMapExpanded(!mobileMapExpanded)}
             className="absolute top-3 right-3 z-10 flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold shadow-lg backdrop-blur-md"
             style={{
-              backgroundColor: "rgba(255,255,255,0.95)",
+              backgroundColor: "var(--card)",
               color: "var(--foreground)",
+              border: "1px solid var(--border)",
             }}
           >
             {mobileMapExpanded ? (
