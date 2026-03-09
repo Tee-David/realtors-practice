@@ -19,7 +19,18 @@ class Config:
     browser_timeout: int = int(os.getenv("BROWSER_TIMEOUT", "30000"))
 
     # Proxy (Brightdata/Smartproxy compatible)
-    proxy_url: str | None = os.getenv("PROXY_URL")
+    proxy_urls_raw: str = os.getenv("PROXY_URLS", "")
+    proxy_urls: list[str] = field(default_factory=list)
+
+    def __post_init__(self):
+        if self.proxy_urls_raw:
+            self.proxy_urls = [p.strip() for p in self.proxy_urls_raw.split(",") if p.strip()]
+
+    @property
+    def proxy_url(self) -> str | None:
+        """Returns a random proxy from the pool, or None if no proxies configured."""
+        import random
+        return random.choice(self.proxy_urls) if self.proxy_urls else None
 
     # Rate limiting
     default_delay_min: float = float(os.getenv("DELAY_MIN", "2.0"))

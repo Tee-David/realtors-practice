@@ -29,7 +29,7 @@ export function ActiveScrapeTrigger({ query, onTriggerScrape, isLoading }: Activ
           Want more results?
         </h3>
         <p className="text-xs mt-0.5" style={{ color: "var(--muted-foreground)" }}>
-          We can search the web for &ldquo;{query}&rdquo; and add new listings to your database.
+          Run a targeted scrape now for &ldquo;{query}&rdquo;
         </p>
       </div>
 

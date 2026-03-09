@@ -131,10 +131,10 @@
 
 ### Engine (ported + enhanced from old project)
 - [x] Port adaptive_fetcher.py (requests -> Playwright -> ScraperAPI fallback)
-- [ ] Port page_renderer.py (Playwright browser management, stealth args)
-- [ ] Port pagination.py (universal pagination handler)
-- [ ] Port cookie_handler.py (consent banner dismissal)
-- [ ] Add proxy rotation support (rotating proxy URL as env var, Brightdata/Smartproxy compatible)
+- [x] Port page_renderer.py (Playwright browser management, stealth args)
+- [x] Port pagination.py (universal pagination handler)
+- [x] Port cookie_handler.py (consent banner dismissal)
+- [x] Add proxy rotation support (rotating proxy URL as env var, Brightdata/Smartproxy compatible)
 - [x] Add user-agent rotation pool (50+ realistic UAs, randomized per request)
 - [x] Add request header rotation (Accept-Language, Referer, etc.)
 - [x] Add randomized delays + human-like behavior simulation
