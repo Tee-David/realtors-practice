@@ -97,10 +97,13 @@ export default function SearchPage() {
   const handleSearch = useCallback((q: string, cat?: PropertyCategory | "ALL") => {
     setQuery(q);
     setHasSearched(true);
+    if (isMobile) {
+      setMobileSheetOpen(true);
+    }
     if (cat) setSelectedCategory(cat);
     setActiveFilters([]); // Reset filters on new search
     setLimit(30); // reset limit
-  }, []);
+  }, [isMobile]);
 
   const handleFacetChange = useCallback((facetKey: string, facetValue: string) => {
     setActiveFilters((prev) => {

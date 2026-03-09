@@ -275,10 +275,13 @@ const BottomSheetContent = ({
           )}
           style={{ height: sheetHeight, y }}
         >
-          <div className="flex justify-center pt-3 pb-1">
-            <div className="w-12 h-1.5 rounded-full bg-muted cursor-grab active:cursor-grabbing" />
+          <div className="flex justify-center pt-3 pb-3 shrink-0 cursor-grab active:cursor-grabbing">
+            <div className="w-12 h-1.5 rounded-full bg-muted" />
           </div>
-          <div className="flex-1 overflow-y-auto px-6 pb-12 pt-2 h-full">
+          <div 
+            className="flex-1 overflow-y-auto px-6 pb-12 pt-0 h-full"
+            onPointerDown={(e) => e.stopPropagation()}
+          >
             {children}
           </div>
         </motion.div>
