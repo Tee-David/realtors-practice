@@ -16,30 +16,7 @@ export function Preloader() {
     let isMounted = true;
     let fallbackTimer: NodeJS.Timeout;
 
-    async function initAnimation() {
-      try {
-        // @ts-ignore
-        const animePayload = await import(/* webpackIgnore: true */ "https://esm.sh/animejs");
-        const { animate, svg, stagger } = animePayload;
-
-        if (!isMounted) return;
-
-        animate(svg.createDrawable('.preload-line'), {
-          draw: ['0 0', '0 1', '1 1'],
-          ease: 'inOutQuad',
-          duration: 2000,
-          delay: stagger(100),
-          loop: true
-        });
-
-      } catch (err) {
-        console.error("Failed to load animejs", err);
-      }
-    }
-
-    initAnimation();
-
-    // Hide preloader after a short time (e.g. 3.5s)
+    // Use a CSS-based timeline, hide wrapper after 3.5s
     fallbackTimer = setTimeout(() => {
       if (isMounted) {
         setShow(false);
@@ -56,9 +33,9 @@ export function Preloader() {
   if (!show) return null;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-zinc-950 text-white transition-opacity duration-500">
-      <div className="w-full max-w-2xl px-8 flex items-center justify-center">
-        <svg viewBox="0 0 1160 400" xmlns="http://www.w3.org/2000/svg" className="w-full h-auto">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-primary text-primary-foreground transition-opacity duration-500">
+      <div className="w-full max-w-sm px-8 flex items-center justify-center">
+        <svg viewBox="0 0 320 300" xmlns="http://www.w3.org/2000/svg" className="w-48 md:w-64 h-auto">
           <style dangerouslySetInnerHTML={{ __html: `
             .preload-line {
               stroke: currentColor;
@@ -67,6 +44,14 @@ export function Preloader() {
               stroke-linecap: round;
               stroke-linejoin: round;
               stroke-width: 4;
+              stroke-dasharray: 600;
+              stroke-dashoffset: 600;
+              animation: drawLine 2.5s ease-in-out forwards;
+            }
+            @keyframes drawLine {
+              to {
+                stroke-dashoffset: 0;
+              }
             }
           `}} />
           <g>
