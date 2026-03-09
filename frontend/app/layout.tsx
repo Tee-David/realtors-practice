@@ -3,6 +3,7 @@ import { Space_Grotesk, Outfit } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "sonner";
 import { Providers } from "@/components/providers";
+import SmoothCursor from "@/components/ui/smooth-cursor";
 
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-space-grotesk",
@@ -38,6 +39,15 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         <Providers>
+          <SmoothCursor 
+            size={16} 
+            showTrail={true} 
+            trailLength={6} 
+            color="black"
+            darkColor="white"
+            magneticElements="button, a, [role='button'], [data-magnetic]"
+            glowEffect={true}
+          />
           {children}
         </Providers>
         <Toaster richColors position="top-right" duration={5000} />

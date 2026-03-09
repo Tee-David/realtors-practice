@@ -1,15 +1,34 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { SearchBar } from "@/components/search/search-bar";
 import { SearchResults } from "@/components/search/search-results";
 import { ActiveScrapeTrigger } from "@/components/search/active-scrape-trigger";
-import { DynamicPropertyMap } from "@/components/property/property-map-dynamic";
+import dynamic from "next/dynamic";
+import { formatPrice } from "@/lib/utils";
+
+const FullscreenMap = dynamic(
+  () => import("@/components/search/fullscreen-map").then((mod) => mod.FullscreenMap),
+  { ssr: false, loading: () => <div className="w-full h-full bg-secondary animate-pulse" /> }
+);
 import { SideSheet, SideSheetContent } from "@/components/ui/side-sheet";
 import { PropertyDetailPanel } from "@/components/property/property-detail-panel";
 import { useSearch } from "@/hooks/use-search";
-import { MapPin, ChevronUp, ChevronDown } from "lucide-react";
+import { MapPin, ChevronUp, ChevronDown, Sparkles } from "lucide-react";
 import type { Property, PropertyCategory } from "@/types/property";
+
+const QUICK_SEARCHES = [
+  "3 bed flat in Lekki",
+  "Land in Ikoyi",
+  "Shortlet in Victoria Island",
+  "House under 50m",
+  "Commercial in Abuja",
+  "2 bedroom apartment in Yaba",
+  "Duplex in Ajah with pool",
+  "Office space in Ikeja",
+  "Warehouse in Oshodi",
+  "Furnished flat in Surulere"
+];
 
 export default function SearchPage() {
   const [query, setQuery] = useState("");
@@ -17,12 +36,22 @@ export default function SearchPage() {
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
-  const [mapExpanded, setMapExpanded] = useState(false);
   const [scrapeLoading, setScrapeLoading] = useState(false);
+
+  const [limit, setLimit] = useState(30);
+  const [sort, setSort] = useState("newest");
+  const [dynamicPills, setDynamicPills] = useState<string[]>([]);
+
+  // Pick 5 random pills on mount
+  useEffect(() => {
+    const shuffled = [...QUICK_SEARCHES].sort(() => 0.5 - Math.random());
+    setDynamicPills(shuffled.slice(0, 5));
+  }, []);
 
   const { data: searchData, isLoading } = useSearch({
     q: query,
-    limit: 30,
+    limit,
+    sort: [sort],
     filters: activeFilters.length > 0 ? activeFilters : undefined,
     facets: ["categoryName", "listingType", "bedrooms", "state"],
   });
@@ -30,6 +59,8 @@ export default function SearchPage() {
   const hits: Property[] = searchData?.hits || [];
   const totalHits = searchData?.estimatedTotalHits || searchData?.nbHits || hits.length;
   const facets = searchData?.facetDistribution || {};
+  const parsedInfo = searchData?.parsedQuery || null; // In case the backend sends parsed NL info
+  const hasMore = totalHits > hits.length;
 
   // Properties with coordinates for the map
   const mappableProperties = useMemo(
@@ -41,6 +72,7 @@ export default function SearchPage() {
     setQuery(q);
     if (cat) setSelectedCategory(cat);
     setActiveFilters([]); // Reset filters on new search
+    setLimit(30); // reset limit
   }, []);
 
   const handleFacetChange = useCallback((facetKey: string, facetValue: string) => {
@@ -68,130 +100,109 @@ export default function SearchPage() {
   }, []);
 
   return (
-    <div className="flex flex-col gap-4 mt-2">
-      {/* Search Bar */}
-      <SearchBar onSearch={handleSearch} initialQuery={query} initialCategory={selectedCategory} />
+    <div className="absolute inset-0 z-0 overflow-hidden md:ml-[60px] pt-[76px] md:pt-[56px] pb-[76px] md:pb-0 flex flex-col bg-background">
+      <div className="relative flex-1 w-full overflow-hidden">
+        
+        {/* Full Screen Map */}
+        <FullscreenMap
+          properties={mappableProperties}
+          hoveredId={hoveredId}
+          setHoveredId={setHoveredId}
+          onPropertyClick={handlePropertyClick}
+        />
+        
+        {/* Top Search Bar Overlay (Only when results are showing) */}
+        {query && (
+          <div className="absolute top-4 left-0 right-0 z-10 px-4 md:px-8 pointer-events-none flex justify-center">
+             <div className="max-w-3xl w-full pointer-events-auto drop-shadow-xl">
+                <SearchBar onSearch={handleSearch} initialQuery={query} initialCategory={selectedCategory} />
+             </div>
+          </div>
+        )}
 
-      {/* Map (top half — collapsible) */}
-      {query && (
-        <div className="relative">
-          <div
-            className="rounded-xl overflow-hidden transition-all duration-300"
-            style={{
-              height: mapExpanded ? "55vh" : "280px",
-              backgroundColor: "var(--secondary)",
-            }}
-          >
-            {mappableProperties.length > 0 ? (
-              <DynamicPropertyMap
-                properties={mappableProperties}
-                hoveredId={hoveredId}
-                onMarkerClick={handlePropertyClick}
-              />
-            ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center gap-2">
-                <MapPin size={32} style={{ color: "var(--muted-foreground)" }} />
-                <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-                  {isLoading ? "Loading map..." : "No properties with coordinates to display"}
-                </p>
+        {/* Side Panel for Results */}
+        {query && (
+           <div className="absolute top-[80px] md:top-[90px] left-4 md:left-8 bottom-4 w-full max-w-[400px] z-[11] pointer-events-none transition-all duration-300">
+              <div className="bg-background/95 backdrop-blur-xl w-full h-full rounded-2xl shadow-2xl border pointer-events-auto flex flex-col overflow-hidden">
+                 
+                 {/* Sidebar Header */}
+                 <div className="p-4 border-b shrink-0 bg-card/80 flex items-center gap-3">
+                   <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                     <Sparkles size={18} className="text-primary" />
+                   </div>
+                   <div className="min-w-0">
+                     <h2 className="font-bold text-lg leading-tight truncate">{totalHits} results</h2>
+                     <p className="text-xs text-muted-foreground truncate">
+                       {parsedInfo ? `Showing ${parsedInfo.bedrooms ? `${parsedInfo.bedrooms} bed ` : ""}${parsedInfo.propertyType || 'properties'}` : query}
+                     </p>
+                   </div>
+                 </div>
+
+                 {/* Scrollable Results List */}
+                 <div className="flex-1 overflow-y-auto p-4 scroller space-y-4">
+                     <SearchResults
+                        hits={hits}
+                        totalHits={totalHits}
+                        query={query}
+                        facets={facets}
+                        isLoading={isLoading}
+                        onPropertyClick={handlePropertyClick}
+                        onPropertyHover={setHoveredId}
+                        onFacetChange={handleFacetChange}
+                        activeFilters={activeFilters}
+                        sort={sort}
+                        onSortChange={setSort}
+                        hasMore={hasMore}
+                        onLoadMore={() => setLimit(l => l + 30)}
+                        onClear={() => handleSearch("")}
+                        compact={true}
+                     />
+                     
+                     <div className="pt-4 border-t border-border/50">
+                       <ActiveScrapeTrigger query={query} onTriggerScrape={handleTriggerScrape} isLoading={scrapeLoading} />
+                     </div>
+                 </div>
               </div>
-            )}
-          </div>
+           </div>
+        )}
 
-          {/* Map expand/collapse toggle */}
-          <button
-            onClick={() => setMapExpanded(!mapExpanded)}
-            className="absolute bottom-3 right-3 flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium backdrop-blur-md transition-colors hover:bg-white/30"
-            style={{
-              backgroundColor: "rgba(0,0,0,0.5)",
-              color: "#fff",
-            }}
-          >
-            {mapExpanded ? (
-              <>
-                <ChevronDown size={14} />
-                Collapse
-              </>
-            ) : (
-              <>
-                <ChevronUp size={14} />
-                Expand
-              </>
-            )}
-          </button>
-        </div>
-      )}
+        {/* Empty State Overlay */}
+        {!query && (
+           <div className="absolute inset-0 z-10 pointer-events-none flex flex-col items-center justify-center bg-background/20 backdrop-blur-sm">
+              <div className="bg-background/95 backdrop-blur-md p-8 md:p-10 rounded-3xl shadow-2xl border pointer-events-auto max-w-lg w-full text-center flex flex-col items-center mx-4 transition-all hover:shadow-primary/5">
+                 <div className="w-20 h-20 rounded-2xl flex items-center justify-center bg-primary/10 mb-6 rotate-3">
+                    <MapPin size={36} className="text-primary -rotate-3" />
+                 </div>
+                 <h2 className="font-display font-bold text-2xl md:text-3xl mb-2 text-foreground tracking-tight">
+                    Where to next?
+                 </h2>
+                 <p className="text-sm text-muted-foreground mb-8 max-w-sm">
+                    Search using natural language, explore the map, or dive straight into one of our quick suggestions below.
+                 </p>
 
-      {/* Results (bottom half) */}
-      {query && (
-        <>
-          <SearchResults
-            hits={hits}
-            totalHits={totalHits}
-            query={query}
-            facets={facets}
-            isLoading={isLoading}
-            onPropertyClick={handlePropertyClick}
-            onPropertyHover={setHoveredId}
-            onFacetChange={handleFacetChange}
-            activeFilters={activeFilters}
-          />
+                 {/* Integrated Search Bar inside Empty State */}
+                 <div className="w-full mb-8">
+                    <SearchBar onSearch={handleSearch} initialQuery={query} initialCategory={selectedCategory} />
+                 </div>
 
-          {/* Voluntary active scrape trigger — always available when searching */}
-          {!isLoading && (
-            <ActiveScrapeTrigger
-              query={query}
-              onTriggerScrape={handleTriggerScrape}
-              isLoading={scrapeLoading}
-            />
-          )}
-        </>
-      )}
+                 {/* Quick search suggestions */}
+                 <div className="flex flex-wrap justify-center gap-2">
+                    {dynamicPills.map((suggestion) => (
+                      <button
+                        key={suggestion}
+                        onClick={() => handleSearch(suggestion)}
+                        className="px-4 py-2 rounded-full text-xs font-semibold transition-all hover:-translate-y-0.5 border bg-secondary/50 hover:bg-primary hover:text-white hover:border-primary text-foreground"
+                      >
+                        {suggestion}
+                      </button>
+                    ))}
+                 </div>
+              </div>
+           </div>
+        )}
 
-      {/* Empty state when no query */}
-      {!query && (
-        <div className="flex flex-col items-center justify-center py-20 gap-4">
-          <div
-            className="w-20 h-20 rounded-full flex items-center justify-center"
-            style={{ backgroundColor: "rgba(0, 1, 252, 0.06)" }}
-          >
-            <MapPin size={32} style={{ color: "var(--primary)" }} />
-          </div>
-          <div className="text-center max-w-md">
-            <h2 className="font-display font-bold text-lg mb-1" style={{ color: "var(--foreground)" }}>
-              Search Properties
-            </h2>
-            <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-              Use natural language to find properties. Try &ldquo;3 bedroom flat in Lekki under 30
-              million&rdquo; or &ldquo;land in Ikoyi for sale&rdquo;.
-            </p>
-          </div>
-
-          {/* Quick search suggestions */}
-          <div className="flex flex-wrap justify-center gap-2 mt-2">
-            {[
-              "3 bed flat in Lekki",
-              "Land in Ikoyi",
-              "Shortlet in Victoria Island",
-              "House under 50m",
-              "Commercial in Abuja",
-            ].map((suggestion) => (
-              <button
-                key={suggestion}
-                onClick={() => handleSearch(suggestion)}
-                className="px-4 py-2 rounded-full text-xs font-medium transition-colors hover:opacity-80"
-                style={{
-                  backgroundColor: "var(--secondary)",
-                  color: "var(--foreground)",
-                }}
-              >
-                {suggestion}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
+      </div>
+      
       {/* Detail Sheet */}
       <SideSheet
         open={!!selectedProperty}
@@ -199,7 +210,7 @@ export default function SearchPage() {
           if (!open) setSelectedProperty(null);
         }}
       >
-        <SideSheetContent className="w-full sm:max-w-md md:max-w-lg lg:max-w-xl p-0 h-full border-l border-zinc-200 dark:border-white/10 overflow-hidden">
+        <SideSheetContent className="w-full sm:max-w-md md:max-w-lg lg:max-w-xl p-0 h-full border-l border-zinc-200 dark:border-white/10 overflow-hidden z-[100]">
           {selectedProperty && (
             <PropertyDetailPanel
               property={selectedProperty}

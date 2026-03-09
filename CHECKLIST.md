@@ -183,13 +183,13 @@
 - [x] Backend: Broadcast scrape events on callback receipt
 
 ### Frontend
-- [ ] Frontend: Scraper control page (start scrape, select sites, parameters)
-- [ ] Frontend: Job progress component (progress bars, status)
-- [ ] Frontend: Live logs viewer (Socket.io connected)
-- [ ] Frontend: Site management page (enable/disable, edit selectors, test scrape)
-- [ ] Frontend: Site card component
-- [ ] Frontend: useSocket hook
-- [ ] Frontend: useScrapeJobs hook
+- [x] Frontend: Scraper control page (start scrape, select sites, parameters)
+- [x] Frontend: Job progress component (progress bars, status)
+- [x] Frontend: Live logs viewer (Socket.io connected)
+- [x] Frontend: Site management page (enable/disable, edit selectors, test scrape)
+- [x] Frontend: Site card component
+- [x] Frontend: useSocket hook
+- [x] Frontend: useScrapeJobs hook
 
 ### Testing
 - [ ] Test: Trigger scrape from UI -> Python scraper receives job
@@ -206,7 +206,7 @@
 - [x] Backend: Search service (NL query parser + Meilisearch integration)
 - [x] Backend: NL query parser (bedrooms, property type, location, price, features regex)
 - [x] Backend: Search routes (search, natural, suggestions, facets)
-- [ ] Backend: Active scraping trigger (on zero results)
+- [x] Backend: Active scraping trigger (on zero results)
 - [x] Backend: Wire property create/update/delete to Meilisearch sync
 - [x] Backend: Analytics service (overview KPIs, trends, market insights)
 - [x] Backend: Analytics controller + routes
@@ -222,7 +222,7 @@
 - [x] Frontend: Explore properties section (latest cards)
 - [ ] Test: "3 bedroom flat in Lekki under 30 million" returns relevant results
 - [ ] Test: Dashboard KPIs reflect actual DB data
-- [ ] Test: Active scrape fires when search yields 0 results
+- [x] Test: Active scrape fires when search yields 0 results
 
 ## Phase 4.5: Intelligence
 - [ ] Backend: Site quality ranking service (auto-score sites by data freshness, completeness, error rate)
@@ -340,7 +340,7 @@
 - **Phase 2:** 30 tasks (30 done ✅)
 - **Phase 2.5:** 11 tasks (11 done ✅)
 - **Phase 3:** 40 tasks (18 done, 22 pending — infra/queue/deploy/frontend/tests)
-- **Phase 4:** 21 tasks (16 done, 5 pending — deploy + backend active scrape trigger + tests)
+- **Phase 4:** 21 tasks (18 done, 3 pending — deploy + tests)
 - **Phase 4.5:** 3 tasks (0 done)
 - **Phase 5:** 16 tasks (3 done, 13 pending)
 - **Phase 6:** 22 tasks (0 done)

@@ -36,7 +36,7 @@ const MAX_RECENT = 6;
 /*  Speech-to-text hook                                                */
 /* ------------------------------------------------------------------ */
 
-function useSpeechRecognition(onResult: (text: string) => void) {
+function useSpeechRecognition(onResult: (text: string, isFinal: boolean) => void) {
   const [isListening, setIsListening] = useState(false);
   const [isSupported, setIsSupported] = useState(false);
   const recognitionRef = useRef<any>(null);
@@ -56,18 +56,29 @@ function useSpeechRecognition(onResult: (text: string) => void) {
         const transcript = Array.from(event.results)
           .map((result: any) => result[0].transcript)
           .join("");
-        onResult(transcript);
+        const isFinal = event.results[event.results.length - 1].isFinal;
+        onResult(transcript, isFinal);
       };
 
       recognition.onend = () => setIsListening(false);
       recognition.onerror = (event: any) => {
-        console.error("Speech recognition error", event.error);
-        setIsListening(false);
         if (event.error === "not-allowed") {
+          setIsListening(false);
           toast.error("Microphone access denied. Please allow microphone permissions in your browser.");
+        } else if (event.error === "network") {
+          // Many browsers throw a network error for SpeechRecognition when offline or disconnected.
+          // In some cases Chrome throws this randomly while transcribing. We'll simply ignore the toast
+          // but we have to set listening to false because the API stops recording on network error.
+          setIsListening(false);
+          console.warn("Speech recognition network error gracefully ignored.");
         } else if (event.error === "no-speech") {
-          // just ignore, time out
+          setIsListening(false);
+          // just gracefully ignore the timeout
+        } else if (event.error === "aborted") {
+          setIsListening(false);
+          // user stopped the recognition, safely ignore
         } else {
+          setIsListening(false);
           toast.error(`Voice search error: ${event.error}`);
         }
       };
@@ -140,14 +151,21 @@ export function SearchBar({
 
   const { data: suggestions, isLoading: suggestionsLoading } = useSearchSuggestions(query);
 
-  const handleVoiceResult = useCallback((text: string) => {
+  const handleVoiceResult = useCallback((text: string, isFinal: boolean) => {
     setQuery(text);
-    setShowDropdown(false);
-  }, []);
+    if (isFinal && text.trim().length > 0) {
+      setShowDropdown(false);
+      saveRecentSearch(text.trim());
+      setRecentSearches(getRecentSearches());
+      onSearch(text.trim(), category);
+    } else {
+      setShowDropdown(true);
+    }
+  }, [category, onSearch]);
 
   const { isListening, isSupported, toggle: toggleMic } = useSpeechRecognition(handleVoiceResult);
 
-  // Load recent searches on mount
+  // Load preferences
   useEffect(() => {
     setRecentSearches(getRecentSearches());
   }, []);
@@ -337,7 +355,7 @@ export function SearchBar({
           {/* Submit button */}
           <button
             type="submit"
-            className="px-4 sm:px-5 py-3 text-xs sm:text-sm font-semibold text-white transition-opacity hover:opacity-90 h-full"
+            className="px-4 sm:px-5 py-3 text-xs sm:text-sm font-semibold text-white transition-opacity hover:opacity-90 h-full rounded-r-2xl"
             style={{ backgroundColor: "var(--primary)" }}
           >
             Search

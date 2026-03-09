@@ -3,8 +3,14 @@
 import dynamic from "next/dynamic";
 import type { Property } from "@/types/property";
 
-const PropertyMap = dynamic(
-  () => import("./property-map").then((mod) => ({ default: mod.PropertyMap })),
+interface Props {
+  properties: Property[];
+  hoveredId: string | null;
+  onMarkerClick: (id: string) => void;
+}
+
+const PropertyMap = dynamic<Props>(
+  () => import("./property-map-mapcn").then((mod) => ({ default: mod.PropertyMapCN })),
   {
     ssr: false,
     loading: () => (
@@ -17,12 +23,6 @@ const PropertyMap = dynamic(
     ),
   }
 );
-
-interface Props {
-  properties: Property[];
-  hoveredId: string | null;
-  onMarkerClick: (id: string) => void;
-}
 
 export function DynamicPropertyMap(props: Props) {
   return <PropertyMap {...props} />;

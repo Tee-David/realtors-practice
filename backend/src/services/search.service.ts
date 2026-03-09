@@ -116,6 +116,11 @@ export class SearchService {
         sort,
       });
 
+      // Active Scrape Trigger on zero results
+      if (result.hits.length === 0 && q && q.length > 2) {
+        this.triggerActiveScrape(parsed.cleanQuery, parsed.extracted);
+      }
+
       return {
         hits: result.hits,
         query: parsed.cleanQuery,
@@ -127,6 +132,47 @@ export class SearchService {
     } catch (err: any) {
       Logger.error(`Search failed: ${err.message}`);
       throw err;
+    }
+  }
+
+  /**
+   * Automatically trigger a scrape if no results were found for a specific query.
+   */
+  private static async triggerActiveScrape(q: string, extractedParams: ParsedQuery["extracted"]) {
+    try {
+      const scraperUrl = process.env.SCRAPER_URL || "http://localhost:8000";
+      const internalApiKey = process.env.INTERNAL_API_KEY || "internal_secret_key";
+
+      // Basic parameter mapping
+      const params = [];
+      if (q) params.push(q);
+      if (extractedParams.listingType) params.push(extractedParams.listingType.toLowerCase());
+      if (extractedParams.bedrooms) params.push(`${extractedParams.bedrooms} bedroom`);
+      
+      const combinedSearchString = params.join(" ");
+
+      if (!combinedSearchString) return;
+
+      Logger.info(`Triggering active scrape for 0-result query: "${combinedSearchString}"`);
+
+      // We don't await this, let it run in the background
+      fetch(`${scraperUrl}/api/scrape/start`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-internal-api-key": internalApiKey,
+        },
+        body: JSON.stringify({
+          sites: ["propertypro", "nigeriapropertycentre"],
+          parameters: {
+            keyword: combinedSearchString
+          }
+        }),
+      }).catch((e: any) => {
+        Logger.error(`Failed to trigger active scrape: ${e.message}`);
+      });
+    } catch (error: any) {
+      Logger.error(`Error initiating active scrape: ${error.message}`);
     }
   }
 

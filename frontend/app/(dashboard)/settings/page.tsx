@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
 import {
   User,
@@ -373,6 +373,20 @@ function PreferencesTab() {
   const [mapProvider, setMapProvider] = useState("osm");
   const [perPage, setPerPage] = useState("24");
   const [sortOrder, setSortOrder] = useState("newest");
+  const [autoSubmitVoice, setAutoSubmitVoice] = useState(false);
+
+  // Load initial settings from localStorage on mount
+  useEffect(() => {
+    const savedAutoSubmit = localStorage.getItem("realtors_auto_submit_voice");
+    if (savedAutoSubmit) {
+      setAutoSubmitVoice(savedAutoSubmit === "true");
+    }
+  }, []);
+
+  const handleAutoSubmitVoiceChange = (val: boolean) => {
+    setAutoSubmitVoice(val);
+    localStorage.setItem("realtors_auto_submit_voice", val.toString());
+  };
 
   return (
     <div className="space-y-8">
@@ -490,6 +504,27 @@ function PreferencesTab() {
             <SelectItem value="price-desc">Price: High to Low</SelectItem>
           </SelectContent>
         </Select>
+      </div>
+
+      <Separator />
+
+      {/* Voice Search Auto-submit */}
+      <div>
+        <h3 className="mb-1 font-display font-semibold" style={{ color: "var(--foreground)" }}>
+          Voice Search Auto-Submit
+        </h3>
+        <p className="mb-4 text-sm" style={{ color: "var(--muted-foreground)" }}>
+          Automatically submit search queries when you finish speaking.
+        </p>
+
+        <div className="flex items-center justify-between rounded-lg border p-4 max-w-sm" style={{ borderColor: "var(--border)" }}>
+          <div>
+            <p className="text-sm font-medium" style={{ color: "var(--foreground)" }}>
+              Enable Auto-Submit
+            </p>
+          </div>
+          <ToggleSwitch checked={autoSubmitVoice} onChange={handleAutoSubmitVoiceChange} />
+        </div>
       </div>
     </div>
   );

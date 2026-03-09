@@ -1,106 +1,399 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { motion, useMotionValue, useSpring } from "framer-motion";
+import { motion, useSpring } from "framer-motion";
+import { FC, JSX, useEffect, useRef, useState } from "react";
+import { useTheme } from "next-themes";
 
-export const SmoothCursor = () => {
-  const cursorX = useMotionValue(-100);
-  const cursorY = useMotionValue(-100);
+// Utility function 'cn' (classnames) - implemented directly to resolve import error
+function cn(...inputs: (string | undefined | null | boolean)[]) {
+  return inputs.filter(Boolean).join(" ");
+}
 
-  const springConfig = {
+interface Position {
+  x: number;
+  y: number;
+}
+
+export interface SpringConfig {
+  damping: number;
+  stiffness: number;
+  mass: number;
+  restDelta: number;
+}
+
+export interface SmoothCursorProps {
+  cursor?: JSX.Element;
+  springConfig?: SpringConfig;
+  className?: string;
+  size?: number;
+  color?: string;
+  darkColor?: string;
+  hideOnLeave?: boolean;
+  trailLength?: number;
+  showTrail?: boolean;
+  rotateOnMove?: boolean;
+  scaleOnClick?: boolean;
+  glowEffect?: boolean;
+  magneticDistance?: number;
+  magneticElements?: string;
+  onCursorMove?: (position: Position) => void;
+  onCursorEnter?: () => void;
+  onCursorLeave?: () => void;
+  disabled?: boolean;
+}
+
+const DefaultCursorSVG: FC<{ size?: number; color?: string; className?: string }> = ({
+  size = 25,
+  color = "black",
+  className
+}) => {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size * 2}
+      height={size * 2.16}
+      viewBox="0 0 50 54"
+      fill="none"
+      className={cn("pointer-events-none", className)}
+    >
+      <g filter="url(#filter0_d_91_7928)">
+        <path
+          d="M42.6817 41.1495L27.5103 6.79925C26.7269 5.02557 24.2082 5.02558 23.3927 6.79925L7.59814 41.1495C6.75833 42.9759 8.52712 44.8902 10.4125 44.1954L24.3757 39.0496C24.8829 38.8627 25.4385 38.8627 25.9422 39.0496L39.8121 44.1954C41.6849 44.8902 43.4884 42.9759 42.6817 41.1495Z"
+          fill={color}
+        />
+        <path
+          d="M43.7146 40.6933L28.5431 6.34306C27.3556 3.65428 23.5772 3.69516 22.3668 6.32755L6.57226 40.6778C5.3134 43.4156 7.97238 46.298 10.803 45.2549L24.7662 40.109C25.0221 40.0147 25.2999 40.0156 25.5494 40.1082L39.4193 45.254C42.2261 46.2953 44.9254 43.4347 43.7146 40.6933Z"
+          stroke="white"
+          strokeWidth={2.25825}
+        />
+      </g>
+      <defs>
+        <filter
+          id="filter0_d_91_7928"
+          x={0.602397}
+          y={0.952444}
+          width={49.0584}
+          height={52.428}
+          filterUnits="userSpaceOnUse"
+          colorInterpolationFilters="sRGB"
+        >
+          <feFlood floodOpacity={0} result="BackgroundImageFix" />
+          <feColorMatrix
+            in="SourceAlpha"
+            type="matrix"
+            values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0"
+            result="hardAlpha"
+          />
+          <feOffset dy={2.25825} />
+          <feGaussianBlur stdDeviation={2.25825} />
+          <feComposite in2="hardAlpha" operator="out" />
+          <feColorMatrix
+            type="matrix"
+            values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.08 0"
+          />
+          <feBlend
+            mode="normal"
+            in2="BackgroundImageFix"
+            result="effect1_dropShadow_91_7928"
+          />
+          <feBlend
+            mode="normal"
+            in="SourceGraphic"
+            in2="effect1_dropShadow_91_7928"
+            result="shape"
+          />
+        </filter>
+      </defs>
+    </svg>
+  );
+};
+
+export function SmoothCursor({
+  cursor,
+  springConfig = {
     damping: 45,
     stiffness: 400,
     mass: 1,
     restDelta: 0.001,
-  };
+  },
+  className,
+  size = 25,
+  color = "black",
+  darkColor = "white",
+  hideOnLeave = true,
+  trailLength = 5,
+  showTrail = false,
+  rotateOnMove = true,
+  scaleOnClick = true,
+  glowEffect = false,
+  magneticDistance = 50,
+  magneticElements = "[data-magnetic]",
+  onCursorMove,
+  onCursorEnter,
+  onCursorLeave,
+  disabled = false,
+}: SmoothCursorProps) {
+  const [isMoving, setIsMoving] = useState(false);
+  const [isVisible, setIsVisible] = useState(true);
+  const [isClicking, setIsClicking] = useState(false);
+  const [trail, setTrail] = useState<Position[]>([]);
 
-  const cursorXSpring = useSpring(cursorX, springConfig);
-  const cursorYSpring = useSpring(cursorY, springConfig);
+  const { theme, systemTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
 
-  const rotate = useMotionValue(0);
-  const rotateSpring = useSpring(rotate, { damping: 30, stiffness: 200 });
-
-  // Hide on touch-only devices (mobile/tablet) — no mouse means no custom cursor
-  const [hasPointer, setHasPointer] = useState(false);
   useEffect(() => {
-    setHasPointer(window.matchMedia("(pointer: fine)").matches);
+    setMounted(true);
   }, []);
 
+  const currentTheme = theme === "system" ? systemTheme : theme;
+  const activeColor = mounted && currentTheme === "dark" ? darkColor : color;
+
+  const lastMousePos = useRef<Position>({ x: 0, y: 0 });
+  const velocity = useRef<Position>({ x: 0, y: 0 });
+  const lastUpdateTime = useRef(Date.now());
+  const previousAngle = useRef(0);
+  const accumulatedRotation = useRef(0);
+
+  const cursorX = useSpring(0, springConfig);
+  const cursorY = useSpring(0, springConfig);
+  const rotation = useSpring(0, {
+    ...springConfig,
+    damping: 60,
+    stiffness: 300,
+  });
+  const scale = useSpring(1, {
+    ...springConfig,
+    stiffness: 500,
+    damping: 35,
+  });
+
+  const defaultCursor = <DefaultCursorSVG size={size} color={activeColor} />;
+  const cursorElement = cursor || defaultCursor;
+
   useEffect(() => {
-    if (!hasPointer) return;
+    if (disabled) return;
 
-    let rafId: number | null = null;
-    let latestX = -100;
-    let latestY = -100;
+    const updateVelocity = (currentPos: Position) => {
+      const currentTime = Date.now();
+      const deltaTime = currentTime - lastUpdateTime.current;
 
-    const moveCursor = (e: MouseEvent) => {
-      latestX = e.clientX;
-      latestY = e.clientY;
+      if (deltaTime > 0) {
+        velocity.current = {
+          x: (currentPos.x - lastMousePos.current.x) / deltaTime,
+          y: (currentPos.y - lastMousePos.current.y) / deltaTime,
+        };
+      }
 
-      if (rafId === null) {
-        rafId = requestAnimationFrame(() => {
-          const dx = latestX - cursorX.get();
-          const dy = latestY - cursorY.get();
-          
-          cursorX.set(latestX);
-          cursorY.set(latestY);
+      lastUpdateTime.current = currentTime;
+      lastMousePos.current = currentPos;
+    };
 
-          if (Math.abs(dx) > 0.1 || Math.abs(dy) > 0.1) {
-            const newAngle = Math.atan2(dy, dx) * (180 / Math.PI) + 90;
-            
-            // Shortest path rotation logic to prevent "awkward spin"
-            const currentRotate = rotate.get();
-            const diff = (newAngle - (currentRotate % 360) + 540) % 360 - 180;
-            rotate.set(currentRotate + diff);
-          }
-          rafId = null;
-        });
+    const updateTrail = (pos: Position) => {
+      if (!showTrail) return;
+
+      setTrail(function (prev) {
+        var newTrail = [pos].concat(prev.slice(0, trailLength - 1));
+        return newTrail;
+      });
+    };
+
+    const findMagneticElement = (x: number, y: number) => {
+      const elements = document.querySelectorAll(magneticElements);
+
+      for (const element of Array.from(elements)) {
+        const rect = element.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        const distance = Math.sqrt(
+          Math.pow(x - centerX, 2) + Math.pow(y - centerY, 2)
+        );
+
+        if (distance < magneticDistance) {
+          return { x: centerX, y: centerY, distance };
+        }
+      }
+      return null;
+    };
+
+    const smoothMouseMove = (e: MouseEvent) => {
+      let currentPos = { x: e.clientX, y: e.clientY };
+
+      const magneticTarget = findMagneticElement(currentPos.x, currentPos.y);
+      if (magneticTarget) {
+        const strength = 1 - (magneticTarget.distance / magneticDistance);
+        currentPos = {
+          x: currentPos.x + (magneticTarget.x - currentPos.x) * strength * 0.3,
+          y: currentPos.y + (magneticTarget.y - currentPos.y) * strength * 0.3,
+        };
+      }
+
+      updateVelocity(currentPos);
+      updateTrail(currentPos);
+
+      const speed = Math.sqrt(
+        Math.pow(velocity.current.x, 2) + Math.pow(velocity.current.y, 2),
+      );
+
+      cursorX.set(currentPos.x);
+      cursorY.set(currentPos.y);
+
+      onCursorMove?.(currentPos);
+
+      if (speed > 0.1 && rotateOnMove) {
+        const currentAngle =
+          Math.atan2(velocity.current.y, velocity.current.x) * (180 / Math.PI) +
+          90;
+
+        let angleDiff = currentAngle - previousAngle.current;
+        if (angleDiff > 180) angleDiff -= 360;
+        if (angleDiff < -180) angleDiff += 360;
+        accumulatedRotation.current += angleDiff;
+        rotation.set(accumulatedRotation.current);
+        previousAngle.current = currentAngle;
+
+        scale.set(0.95);
+        setIsMoving(true);
+
+        const timeout = setTimeout(function () {
+          scale.set(1);
+          setIsMoving(false);
+        }, 150);
+
+        return function () {
+          return clearTimeout(timeout);
+        };
       }
     };
 
-    window.addEventListener("mousemove", moveCursor);
-    return () => {
-      window.removeEventListener("mousemove", moveCursor);
-      if (rafId !== null) cancelAnimationFrame(rafId);
+    const handleMouseEnter = function () {
+      setIsVisible(true);
+      onCursorEnter?.();
     };
-  }, [cursorX, cursorY, rotate, hasPointer]);
 
-  if (!hasPointer) return null;
+    const handleMouseLeave = function () {
+      if (hideOnLeave) {
+        setIsVisible(false);
+      }
+      onCursorLeave?.();
+    };
+
+    const handleMouseDown = function () {
+      if (scaleOnClick) {
+        setIsClicking(true);
+        scale.set(0.8);
+      }
+    };
+
+    const handleMouseUp = function () {
+      if (scaleOnClick) {
+        setIsClicking(false);
+        scale.set(1);
+      }
+    };
+
+    let rafId: number;
+    const throttledMouseMove = function (e: MouseEvent) {
+      if (rafId) return;
+
+      rafId = requestAnimationFrame(function () {
+        smoothMouseMove(e);
+        rafId = 0;
+      });
+    };
+
+    document.body.style.cursor = "none";
+    window.addEventListener("mousemove", throttledMouseMove);
+    document.addEventListener("mouseenter", handleMouseEnter);
+    document.addEventListener("mouseleave", handleMouseLeave);
+    document.addEventListener("mousedown", handleMouseDown);
+    document.addEventListener("mouseup", handleMouseUp);
+
+    return function () {
+      window.removeEventListener("mousemove", throttledMouseMove);
+      document.removeEventListener("mouseenter", handleMouseEnter);
+      document.removeEventListener("mouseleave", handleMouseLeave);
+      document.removeEventListener("mousedown", handleMouseDown);
+      document.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "auto";
+      if (rafId) cancelAnimationFrame(rafId);
+    };
+  }, [
+    cursorX,
+    cursorY,
+    rotation,
+    scale,
+    disabled,
+    showTrail,
+    trailLength,
+    rotateOnMove,
+    scaleOnClick,
+    hideOnLeave,
+    magneticDistance,
+    magneticElements,
+    onCursorMove,
+    onCursorEnter,
+    onCursorLeave
+  ]);
+
+  // Use a query to see if on mobile to disable it. Wait, the disabled prop is better, but since it hides cursor, let's keep it desktop only via CSS class 'hidden pointer-events-none md:block'
+  // Actually, we can just use the provided code completely verbatim.
+
+  if (disabled || !isVisible) return null;
 
   return (
-    <motion.div
-      className="fixed top-0 left-0 pointer-events-none z-[2147483647]"
-      style={{
-        translateX: cursorXSpring,
-        translateY: cursorYSpring,
-        x: "-12px", 
-        y: "-12px",
-        rotate: rotateSpring,
-      }}
-    >
-      <DefaultCursorSVG />
-    </motion.div>
-  );
-};
+    <div className="hidden md:block">
+      {/* Trail Effect */}
+      {showTrail && trail.map(function (pos, index) {
+        return (
+          <motion.div
+            key={index}
+            style={{
+              position: "fixed",
+              left: pos.x,
+              top: pos.y,
+              translateX: "-50%",
+              translateY: "-50%",
+              zIndex: 99 - index,
+              pointerEvents: "none",
+              opacity: (trailLength - index) / trailLength * 0.5,
+              scale: (trailLength - index) / trailLength * 0.8,
+              backgroundColor: activeColor,
+              boxShadow: glowEffect ? "0 0 8px " + activeColor + "80" : "none",
+            }}
+            className="w-2 h-2 rounded-full"
+          />
+        );
+      })}
 
-function DefaultCursorSVG() {
-  return (
-    <svg
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      style={{ filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.3))" }}
-    >
-      <path
-        d="M12 3L4.5 21.29L5.21 22L12 19L18.79 22L19.5 21.29L12 3Z"
-        fill="black"
-        stroke="white"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
+      {/* Main Cursor */}
+      <motion.div
+        style={{
+          position: "fixed",
+          left: cursorX,
+          top: cursorY,
+          translateX: "-50%",
+          translateY: "-50%",
+          rotate: rotateOnMove ? rotation : 0,
+          scale: scale,
+          zIndex: 100,
+          pointerEvents: "none",
+          willChange: "transform",
+          filter: glowEffect ? "drop-shadow(0 0 10px " + activeColor + "A0)" : "none",
+        }}
+        initial={{ scale: 0, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0, opacity: 0 }}
+        transition={{
+          type: "spring",
+          stiffness: 400,
+          damping: 30,
+        }}
+        className={cn("select-none pointer-events-none", className)}
+      >
+        {cursorElement}
+      </motion.div>
+    </div>
   );
 }
+
+export default SmoothCursor;

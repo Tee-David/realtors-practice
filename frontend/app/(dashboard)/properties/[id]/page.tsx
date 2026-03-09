@@ -11,7 +11,7 @@ import {
   ExternalLink, Phone, Mail, Building, Building2, User, Clock, Tag, ChevronDown,
   ChevronUp, ChevronRight, Layers, TrendingUp, Share2, Heart, Copy, Check,
   Warehouse, Car, Zap, Wifi, Droplets, Trees, Fence, ShieldCheck, Eye,
-  MessageCircle, Bookmark, SquareStack, Ruler, Home, ArrowRightLeft,
+  MessageCircle, Bookmark, SquareStack, Ruler, Home, ArrowRightLeft, Printer,
 } from "lucide-react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
@@ -589,10 +589,34 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
             <MapPin size={13} style={{ color: "var(--muted-foreground)" }} />
             <span className="text-sm" style={{ color: "var(--muted-foreground)" }}>{location || "Location not specified"}</span>
           </div>
+
+          {/* Mobile Price Display */}
+          <div className="mt-4 lg:hidden rounded-xl p-5" style={{ backgroundColor: "var(--card)" }}>
+            <p className="text-xs font-medium mb-1" style={{ color: "var(--muted-foreground)" }}>
+              {property.listingType === "RENT" ? "Monthly Rent" : "Total Price"}
+            </p>
+            <p className="text-2xl font-display font-bold" style={{ color: "var(--accent)" }}>
+              {formatPrice(property.price)}
+            </p>
+            {property.rentFrequency && (
+              <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                per {property.rentFrequency}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Action buttons */}
         <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => window.print()}
+            className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-medium transition-colors"
+            style={{ backgroundColor: "var(--secondary)", color: "var(--foreground)" }}
+            title="Print as PDF"
+          >
+            <Printer size={16} />
+            <span className="hidden sm:inline">Print</span>
+          </button>
           <button
             onClick={handleCopyLink}
             className="p-2.5 rounded-xl transition-colors"
@@ -630,7 +654,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
 
           {/* Quick Stats Row */}
           <div
-            className="rounded-xl grid grid-cols-2 sm:grid-cols-4 divide-x"
+            className="rounded-xl grid grid-cols-2 sm:grid-cols-4"
             style={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }}
           >
             {property.bedrooms != null && (
@@ -773,7 +797,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
         <div className="space-y-5">
 
           {/* Price Card */}
-          <div className="rounded-xl p-5 sticky top-[72px]" style={{ backgroundColor: "var(--card)" }}>
+          <div className="hidden lg:block rounded-xl p-5 sticky top-[72px]" style={{ backgroundColor: "var(--card)" }}>
             <p className="text-xs font-medium mb-1" style={{ color: "var(--muted-foreground)" }}>
               {property.listingType === "RENT" ? "Monthly Rent" : "Total Price"}
             </p>

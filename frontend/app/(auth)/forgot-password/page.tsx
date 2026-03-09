@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, Loader2, CheckCircle2, Mail } from "lucide-react";
+import { ThemeSwitch } from "@/components/ui/theme-switch";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -34,12 +35,29 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="w-full max-w-[400px]">
-      {/* Mobile logo */}
-      <div className="flex items-center gap-3 mb-10 lg:hidden">
-        <Image src="/logo-icon-blue.png" alt="RP" width={36} height={36} />
-        <span className="font-display font-bold text-lg" style={{ color: "var(--foreground)" }}>
-          Realtors&apos; Practice
-        </span>
+      {/* Mobile logo & Theme switch — only visible on small screens */}
+      <div className="flex items-center justify-between mb-10 lg:hidden w-full -ml-4">
+        <div className="relative">
+          <Image 
+            src="/hlogo-blue.png" 
+            alt="Realtors' Practice" 
+            width={180} 
+            height={45} 
+            style={{ objectFit: "contain" }}
+            className="dark:hidden"
+          />
+          <Image 
+            src="/hlogo-white.png" 
+            alt="Realtors' Practice" 
+            width={180} 
+            height={45} 
+            style={{ objectFit: "contain" }}
+            className="hidden dark:block"
+          />
+        </div>
+        <div className="scale-90 origin-right translate-x-2">
+          <ThemeSwitch />
+        </div>
       </div>
 
       {/* Back link */}

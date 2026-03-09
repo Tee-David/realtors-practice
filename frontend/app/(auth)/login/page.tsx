@@ -8,12 +8,14 @@ import Link from "next/link";
 import { Eye, EyeOff, ArrowRight, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { ThemeSwitch } from "@/components/ui/theme-switch";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -129,13 +131,6 @@ export default function LoginPage() {
               >
                 Password
               </label>
-              <Link
-                href="/forgot-password"
-                className="text-xs font-semibold hover:underline"
-                style={{ color: "var(--primary)" }}
-              >
-                Forgot password?
-              </Link>
             </div>
             <div className="relative">
               <input
@@ -162,6 +157,31 @@ export default function LoginPage() {
                 {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
+          </div>
+
+          {/* Remember Me and Forgot Password */}
+          <div className="flex items-center justify-between mt-4">
+            <div className="flex items-center space-x-2">
+              <Checkbox 
+                id="rememberMe" 
+                checked={rememberMe}
+                onCheckedChange={(checked) => setRememberMe(checked as boolean)}
+              />
+              <label
+                htmlFor="rememberMe"
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                style={{ color: "var(--foreground)" }}
+              >
+                Remember me
+              </label>
+            </div>
+            <Link
+              href="/forgot-password"
+              className="text-xs font-semibold hover:underline"
+              style={{ color: "var(--primary)" }}
+            >
+              Forgot password?
+            </Link>
           </div>
 
           {/* Submit */}
@@ -225,22 +245,6 @@ export default function LoginPage() {
           </div>
 
         </form>
-      </div>
-      
-      {/* Bottom Attribution Footer */}
-      <div className="mt-auto lg:mt-16 pt-8 pb-4 flex flex-col items-center justify-center text-xs" style={{ color: "var(--muted-foreground)" }}>
-        <p>
-          &copy; {new Date().getFullYear()} Realtor&apos;s Practice |{" "}
-          <a 
-            href="https://wedigcreativity.com.ng" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="font-medium hover:underline"
-            style={{ color: "var(--primary)" }}
-          >
-            WDC Solutions
-          </a>
-        </p>
       </div>
     </div>
   );

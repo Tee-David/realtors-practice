@@ -2,116 +2,174 @@
 
 import dynamic from "next/dynamic";
 import Image from "next/image";
+import { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { ThemeSwitch } from "@/components/ui/theme-switch";
+import GlassCard from "@/components/ui/glass-card";
+import TextType from "@/components/ui/TextType";
 
-const Globe = dynamic(() => import("@/components/ui/globe"), { ssr: false });
+import "@fontsource/space-grotesk";
+
+const Squares = dynamic(() => import("@/components/ui/squares"), { ssr: false });
+
+const REAL_ESTATE_QUOTES = [
+  { text: "Landlords grow rich in their sleep.", author: "John Stuart Mill" },
+  { text: "Buy land, they're not making it anymore.", author: "Mark Twain" },
+  { text: "Real estate cannot be lost or stolen, nor can it be carried away.", author: "Franklin D. Roosevelt" },
+  { text: "The best investment on earth is earth.", author: "Louis Glickman" },
+  { text: "Ninety percent of all millionaires become so through owning real estate.", author: "Andrew Carnegie" }
+];
 
 interface AuthVisualPanelProps {
-  headline?: string;
-  subtext?: string;
   backgroundContent?: React.ReactNode;
 }
 
 export function AuthVisualPanel({
-  headline = "Hello Realtors'\u00A0Practice! 👋",
-  subtext = "Skip repetitive and manual real estate tasks. Get highly productive through automation and save tons of time!",
   backgroundContent,
 }: AuthVisualPanelProps) {
+  const [quotes, setQuotes] = useState<{text: string; author: string}[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  
+  useEffect(() => {
+    // Select 5 random quotes on mount
+    const shuffled = [...REAL_ESTATE_QUOTES].sort(() => 0.5 - Math.random());
+    setQuotes(shuffled.slice(0, 5));
+  }, []);
+
+  useEffect(() => {
+    if (quotes.length === 0) return;
+    const timer = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % quotes.length);
+    }, 7000);
+    return () => clearInterval(timer);
+  }, [quotes.length, currentIndex]); // Reset interval when currentIndex changes
+
+  const swipeConfidenceThreshold = 10000;
+  const swipePower = (offset: number, velocity: number) => {
+    return Math.abs(offset) * velocity;
+  };
+
+  const paginate = (newDirection: number) => {
+    if (quotes.length === 0) return;
+    let nextIndex = currentIndex + newDirection;
+    if (nextIndex < 0) nextIndex = quotes.length - 1;
+    else if (nextIndex >= quotes.length) nextIndex = 0;
+    setCurrentIndex(nextIndex);
+  };
+
   return (
-    <div
-      className="relative hidden lg:flex flex-col justify-between overflow-hidden rounded-3xl m-4"
-      style={{
-        background:
-          "linear-gradient(160deg, #020024 0%, #06065a 35%, #0001b0 70%, #0001fc 100%)",
-      }}
-    >
-      {/* Abstract line decoration */}
-      <div className="absolute inset-0 z-0 overflow-hidden opacity-[0.07]">
-        {Array.from({ length: 8 }).map((_, i) => (
-          <div
-            key={i}
-            className="absolute rounded-full"
-            style={{
-              width: `${300 + i * 120}px`,
-              height: `${300 + i * 120}px`,
-              border: "1px solid rgba(255,255,255,0.5)",
-              top: "50%",
-              left: "-10%",
-              transform: `translateY(-40%) rotate(${i * 8}deg)`,
-            }}
+    <div className="relative hidden lg:flex overflow-hidden rounded-3xl m-4 bg-zinc-950 flex-col flex-1 h-[calc(100vh-32px)]">
+      
+      {/* Background Layer */}
+      <div className="absolute inset-0 z-0 overflow-hidden">
+        {backgroundContent ? (
+          backgroundContent
+        ) : (
+          <Squares
+            speed={0.5}
+            squareSize={80}
+            direction="diagonal"
+            borderColor="#222"
+            hoverFillColor="#000"
           />
-        ))}
+        )}
       </div>
 
-      {/* Custom background content */}
-      {backgroundContent && (
-        <div className="absolute inset-0 z-0">{backgroundContent}</div>
-      )}
+      {/* Subtle overlay gradients for legibility */}
+      <div className="absolute inset-0 z-0 bg-black/40 pointer-events-none" />
 
-      {/* Top: Logo + Headline */}
-      <div className="relative z-10 p-10 pt-12">
-        <div className="flex items-center gap-3 mb-14">
-          <Image
-            src="/hlogo-white.png"
-            alt="Realtors' Practice"
-            width={200}
-            height={50}
-            style={{ objectFit: "contain" }}
-            priority
-          />
-        </div>
-
-        <h2
-          className="font-display text-[2.75rem] font-bold leading-[1.15] mb-5 mt-6"
-          style={{ color: "white" }}
-        >
-          {headline}
-        </h2>
-        <p
-          className="text-base leading-relaxed max-w-md"
-          style={{ color: "rgba(255,255,255,0.55)" }}
-        >
-          {subtext}
-        </p>
-      </div>
-
-      {/* Bottom: Massive globe — only top portion visible */}
-      {!backgroundContent && (
-        <div className="relative z-10 flex items-end justify-center overflow-hidden" style={{ height: "340px" }}>
-          <div className="translate-y-[55%]">
-            <Globe
-              baseColor={[0.15, 0.15, 0.4]}
-              markerColor={[0.1, 0.1, 1]}
-              glowColor={[0.08, 0.08, 0.5]}
-              markers={[
-                { location: [6.5244, 3.3792], size: 0.08 },
-                { location: [9.0579, 7.4951], size: 0.06 },
-                { location: [7.3776, 3.947], size: 0.04 },
-                { location: [6.335, 5.6037], size: 0.04 },
-                { location: [10.5105, 7.4165], size: 0.04 },
-                { location: [4.8156, 7.0498], size: 0.04 },
-              ]}
-              className="aspect-square w-full max-w-[600px]"
+      {/* Top Bar: Logo, Theme Switch, and Title */}
+      <div className="absolute top-10 left-10 right-10 z-10 flex flex-col pointer-events-auto">
+        <div className="flex items-center justify-between">
+          <div className="-ml-3 mt-[-4px]"> {/* Slight shift left and up if needed */}
+            <Image
+              src="/hlogo-white.png"
+              alt="Realtors' Practice Logo"
+              width={180}
+              height={45}
+              style={{ objectFit: "contain" }}
+              priority
             />
           </div>
-          {/* Fade-out gradient at bottom */}
-          <div
-            className="absolute bottom-0 left-0 right-0 h-20 pointer-events-none"
-            style={{
-              background:
-                "linear-gradient(to top, rgba(2,0,36,0.95), transparent)",
-            }}
-          />
+          <div className="scale-90 origin-right flex-shrink-0">
+            <ThemeSwitch />
+          </div>
         </div>
-      )}
+        
+        <h2 className="font-display text-5xl lg:text-6xl xl:text-7xl tracking-tight font-extrabold text-white mt-12 drop-shadow-lg leading-tight max-w-[90%] text-left">
+          Nigerian Property Intelligence Platform.
+        </h2>
+      </div>
 
-      {/* Footer */}
-      <div className="relative z-10 px-10 pb-6">
-        <p
-          className="text-xs"
-          style={{ color: "rgba(255,255,255,0.25)" }}
-        >
-          &copy; {new Date().getFullYear()} Realtors&apos; Practice. All rights reserved.
-        </p>
+      {/* Bottom Area: Slider, Attribution */}
+      <div className="absolute bottom-10 left-10 right-10 z-10 flex flex-col pointer-events-none gap-8">
+        
+        {/* Draggable Quotes Slider */}
+        <GlassCard className="w-full relative pointer-events-auto overflow-hidden group items-start text-left">
+          <div className="min-h-[160px] flex flex-col justify-center w-full items-start">
+            <AnimatePresence mode="wait">
+              {quotes.length > 0 && (
+                <motion.div
+                  key={currentIndex}
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  transition={{ duration: 0.3 }}
+                  style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+                  className="w-full pb-2 text-left cursor-grab active:cursor-grabbing"
+                  drag="x"
+                  dragConstraints={{ left: 0, right: 0 }}
+                  dragElastic={1}
+                  onDragEnd={(e, { offset, velocity }) => {
+                    const swipe = swipePower(offset.x, velocity.x);
+                    if (swipe < -swipeConfidenceThreshold) {
+                      paginate(1);
+                    } else if (swipe > swipeConfidenceThreshold) {
+                      paginate(-1);
+                    }
+                  }}
+                >
+                  <TextType
+                    text={`"${quotes[currentIndex].text}"`}
+                    typingSpeed={35}
+                    showCursor={false}
+                    loop={false}
+                    className="text-3xl xl:text-4xl text-white leading-tight font-medium"
+                  />
+                  <p className="text-zinc-400 font-medium mt-4 text-sm tracking-wide uppercase">— {quotes[currentIndex].author}</p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Dot Indicators */}
+          <div className="flex items-center justify-start gap-2 mt-6 h-4 pointer-events-auto z-20 w-full">
+            {quotes.map((_, idx) => (
+              <button
+                key={idx}
+                onClick={() => setCurrentIndex(idx)}
+                style={{ zIndex: 30 }}
+                className={`h-1.5 rounded-full transition-all ${idx === currentIndex ? 'w-8 bg-zinc-200' : 'w-2 bg-zinc-500/50 hover:bg-zinc-400'}`}
+                aria-label={`Go to slide ${idx + 1}`}
+              />
+            ))}
+          </div>
+        </GlassCard>
+
+        {/* Attribution */}
+        <div className="pointer-events-auto">
+          <p className="text-xs font-medium text-zinc-500">
+            &copy; {new Date().getFullYear()} Realtor&apos;s Practice | powered by{" "}
+            <a 
+              href="https://wedigcreativity.com.ng" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="hover:text-zinc-300 transition-colors font-semibold"
+            >
+              WDC Solutions
+            </a>
+          </p>
+        </div>
       </div>
     </div>
   );

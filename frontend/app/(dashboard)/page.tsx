@@ -482,7 +482,7 @@ function PropertyOverviewTable({
               {["Photo", "Property", "Type", "Price", "Date", "Status"].map((h) => (
                 <th
                   key={h}
-                  className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider"
+                  className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider"
                   style={{ color: "var(--muted-foreground)" }}
                 >
                   {h}
@@ -495,7 +495,7 @@ function PropertyOverviewTable({
               <tr>
                 <td
                   colSpan={6}
-                  className="px-6 py-12 text-center text-sm"
+                  className="px-4 py-12 text-center text-sm"
                   style={{ color: "var(--muted-foreground)" }}
                 >
                   No properties found
@@ -523,7 +523,7 @@ function PropertyOverviewTable({
                     style={{ borderBottom: "1px solid var(--border)" }}
                   >
                     {/* Photo */}
-                    <td className="px-6 py-3">
+                    <td className="px-3 py-3 w-[60px]">
                       <div
                         className="w-10 h-10 rounded-lg overflow-hidden flex items-center justify-center"
                         style={{ backgroundColor: "var(--secondary)" }}
@@ -545,7 +545,7 @@ function PropertyOverviewTable({
                     </td>
 
                     {/* Property name */}
-                    <td className="px-6 py-3 max-w-[200px]">
+                    <td className="px-3 py-3">
                       <p
                         className="font-medium text-sm truncate"
                         style={{ color: "var(--foreground)" }}
@@ -561,7 +561,7 @@ function PropertyOverviewTable({
                     </td>
 
                     {/* Type */}
-                    <td className="px-6 py-3">
+                    <td className="px-3 py-3">
                       <span
                         className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold uppercase"
                         style={{
@@ -580,7 +580,7 @@ function PropertyOverviewTable({
                     </td>
 
                     {/* Price */}
-                    <td className="px-6 py-3">
+                    <td className="px-3 py-3">
                       <span
                         className="font-display font-semibold text-sm"
                         style={{ color: "var(--accent)" }}
@@ -590,7 +590,7 @@ function PropertyOverviewTable({
                     </td>
 
                     {/* Date */}
-                    <td className="px-6 py-3">
+                    <td className="px-3 py-3">
                       <span
                         className="text-xs"
                         style={{ color: "var(--muted-foreground)" }}
@@ -600,7 +600,7 @@ function PropertyOverviewTable({
                     </td>
 
                     {/* Status badge */}
-                    <td className="px-6 py-3">
+                    <td className="px-3 py-3">
                       <span
                         className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold capitalize"
                         style={{
@@ -630,7 +630,7 @@ export default function DashboardPage() {
   const { data: stats, isLoading: statsLoading } = usePropertyStats();
   const { data: recentData, isLoading: recentLoading } = useProperties({
     page: 1,
-    limit: 10,
+    limit: 12,
     sortBy: "createdAt",
     sortOrder: "desc",
   });
@@ -678,7 +678,7 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       {/* Greeter Section */}
-      <div className="flex flex-col gap-1.5 mb-8">
+      <div className="flex flex-col gap-1.5 mb-8 md:mt-8">
         <h1 
           className="font-display text-2xl sm:text-[28px] font-bold tracking-tight min-h-[36px] sm:min-h-[42px]"
           style={{ color: "var(--foreground)" }}
@@ -687,7 +687,7 @@ export default function DashboardPage() {
             text={[`${greeting}, David`]}
             typingSpeed={75}
             pauseDuration={1500}
-            showCursor
+            showCursor={false}
             cursorCharacter="|"
             deletingSpeed={50}
             variableSpeedEnabled={true}
