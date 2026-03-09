@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { io } from "socket.io-client";
-import type { Socket } from "socket.io-client";
+import io, { type Socket } from "socket.io-client";
 
 interface UseSocketOptions {
   namespace?: string;
