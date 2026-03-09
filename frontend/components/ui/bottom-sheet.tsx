@@ -16,6 +16,7 @@ import {
   PanInfo,
   useMotionValue,
   useTransform,
+  useDragControls,
 } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
@@ -203,6 +204,7 @@ const BottomSheetContent = ({
   const { isOpen, onOpenChange, contentProps } = useBottomSheetContext();
   const { height, closeThreshold } = contentProps;
   const controls = useAnimation();
+  const dragControls = useDragControls();
   const y = useMotionValue(0);
   const overlayRef = useRef<HTMLDivElement>(null);
   const [sheetHeight, setSheetHeight] = useState(0);
@@ -263,6 +265,8 @@ const BottomSheetContent = ({
         <BottomSheetOverlay />
         <motion.div
           drag='y'
+          dragControls={dragControls}
+          dragListener={false}
           dragConstraints={{ top: 0, bottom: sheetHeight }}
           dragElastic={0.1}
           dragMomentum={false}
@@ -270,17 +274,19 @@ const BottomSheetContent = ({
           animate={controls}
           initial={{ y: sheetHeight + 100 }}
           className={cn(
-            'absolute bottom-0 left-0 right-0 w-full bg-background border-t border-zinc-200 dark:border-white/10 shadow-2xl rounded-t-3xl overflow-hidden',
+            'absolute bottom-0 left-0 right-0 w-full flex flex-col bg-background border-t border-zinc-200 dark:border-white/10 shadow-2xl rounded-t-3xl overflow-hidden',
             className,
           )}
           style={{ height: sheetHeight, y }}
         >
-          <div className="flex justify-center pt-3 pb-3 shrink-0 cursor-grab active:cursor-grabbing">
+          <div 
+            className="flex justify-center pt-3 pb-3 shrink-0 cursor-grab active:cursor-grabbing w-full touch-none"
+            onPointerDown={(e) => dragControls.start(e)}
+          >
             <div className="w-12 h-1.5 rounded-full bg-muted" />
           </div>
           <div 
-            className="flex-1 overflow-y-auto px-6 pb-12 pt-0 h-full"
-            onPointerDown={(e) => e.stopPropagation()}
+            className="flex-1 overflow-y-auto px-6 pb-12 pt-0 w-full"
           >
             {children}
           </div>
