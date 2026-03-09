@@ -175,7 +175,7 @@ function SidebarContent({
                   const isActive =
                     item.href === "/"
                       ? pathname === "/"
-                      : pathname.startsWith(item.href);
+                      : pathname === item.href || (pathname.startsWith(item.href) && item.href !== "/scraper");
                   const Icon = item.icon;
 
                   return (
