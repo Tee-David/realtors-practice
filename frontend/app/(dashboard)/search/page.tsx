@@ -281,13 +281,13 @@ export default function SearchPage() {
                     <SearchBar onSearch={handleSearch} initialQuery={query} initialCategory={selectedCategory} />
                  </div>
 
-                 {/* Quick search suggestions */}
-                 <div className="flex flex-wrap justify-center gap-3 w-full px-2">
+                  {/* Quick search suggestions */}
+                 <div className="flex flex-wrap justify-center gap-2.5 w-full">
                     {dynamicPills.map((suggestion) => (
                       <button
                         key={suggestion}
                         onClick={() => handleSearch(suggestion)}
-                        className="px-5 py-2.5 rounded-full text-sm font-semibold transition-all hover:-translate-y-0.5 border-2 border-border bg-background hover:bg-primary hover:text-white hover:border-primary text-foreground shadow-sm whitespace-nowrap"
+                        className="px-4 py-2 rounded-full text-[13px] md:text-sm font-semibold transition-all hover:-translate-y-0.5 border-2 border-border bg-background hover:bg-primary hover:text-white hover:border-primary text-foreground shadow-sm whitespace-nowrap"
                       >
                         {suggestion}
                       </button>
