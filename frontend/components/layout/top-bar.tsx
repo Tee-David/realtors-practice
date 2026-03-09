@@ -62,16 +62,16 @@ export function TopBar({ title, notificationCount, onOpenSidebar }: TopBarProps)
             </button>
           )}
           {/* Mobile Logo next to hamburger */}
-          <div className="w-24 h-20 flex items-center justify-center -ml-5 pt-1">
+          <div className="w-20 h-20 flex items-center justify-center -ml-4 pt-1">
              <img 
                src="/logo-icon-blue.png" 
                alt="Logo" 
-               className="w-full h-full object-contain dark:hidden scale-[2.1]" 
+               className="w-full h-full object-contain dark:hidden scale-[1.7]" 
              />
              <img 
                src="/logo-icon-white.png" 
                alt="Logo" 
-               className="w-full h-full object-contain hidden dark:block scale-[2.1]" 
+               className="w-full h-full object-contain hidden dark:block scale-[1.7]" 
              />
           </div>
         </div>
