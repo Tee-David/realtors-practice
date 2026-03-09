@@ -101,20 +101,8 @@ export function JotformAgent() {
     };
   }, []);
 
-  if (!isReady) return null;
-
-  // Set the container right before rendering the script
-  if (typeof window !== "undefined") {
-    window._jfAgentContainerSelector = '.jf-agent-my-container';
-  }
-
-  // The JotForm script often injects fixed elements directly into body despite the selector.
-  // We'll wrap our target in a fixed container that respects the bottom nav.
   return (
-    <div className="fixed md:bottom-6 md:right-6 bottom-24 right-4 z-[60] pointer-events-none [&>*]:pointer-events-auto">
-      <div className="jf-agent-my-container relative w-full h-full">
-         {/* The chatbot will be injected inside this relative container if it respects the selector */}
-      </div>
+    <>
       <style dangerouslySetInnerHTML={{ __html: `
         /* Force any Jotform injected iframe to respect the padding on mobile */
         @media (max-width: 768px) {
@@ -128,6 +116,6 @@ export function JotformAgent() {
         src={`https://cdn.jotfor.ms/agent/embedjs/${agentId}/embed.js`}
         strategy="afterInteractive"
       />
-    </div>
+    </>
   );
 }
