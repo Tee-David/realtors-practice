@@ -857,7 +857,7 @@ export default function DashboardPage() {
 
       {/* Charts row: Category + Status */}
       <motion.div 
-        className="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-5"
+        className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-10"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.8 }}
