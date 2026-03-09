@@ -327,7 +327,7 @@ export function MobileSidebar({
         initial={{ opacity: 0 }}
         animate={{ opacity: open ? 1 : 0 }}
         transition={{ duration: 0.2, ease: "easeOut" }}
-        className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-xs"
+        className="fixed inset-0 z-[999] bg-black/50 backdrop-blur-xs print:hidden"
         onClick={() => onOpenChange(false)}
         style={{ pointerEvents: open ? "auto" : "none" }}
       />
@@ -341,7 +341,7 @@ export function MobileSidebar({
         onDragEnd={handleDragEnd}
         animate={controls}
         initial={{ x: -sheetWidth - 50 }}
-        className="fixed left-0 top-0 z-[60] h-screen w-[240px] border-r shadow-2xl"
+        className="fixed left-0 top-0 z-[999] h-screen w-[240px] border-r shadow-2xl print:hidden"
         style={{
           backgroundColor: "var(--sidebar)",
           borderColor: "var(--sidebar-border)",

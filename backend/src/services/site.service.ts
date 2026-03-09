@@ -48,7 +48,7 @@ export class SiteService {
   }
 
   static async create(data: CreateSiteInput) {
-    return prisma.site.create({ data });
+    return prisma.site.create({ data: data as Prisma.SiteUncheckedCreateInput });
   }
 
   static async update(id: string, data: UpdateSiteInput) {

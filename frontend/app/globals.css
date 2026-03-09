@@ -225,4 +225,431 @@ iframe[src*="jotfor"],
     margin: 0 !important;
     padding: 0 !important;
   }
+  -webkit-backdrop-filter: blur(25px) saturate(180%) contrast(100%) brightness(105%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.4) !important;
+  box-shadow: 
+    0 10px 40px -10px rgba(0, 0, 0, 0.15),
+    inset 0 0 20px rgba(255, 255, 255, 0.3) !important;
+  max-width: 420px !important;
+  border-radius: 20px !important;
+  z-index: 9999 !important;
+  overflow: hidden !important;
 }
+
+.dark .shepherd-element.axiom-liquid-glass-tour {
+  background: rgba(15, 23, 42, 0.88) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 
+    0 10px 40px -10px rgba(0, 0, 0, 0.5),
+    inset 0 0 20px rgba(255, 255, 255, 0.05) !important;
+}
+
+.shepherd-content {
+  padding: 0 !important;
+}
+
+.shepherd-header {
+  background: transparent !important;
+  padding: 1.5rem 1.5rem 0.5rem !important;
+}
+
+.shepherd-title {
+  color: #10b981 !important; /* emerald-500 */
+  font-family: var(--font-red-hat-display) !important;
+  font-size: 1.5rem !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.025em !important;
+  line-height: 1.1 !important;
+}
+
+.shepherd-text {
+  color: #1e293b !important; /* slate-800 */
+  font-family: var(--font-red-hat-display) !important;
+  font-size: 1rem !important;
+  font-weight: 500 !important;
+  line-height: 1.6 !important;
+  padding: 0.5rem 1.75rem 1.5rem !important;
+}
+
+.dark .shepherd-text {
+  color: #f1f5f9 !important; /* slate-100 */
+}
+
+.shepherd-footer {
+  padding: 15px 20px 20px !important;
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.2) !important;
+  background: white !important;
+}
+
+/* Force progress to top */
+/* Tour Progress Styling */
+.tour-progress {
+  width: 100% !important;
+  margin-bottom: 0px !important;
+}
+
+.tour-progress-wrapper {
+  flex-basis: 100% !important;
+  width: 100% !important;
+  margin-bottom: 10px;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Ensure buttons take remaining space */
+.shepherd-footer .shepherd-button {
+  flex: 1 !important;
+  max-width: 48% !important;
+}
+
+/* Fix: Single button should be full width */
+.shepherd-footer .shepherd-button:only-child,
+.shepherd-footer .shepherd-button:only-of-type {
+  max-width: 100% !important;
+  width: 100% !important;
+}
+
+.tour-progress-text {
+  text-align: right;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1e293b !important; /* Force dark color text-slate-800 */
+  margin-top: 6px;
+}
+
+.dark .tour-progress-text {
+  color: #fbbf24 !important; /* Amber for dark mode */
+}
+
+
+.dark .shepherd-footer {
+  background: rgba(15, 23, 42, 0.5) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.05) !important;
+}
+
+.tour-progress-wrapper {
+  flex-basis: 100% !important;
+  width: 100% !important;
+  margin-bottom: 20px;
+}
+
+.tour-progress-bar-container {
+  height: 6px;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.dark .tour-progress-bar-container {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.tour-progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981, #34d399);
+  transition: width 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.tour-progress-text {
+  font-size: 11px;
+  font-weight: 700;
+  color: #10b981;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.shepherd-button {
+    flex: 1 1 0px !important;
+    min-width: 0 !important;
+}
+
+.shepherd-button-primary {
+  background: #10b981 !important;
+  border-radius: 10px !important;
+  padding: 10px 20px !important;
+  font-weight: 600 !important;
+  box-shadow: 0 4px 14px 0 rgba(16, 185, 129, 0.39) !important;
+  transition: all 0.2s ease !important;
+}
+
+.shepherd-button-secondary {
+    background: #f1f5f9 !important;
+    color: #475569 !important;
+    border-radius: 10px !important;
+    padding: 10px 20px !important;
+    font-weight: 600 !important;
+    transition: all 0.2s ease !important;
+}
+
+.dark .shepherd-button-secondary {
+    background: #334155 !important;
+    color: #94a3b8 !important;
+}
+
+/* Lift Sidebar above overlay when tour is active */
+body.shepherd-active #millenium-sidebar {
+  z-index: 10002 !important; /* Above overlay (9999), below modal (100000) */
+  position: relative !important;
+}
+
+/* RESTORE NATIVE SHEPHERD OVERLAY (Spotlight Effect) - increased specificity */
+body .shepherd-modal-overlay-container {
+  opacity: 1 !important;
+  visibility: visible !important;
+  z-index: 9999 !important; /* Standard high z-index */
+  transition: all 0.3s ease !important;
+}
+
+/* Force the SVG PATH to be the dark overlay */
+body .shepherd-modal-overlay-container svg path,
+body .shepherd-modal-overlay-container path {
+  fill: rgba(0, 0, 0, 0.75) !important; 
+  opacity: 1 !important;
+}
+
+/* Dark mode: slightly darker */
+.dark body .shepherd-modal-overlay-container svg path,
+.dark body .shepherd-modal-overlay-container path {
+  fill: rgba(0, 0, 0, 0.9) !important;
+}
+
+/* Hide fallback overlay since we are using native one now */
+body.shepherd-modal-is-visible::after,
+body.shepherd-active::after {
+  display: none !important;
+}
+
+/* Highlighted element styling */
+body .shepherd-enabled.shepherd-target {
+  position: relative !important;
+  z-index: 99999 !important; /* Above overlay */
+  outline: none !important;
+  box-shadow: 
+    0 0 0 2px rgba(16, 185, 129, 0.4),
+    0 0 30px rgba(16, 185, 129, 0.2) !important;
+  border-radius: 12px !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+/* Main shepherd element positioning */
+body .shepherd-element {
+  z-index: 100000 !important; /* Highest priority */
+}
+
+/* Center modal on mobile */
+/* Center modal on mobile - FORCE CENTER */
+@media (max-width: 640px) {
+  .shepherd-element,
+  .shepherd-element.shepherd-centered,
+  .shepherd-element[data-popper-reference-hidden] {
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    top: 50% !important; /* Start at vertical center */
+    margin: 0 !important;
+    max-width: 90vw !important;
+  }
+  
+  /* Adjust vertical alignment if it's too tall or specifically positioned */
+  .shepherd-element {
+      transform: translate(-50%, -50%) !important;
+  }
+}
+
+/* Footer and Buttons - FORCE GRID LAYOUT */
+
+/* -------------------------------------------------------------------------- */
+/* FINAL TOUR BUTTON LAYOUT - FORCE 100% WIDTH */
+/* -------------------------------------------------------------------------- */
+body .shepherd-footer {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 12px !important;
+  width: 100% !important;
+  padding: 1.25rem 1.5rem !important;
+}
+
+/* Ensure ALL buttons fill their grid cells completely */
+body .shepherd-button,
+body button.shepherd-button,
+body button.shepherd-button.shepherd-button-primary,
+body button.shepherd-button.shepherd-button-secondary,
+body button.shepherd-button.shepherd-button-skip {
+  width: 100% !important;
+  min-width: 0 !important;
+  flex: 1 1 auto !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  max-width: none !important;
+}
+
+/* Row 1: First two buttons (Exit, Next/Get Started) */
+body button.shepherd-button:nth-child(1), 
+body button.shepherd-button:nth-child(2) {
+  grid-row: 1 !important;
+  /* They will naturally fill col 1 and col 2 in a 1fr 1fr grid */
+}
+
+/* Row 2: Third button (Skip Tour) - FORCE full width */
+body button.shepherd-button:nth-child(3) {
+  grid-row: 2 !important;
+  grid-column: 1 / -1 !important; /* Full width spanning both cols */
+  margin-top: 4px !important;
+  
+  /* Ensure it looks like a secondary action */
+  background: transparent !important;
+  border: 1px solid #e2e8f0 !important;
+  color: #64748b !important;
+}
+
+body .dark button.shepherd-button:nth-child(3) {
+  border-color: #334155 !important;
+  color: #94a3b8 !important;
+}
+
+/* Progress Bar */
+.tour-progress-wrapper {
+  flex-basis: 100% !important;
+  width: 100% !important;
+  margin-bottom: 20px;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.tour-progress-bar-container {
+  height: 6px;
+  width: 100% !important;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.dark .tour-progress-bar-container {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.tour-progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981, #34d399);
+  transition: width 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.tour-progress-text {
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  color: #10b981 !important;
+  text-align: center !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.04em !important;
+  display: block !important;
+  width: 100% !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* VISUAL POLISH: Animations & Hovers */
+/* -------------------------------------------------------------------------- */
+
+/* Pop Animation for Tour Trigger Buttons */
+@keyframes pop-emphasis {
+  0%, 80%, 100% {
+    transform: scale(1);
+  }
+  90% {
+    transform: scale(1.15); /* Bigger pop */
+  }
+}
+
+.animate-pop-trigger {
+  animation: pop-emphasis 2s infinite ease-in-out;
+}
+
+/* Enhanced Hover States for Tour Buttons */
+/* Primary (Get Started) */
+body button.shepherd-button.shepherd-button-primary:hover {
+  background-color: #059669 !important; /* Darker emerald */
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+}
+
+/* Secondary (Exit) */
+body button.shepherd-button.shepherd-button-secondary:hover {
+  background-color: #e2e8f0 !important; /* Darker slate */
+  color: #1e293b !important;
+}
+
+.dark body button.shepherd-button.shepherd-button-secondary:hover {
+  background-color: #1e293b !important; /* Darker slate for dark mode */
+  color: #e2e8f0 !important;
+}
+
+/* Skip Tour */
+body button.shepherd-button-skip:hover {
+  background-color: rgba(241, 245, 249, 0.5) !important;
+  border-color: #cbd5e1 !important;
+  color: #475569 !important;
+}
+
+.dark body button.shepherd-button-skip:hover {
+  background-color: rgba(30, 41, 59, 0.5) !important;
+  border-color: #475569 !important;
+  color: #cbd5e1 !important;
+}
+
+/* Text and Header */
+.shepherd-text {
+  padding: 1.25rem 1.5rem !important;
+  line-height: 1.6;
+}
+
+.shepherd-header {
+  padding: 1.25rem 1.5rem 0.5rem !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+}
+
+.shepherd-title {
+  font-size: 1.15rem !important;
+  font-weight: 700 !important;
+  flex: 1 !important;
+}
+
+.shepherd-cancel-icon {
+  position: relative !important;
+  font-size: 1.25rem !important;
+  width: 32px !important;
+  height: 32px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 50% !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  color: #94a3b8 !important;
+  opacity: 0.7 !important;
+}
+
+.shepherd-cancel-icon:hover {
+  background-color: rgba(148, 163, 184, 0.1) !important;
+  color: #ef4444 !important;
+  opacity: 1 !important;
+}
+
+@media (max-width: 768px) {
+   .axiom-liquid-glass-tour {
+      width: 92vw !important;
+      max-width: 92vw !important;
+   }
+}
+
+

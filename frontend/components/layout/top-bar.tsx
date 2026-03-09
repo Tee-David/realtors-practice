@@ -41,7 +41,7 @@ function UserProfileDropdown() {
 export function TopBar({ title, notificationCount, onOpenSidebar }: TopBarProps) {
   return (
     <header
-      className="flex fixed top-0 right-0 left-0 md:left-[60px] items-center justify-between px-4 sm:px-6 z-30 border-b"
+      className="flex fixed top-0 right-0 left-0 md:left-[60px] items-center justify-between px-4 sm:px-6 z-[900] border-b print:hidden"
       style={{
         height: 56,
         backgroundColor: "var(--card)",
@@ -62,16 +62,16 @@ export function TopBar({ title, notificationCount, onOpenSidebar }: TopBarProps)
             </button>
           )}
           {/* Mobile Logo next to hamburger */}
-          <div className="w-12 h-12 flex items-center justify-center -ml-1">
+          <div className="w-28 h-20 flex items-center justify-center -ml-5 pt-1">
              <img 
                src="/logo-icon-blue.png" 
                alt="Logo" 
-               className="w-full h-full object-contain dark:hidden scale-[1.3]" 
+               className="w-full h-full object-contain dark:hidden scale-[2.5]" 
              />
              <img 
                src="/logo-icon-white.png" 
                alt="Logo" 
-               className="w-full h-full object-contain hidden dark:block scale-[1.3]" 
+               className="w-full h-full object-contain hidden dark:block scale-[2.5]" 
              />
           </div>
         </div>

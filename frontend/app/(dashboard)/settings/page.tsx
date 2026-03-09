@@ -452,26 +452,26 @@ function PreferencesTab() {
           </div>
 
           {/* Typography */}
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
+          <div className="space-y-3 mt-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div className="space-y-2">
                 <label className="text-sm font-medium" style={{ color: "var(--foreground)" }}>Display Font</label>
                 <Select value={fontDisplay} onValueChange={setFontDisplay}>
-                  <SelectTrigger>
+                  <SelectTrigger className="w-full">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="max-h-[250px] overflow-y-auto">
                     {FONTS.map(f => <SelectItem key={f} value={f} style={{ fontFamily: `"${f}", sans-serif` }}>{f}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 <label className="text-sm font-medium" style={{ color: "var(--foreground)" }}>Body Font</label>
                 <Select value={fontBody} onValueChange={setFontBody}>
-                  <SelectTrigger>
+                  <SelectTrigger className="w-full">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="max-h-[250px] overflow-y-auto">
                     {FONTS.map(f => <SelectItem key={f} value={f} style={{ fontFamily: `"${f}", sans-serif` }}>{f}</SelectItem>)}
                   </SelectContent>
                 </Select>

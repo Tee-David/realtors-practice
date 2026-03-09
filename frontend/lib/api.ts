@@ -8,7 +8,7 @@ if (typeof process !== "undefined" && process.env && process.env.NEXT_PUBLIC_API
 
 const api = axios.create({
   baseURL: API_URL,
-  timeout: 3000,
+  timeout: 15000,
   headers: { "Content-Type": "application/json" },
 });
 

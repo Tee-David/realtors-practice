@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { io, Socket } from "socket.io-client";
+import { io } from "socket.io-client";
+import type { Socket } from "socket.io-client";
 
 interface UseSocketOptions {
   namespace?: string;
@@ -20,6 +21,7 @@ export function useSocket({ namespace = "", autoConnect = true }: UseSocketOptio
 
     const socket = io(`${url}${namespace}`, {
       auth: { token },
+      path: "/ws",
       autoConnect: true,
       reconnection: true,
     });

@@ -477,6 +477,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
 
   const [descExpanded, setDescExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [shareMenuOpen, setShareMenuOpen] = useState(false);
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const carouselRef = useRef<HTMLDivElement>(null);
 
@@ -608,36 +609,84 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
 
         {/* Action buttons */}
         <div className="flex items-center gap-2 shrink-0">
+          {/* Print Button (Hidden in Print) */}
           <button
             onClick={() => window.print()}
-            className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-medium transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-medium transition-colors print:hidden"
             style={{ backgroundColor: "var(--secondary)", color: "var(--foreground)" }}
             title="Print as PDF"
           >
             <Printer size={16} />
             <span className="hidden sm:inline">Print</span>
           </button>
+          
+          {/* Copy Link Button (Hidden in Print) */}
           <button
             onClick={handleCopyLink}
-            className="p-2.5 rounded-xl transition-colors"
+            className="p-2.5 rounded-xl transition-colors print:hidden"
             style={{ backgroundColor: "var(--secondary)" }}
             title="Copy link"
           >
             {copied ? <Check size={16} style={{ color: "var(--success)" }} /> : <Copy size={16} style={{ color: "var(--muted-foreground)" }} />}
           </button>
-          <button
-            className="p-2.5 rounded-xl transition-colors"
-            style={{ backgroundColor: "var(--secondary)" }}
-            title="Share"
-          >
-            <Share2 size={16} style={{ color: "var(--muted-foreground)" }} />
-          </button>
+          
+          {/* Share Menu Pill (Hidden in Print) */}
+          <div className="relative print:hidden">
+            <AnimatePresence>
+              {shareMenuOpen ? (
+                <motion.div
+                  initial={{ opacity: 0, width: 0, x: 20 }}
+                  animate={{ opacity: 1, width: "auto", x: 0 }}
+                  exit={{ opacity: 0, width: 0, x: 20 }}
+                  className="flex items-center gap-2 rounded-full p-1.5 shadow-md bg-[#e3e8ed] dark:bg-zinc-800"
+                  style={{ border: "1px solid var(--border)" }}
+                >
+                  <button
+                    onClick={() => setShareMenuOpen(false)}
+                    className="w-8 h-8 rounded-full bg-[#124266] text-white flex items-center justify-center transition-opacity hover:opacity-90 shrink-0"
+                  >
+                    <User size={14} className="opacity-0 absolute" /> {/* Placeholder for visual weight */}
+                    <div className="absolute w-3 h-px bg-white rotate-45" />
+                    <div className="absolute w-3 h-px bg-white -rotate-45" />
+                  </button>
+                  <div className="flex items-center gap-1.5 px-1 pr-2 overflow-hidden whitespace-nowrap">
+                    <button className="w-8 h-8 rounded-full flex items-center justify-center text-[#124266] dark:text-zinc-300 hover:bg-black/5 dark:hover:bg-white/5 transition-colors shrink-0">
+                      <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"></path></svg>
+                    </button>
+                    <button className="w-8 h-8 rounded-full flex items-center justify-center text-[#124266] dark:text-zinc-300 hover:bg-black/5 dark:hover:bg-white/5 transition-colors shrink-0">
+                      <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
+                    </button>
+                    <button className="w-8 h-8 rounded-full flex items-center justify-center text-[#124266] dark:text-zinc-300 hover:bg-black/5 dark:hover:bg-white/5 transition-colors shrink-0">
+                      <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                    </button>
+                    <button className="w-8 h-8 rounded-full flex items-center justify-center text-[#124266] dark:text-zinc-300 hover:bg-black/5 dark:hover:bg-white/5 transition-colors shrink-0">
+                      <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                    </button>
+                    <button className="w-8 h-8 rounded-full flex items-center justify-center text-[#124266] dark:text-zinc-300 hover:bg-black/5 dark:hover:bg-white/5 transition-colors shrink-0">
+                      <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle cx="4" cy="4" r="2"></circle></svg>
+                    </button>
+                  </div>
+                </motion.div>
+              ) : (
+                <button
+                  onClick={() => setShareMenuOpen(true)}
+                  className="p-2.5 rounded-xl transition-colors"
+                  style={{ backgroundColor: "var(--secondary)" }}
+                  title="Share"
+                >
+                  <Share2 size={16} style={{ color: "var(--muted-foreground)" }} />
+                </button>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* View Source Link (Hidden in Print) */}
           {property.listingUrl && (
             <a
               href={property.listingUrl}
               target="_blank"
               rel="noopener"
-              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-medium transition-colors"
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-medium transition-colors print:hidden"
               style={{ backgroundColor: "var(--secondary)", color: "var(--foreground)" }}
             >
               <ExternalLink size={14} />

@@ -78,31 +78,52 @@ export default function SitesPage() {
         }
       });
     } else {
-      // Bulk Mode
-      const urls = bulkUrls.split(/\n|,/).map(u => u.trim()).filter(Boolean);
-      if (urls.length === 0) {
-        toast.error("Please enter at least one URL.");
+      // Bulk Mode (CSV)
+      const lines = bulkUrls.split(/\n/).map(u => u.trim()).filter(Boolean);
+      if (lines.length === 0) {
+        toast.error("Please enter at least one source (Name, URL).");
         return;
       }
       
-      const toastId = toast.loading(`Adding ${urls.length} sources...`);
+      const toastId = toast.loading(`Parsing ${lines.length} lines...`);
       let successCount = 0;
       
-      for (const url of urls) {
+      for (const line of lines) {
         try {
-          // Attempt to extract a decent name from URL
-          const hostname = new URL(url).hostname.replace('www.', '');
+          // split by comma. If there's 2+ parts, assume part 0 is name, part 1 is url
+          let nameStr = "";
+          let urlStr = "";
+          const parts = line.split(',');
+          if (parts.length >= 2) {
+             nameStr = parts[0].trim();
+             urlStr = parts.slice(1).join(',').trim(); // in case url has commas
+          } else {
+             urlStr = line;
+          }
+
+          if (!urlStr.startsWith('http')) {
+             if (nameStr && nameStr.startsWith('http')) {
+                const temp = urlStr;
+                urlStr = nameStr;
+                nameStr = temp;
+             }
+          }
+
+          if (!urlStr.startsWith('http')) continue;
+
+          const hostname = new URL(urlStr).hostname.replace('www.', '');
           const key = hostname.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
+          
           await addSite.mutateAsync({
-             name: hostname,
-             baseUrl: url,
+             name: nameStr || hostname,
+             baseUrl: urlStr,
              key: key,
              enabled: true,
              selectors: {},
           });
           successCount++;
         } catch (err) {
-          console.error(`Failed to add ${url}`, err);
+          console.error(`Failed to add line ${line}`, err);
         }
       }
       
@@ -112,13 +133,13 @@ export default function SitesPage() {
         setIsAddModalOpen(false);
         setBulkUrls("");
       } else {
-        toast.error("Failed to add sources. Check URLs.");
+        toast.error("Failed to add sources. Check formatting (Name, URL).");
       }
     }
   };
 
   const downloadSampleCsv = () => {
-    const csvContent = "data:text/csv;charset=utf-8,https://example1.com/properties\nhttps://example2.com/real-estate\nhttps://example3.com/homes";
+    const csvContent = "data:text/csv;charset=utf-8,Name,URL\nExample Property,https://example1.com/properties\nReal Estate Site,https://example2.com/real-estate\nHomes Portal,https://example3.com/homes";
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -133,10 +154,13 @@ export default function SitesPage() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (event) => {
-      const text = event.target?.result as string;
+      let text = event.target?.result as string;
       if (text) {
-        // Append to existing text or replace
-        setBulkUrls(prev => prev ? prev + "\n" + text : text);
+        // Strip common headers if present
+        if (text.toLowerCase().startsWith('name,url')) {
+          text = text.substring(text.indexOf('\n') + 1);
+        }
+        setBulkUrls(prev => prev ? prev + "\n" + text.trim() : text.trim());
         toast.success("CSV loaded into text area");
       }
     };

@@ -58,7 +58,7 @@ export function AuthVisualPanel({
   };
 
   return (
-    <div className="relative hidden lg:flex overflow-hidden rounded-3xl m-4 bg-zinc-950 flex-col flex-1 h-[calc(100vh-32px)]">
+    <div className="relative hidden lg:flex overflow-hidden rounded-3xl m-4 bg-zinc-950 flex-col flex-1 min-h-[calc(100vh-32px)]">
       
       {/* Background Layer */}
       <div className="absolute inset-0 z-0 overflow-hidden">
@@ -78,98 +78,106 @@ export function AuthVisualPanel({
       {/* Subtle overlay gradients for legibility */}
       <div className="absolute inset-0 z-0 bg-black/40 pointer-events-none" />
 
-      {/* Top Bar: Logo, Theme Switch, and Title */}
-      <div className="absolute top-10 left-10 right-10 z-10 flex flex-col pointer-events-auto">
-        <div className="flex items-center justify-between">
-          <div className="-ml-3 mt-[-4px]"> {/* Slight shift left and up if needed */}
-            <Image
-              src="/hlogo-white.png"
-              alt="Realtors' Practice Logo"
-              width={180}
-              height={45}
-              style={{ objectFit: "contain" }}
-              priority
-            />
-          </div>
-          <div className="scale-90 origin-right flex-shrink-0">
-            <ThemeSwitch />
-          </div>
-        </div>
+      {/* Main Content Flow Container (to handle zoom and prevent overlap) */}
+      <div className="relative z-10 flex flex-col justify-between h-full p-8 lg:p-10 pointer-events-none min-h-full">
         
-        <h2 className="font-display text-5xl lg:text-6xl xl:text-7xl tracking-tight font-extrabold text-white mt-12 drop-shadow-lg leading-tight max-w-[90%] text-left">
-          Nigerian Property Intelligence Platform.
-        </h2>
-      </div>
-
-      {/* Bottom Area: Slider, Attribution */}
-      <div className="absolute bottom-10 left-10 right-10 z-10 flex flex-col pointer-events-none gap-8">
-        
-        {/* Draggable Quotes Slider */}
-        <GlassCard className="w-full relative pointer-events-auto overflow-hidden group items-start text-left">
-          <div className="min-h-[160px] flex flex-col justify-center w-full items-start">
-            <AnimatePresence mode="wait">
-              {quotes.length > 0 && (
-                <motion.div
-                  key={currentIndex}
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
-                  transition={{ duration: 0.3 }}
-                  style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-                  className="w-full pb-2 text-left cursor-grab active:cursor-grabbing"
-                  drag="x"
-                  dragConstraints={{ left: 0, right: 0 }}
-                  dragElastic={1}
-                  onDragEnd={(e, { offset, velocity }) => {
-                    const swipe = swipePower(offset.x, velocity.x);
-                    if (swipe < -swipeConfidenceThreshold) {
-                      paginate(1);
-                    } else if (swipe > swipeConfidenceThreshold) {
-                      paginate(-1);
-                    }
-                  }}
-                >
-                  <TextType
-                    text={`"${quotes[currentIndex].text}"`}
-                    typingSpeed={35}
-                    showCursor={false}
-                    loop={false}
-                    className="text-3xl xl:text-4xl text-white leading-tight font-medium"
-                  />
-                  <p className="text-zinc-400 font-medium mt-4 text-sm tracking-wide uppercase">— {quotes[currentIndex].author}</p>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          {/* Dot Indicators */}
-          <div className="flex items-center justify-start gap-2 mt-6 h-4 pointer-events-auto z-20 w-full">
-            {quotes.map((_, idx) => (
-              <button
-                key={idx}
-                onClick={() => setCurrentIndex(idx)}
-                style={{ zIndex: 30 }}
-                className={`h-1.5 rounded-full transition-all ${idx === currentIndex ? 'w-8 bg-zinc-200' : 'w-2 bg-zinc-500/50 hover:bg-zinc-400'}`}
-                aria-label={`Go to slide ${idx + 1}`}
+        {/* Top Bar: Logo, Theme Switch, and Title */}
+        <div className="flex flex-col pointer-events-auto">
+          <div className="flex items-center justify-between">
+            <div className="-ml-3 mt-[-4px]"> {/* Slight shift left and up if needed */}
+              <Image
+                src="/hlogo-white.png"
+                alt="Realtors' Practice Logo"
+                width={180}
+                height={45}
+                style={{ objectFit: "contain" }}
+                priority
               />
-            ))}
+            </div>
+            <div className="scale-90 origin-right flex-shrink-0">
+              <ThemeSwitch />
+            </div>
           </div>
-        </GlassCard>
-
-        {/* Attribution */}
-        <div className="pointer-events-auto">
-          <p className="text-xs font-medium text-zinc-500">
-            &copy; {new Date().getFullYear()} Realtor&apos;s Practice | powered by{" "}
-            <a 
-              href="https://wedigcreativity.com.ng" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="hover:text-zinc-300 transition-colors font-semibold"
-            >
-              WDC Solutions
-            </a>
-          </p>
+          
+          <h2 className="font-display text-4xl lg:text-5xl xl:text-6xl tracking-tight font-extrabold text-white mt-8 drop-shadow-lg leading-tight max-w-[95%] text-left">
+            Nigerian Property Intelligence Platform.
+          </h2>
         </div>
+
+        {/* Flexible spacer in middle */}
+        <div className="flex-1 min-h-[40px]"></div>
+
+        {/* Bottom Area: Slider, Attribution */}
+        <div className="flex flex-col pointer-events-none gap-6 mt-8">
+          
+          {/* Draggable Quotes Slider */}
+          <GlassCard className="w-full relative pointer-events-auto overflow-hidden group items-start text-left shrink-0">
+            <div className="min-h-[160px] flex flex-col justify-center w-full items-start">
+              <AnimatePresence mode="wait">
+                {quotes.length > 0 && (
+                  <motion.div
+                    key={currentIndex}
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    transition={{ duration: 0.3 }}
+                    style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+                    className="w-full pb-2 text-left cursor-grab active:cursor-grabbing"
+                    drag="x"
+                    dragConstraints={{ left: 0, right: 0 }}
+                    dragElastic={1}
+                    onDragEnd={(e, { offset, velocity }) => {
+                      const swipe = swipePower(offset.x, velocity.x);
+                      if (swipe < -swipeConfidenceThreshold) {
+                        paginate(1);
+                      } else if (swipe > swipeConfidenceThreshold) {
+                        paginate(-1);
+                      }
+                    }}
+                  >
+                    <TextType
+                      text={`"${quotes[currentIndex].text}"`}
+                      typingSpeed={35}
+                      showCursor={false}
+                      loop={false}
+                      className="text-3xl xl:text-4xl text-white leading-tight font-medium"
+                    />
+                    <p className="text-zinc-400 font-medium mt-4 text-sm tracking-wide uppercase">— {quotes[currentIndex].author}</p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Dot Indicators */}
+            <div className="flex items-center justify-start gap-2 mt-6 h-4 pointer-events-auto z-20 w-full shrink-0">
+              {quotes.map((_, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setCurrentIndex(idx)}
+                  style={{ zIndex: 30 }}
+                  className={`h-1.5 rounded-full transition-all ${idx === currentIndex ? 'w-8 bg-zinc-200' : 'w-2 bg-zinc-500/50 hover:bg-zinc-400'}`}
+                  aria-label={`Go to slide ${idx + 1}`}
+                />
+              ))}
+            </div>
+          </GlassCard>
+
+          {/* Attribution */}
+          <div className="pointer-events-auto shrink-0 pb-2">
+            <p className="text-xs font-medium text-zinc-500">
+              &copy; {new Date().getFullYear()} Realtor&apos;s Practice | powered by{" "}
+              <a 
+                href="https://wedigcreativity.com.ng" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="hover:text-zinc-300 transition-colors font-semibold"
+              >
+                WDC Solutions
+              </a>
+            </p>
+          </div>
+        </div>
+
       </div>
     </div>
   );

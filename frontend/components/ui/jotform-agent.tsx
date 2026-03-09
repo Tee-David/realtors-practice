@@ -101,6 +101,8 @@ export function JotformAgent() {
     };
   }, []);
 
+  if (!isReady || !isAuthenticated) return null;
+
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: `
