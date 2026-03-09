@@ -405,6 +405,12 @@ body .shepherd-enabled.shepherd-target {
   color: #ef4444 !important;
 }
 
+/* Lift Sidebar above overlay when tour is active */
+body.shepherd-active #app-sidebar {
+  z-index: 10002 !important; /* Above overlay (9999) */
+  position: fixed !important;
+}
+
 @media (max-width: 768px) {
   .shepherd-element.axiom-liquid-glass-tour {
     width: 92vw !important;

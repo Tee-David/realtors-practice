@@ -248,7 +248,8 @@ export function AppSidebar() {
 
   return (
     <aside
-      className="hidden md:flex flex-col h-screen fixed left-0 top-0 z-40 border-r transition-all duration-300"
+      id="app-sidebar"
+      className="hidden md:flex flex-col h-screen fixed left-0 top-0 z-[1001] border-r transition-all duration-300"
       style={{
         width: expanded ? 240 : 60,
         backgroundColor: "var(--sidebar)",
