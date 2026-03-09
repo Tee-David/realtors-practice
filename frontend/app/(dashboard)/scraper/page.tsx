@@ -546,10 +546,8 @@ export default function ScraperControlPage() {
       {/* Scraper Configuration Responsive Sheets */}
       {isMobile ? (
         <BottomSheet open={isConfigOpen} onOpenChange={setIsConfigOpen} height="85vh">
-          <BottomSheetContent className="p-0 bg-transparent border-none">
-             <div className="h-full bg-card rounded-t-3xl overflow-hidden shadow-2xl relative border border-white/10">
+          <BottomSheetContent className="p-0 bg-card border-white/10">
                {configContent}
-             </div>
           </BottomSheetContent>
         </BottomSheet>
       ) : (

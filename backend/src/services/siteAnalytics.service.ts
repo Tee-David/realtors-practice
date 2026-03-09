@@ -1,4 +1,4 @@
-import prisma from "../utils/prisma.util";
+import prisma from "../prismaClient";
 
 export class SiteAnalyticsService {
   /**
@@ -11,13 +11,11 @@ export class SiteAnalyticsService {
   public static async getSiteRankings() {
     // 1. Fetch all active sites
     const sites = await prisma.site.findMany({
-      where: { isActive: true },
+      where: { enabled: true },
       select: {
         id: true,
         name: true,
-        url: true,
-        logoUrl: true,
-        scrapeInterval: true,
+        baseUrl: true,
       },
     });
 
@@ -84,6 +82,6 @@ export class SiteAnalyticsService {
     );
 
     // Sort by descending score
-    return rankings.sort((a, b) => b.score - a.score);
+    return rankings.sort((a: any, b: any) => b.score - a.score);
   }
 }

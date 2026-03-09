@@ -4,7 +4,7 @@ import { sendSuccess, sendError } from "../utils/apiResponse.util";
 import { z } from "zod";
 
 const roleSchema = z.object({
-  role: z.enum(["ADMIN", "PENDING_ADMIN", "EDITOR", "VIEWER", "API_USER"]),
+  role: z.enum(["ADMIN", "EDITOR", "VIEWER", "API_USER"]),
 });
 
 export class UserController {

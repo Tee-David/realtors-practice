@@ -91,7 +91,7 @@ router.post(
           email: body.email,
           firstName: body.firstName,
           lastName: body.lastName,
-          role: finalRole as 'ADMIN' | 'PENDING_ADMIN' | 'EDITOR' | 'VIEWER' | 'API_USER',
+          role: finalRole as 'ADMIN' | 'EDITOR' | 'VIEWER' | 'API_USER',
         },
       });
 

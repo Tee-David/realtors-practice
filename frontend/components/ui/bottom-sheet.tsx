@@ -286,7 +286,7 @@ const BottomSheetContent = ({
             <div className="w-12 h-1.5 rounded-full bg-muted" />
           </div>
           <div 
-            className="flex-1 overflow-y-auto px-6 pb-12 pt-0 w-full"
+            className="flex-1 overflow-y-auto px-6 pb-6 pt-0 w-full"
           >
             {children}
           </div>

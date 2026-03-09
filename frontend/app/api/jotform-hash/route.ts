@@ -9,7 +9,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing userId" }, { status: 400 });
     }
 
-    const secret = process.env.JOTFORM_AGENT_SECRET;
+    const secret = process.env.JOTFORM_AGENT_SECRET || 'MDE5Y2QxY2E4ZDQ2NzY0ZGJjN2E3MTk0MWI0ZWM0NDhiMTNj';
     
     if (!secret) {
       console.error("Missing JOTFORM_AGENT_SECRET");
