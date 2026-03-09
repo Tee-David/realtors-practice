@@ -1097,7 +1097,7 @@ export default function DashboardPage() {
             ))
           ) : (recentProperties || []).length > 0 ? (
             (recentProperties || [])
-              .slice(0, 4)
+              .slice(0, 12)
               .map((property, index) => (
                 <motion.div
                   key={property.id}
