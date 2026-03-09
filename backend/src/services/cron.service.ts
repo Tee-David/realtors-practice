@@ -19,7 +19,6 @@ export class CronService {
         Logger.error(`[CRON] Weekly Meilisearch re-index failed: ${error.message}`);
       }
     }, {
-      scheduled: true,
       timezone: "Africa/Lagos"
     });
   }

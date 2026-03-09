@@ -941,8 +941,8 @@ export default function DashboardPage() {
           ) : (
             <div className="flex items-center gap-8">
               <div className="relative w-36 h-36 shrink-0">
-                <ResponsiveContainer width="100%" height="100%">
-                  <RadialBarChart
+                <RechartsResponsiveContainer width="100%" height="100%">
+                  <RechartsRadialBarChart
                     cx="50%"
                     cy="50%"
                     innerRadius="70%"
@@ -963,13 +963,13 @@ export default function DashboardPage() {
                           ]
                     }
                   >
-                    <RadialBar
+                    <RechartsRadialBar
                       background
                       dataKey="value"
                       cornerRadius={10}
                     />
-                  </RadialBarChart>
-                </ResponsiveContainer>
+                  </RechartsRadialBarChart>
+                </RechartsResponsiveContainer>
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
                   <AnimatedCounter
                     value={total}
