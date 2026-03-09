@@ -7,19 +7,12 @@ import "driver.js/dist/driver.css";
 const TOUR_SEEN_KEY = "rp-tour-complete";
 
 export function TourProvider() {
-  const ran = useRef(false);
+  const hasAutoStarted = useRef(false);
 
   useEffect(() => {
-    if (ran.current) return;
-    ran.current = true;
+    let timeout: NodeJS.Timeout;
 
-    // Don't run if user has already seen the tour
-    if (typeof window !== "undefined" && localStorage.getItem(TOUR_SEEN_KEY)) {
-      return;
-    }
-
-    // Small delay so the DOM is painted
-    const timeout = setTimeout(() => {
+    const startTour = () => {
       const tourDriver = driver({
         showProgress: true,
         animate: true,
@@ -90,9 +83,23 @@ export function TourProvider() {
       });
 
       tourDriver.drive();
-    }, 1500);
+    };
 
-    return () => clearTimeout(timeout);
+    // Listen for manual trigger from TopBar
+    document.addEventListener('start-product-tour', startTour);
+
+    // Auto-start for first-time users
+    if (typeof window !== "undefined" && !localStorage.getItem(TOUR_SEEN_KEY) && !hasAutoStarted.current) {
+      hasAutoStarted.current = true;
+      timeout = setTimeout(() => {
+        startTour();
+      }, 1500);
+    }
+
+    return () => {
+      if (timeout) clearTimeout(timeout);
+      document.removeEventListener('start-product-tour', startTour);
+    };
   }, []);
 
   return null; // Renderless component
