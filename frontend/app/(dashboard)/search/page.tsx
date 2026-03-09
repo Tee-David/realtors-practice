@@ -248,15 +248,15 @@ export default function SearchPage() {
            </>
         )}
 
-        {/* Empty State Overlay */}
+         {/* Empty State Overlay */}
         {!hasSearched && !hasDismissedSplash && (
            <div 
-             className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-background/20 backdrop-blur-sm px-4"
+             className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-background/20 backdrop-blur-sm p-4"
              onClick={(e) => {
                if (e.target === e.currentTarget) setHasDismissedSplash(true);
              }}
            >
-              <div className="bg-background/95 backdrop-blur-md px-6 py-10 sm:px-10 sm:py-12 rounded-[2rem] shadow-2xl border pointer-events-auto max-w-md w-full text-center flex flex-col items-center relative transition-all hover:shadow-primary/5">
+              <div className="bg-background/95 backdrop-blur-md px-6 py-8 sm:px-10 sm:py-12 rounded-[2rem] shadow-2xl border pointer-events-auto max-w-md w-full max-h-full overflow-y-auto scroller text-center flex flex-col items-center relative transition-all hover:shadow-primary/5">
                  
                  <button 
                    onClick={() => setHasDismissedSplash(true)}
