@@ -118,9 +118,9 @@ export function JotformAgent() {
       <style dangerouslySetInnerHTML={{ __html: `
         /* Force any Jotform injected iframe to respect the padding on mobile */
         @media (max-width: 768px) {
-          iframe[src*="agent/embed"], div[id^="Jotform"], div[id^="jotform"] {
-            margin-bottom: 90px !important;
-            margin-right: 10px !important;
+          iframe[src*="agent/embed"], div[id^="Jotform"], div[id^="jotform"], div.ai-agent-chat-avatar-container {
+            margin-bottom: 60px !important;
+            margin-right: 30px !important;
           }
         }
       `}} />
