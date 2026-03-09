@@ -225,21 +225,21 @@
 - [x] Test: Active scrape fires when search yields 0 results
 
 ## Phase 4.5: Intelligence
-- [ ] Backend: Site quality ranking service (auto-score sites by data freshness, completeness, error rate)
-- [ ] Backend: Site ranking recommendations API
-- [ ] Frontend: Site quality dashboard widget
+- [x] Backend: Site quality ranking service (auto-score sites by data freshness, completeness, error rate)
+- [x] Backend: Site ranking recommendations API
+- [x] Frontend: Site quality dashboard widget
 
 ## Phase 5: Maps + Geospatial
-- [ ] Frontend: Map provider abstraction (MapProvider interface)
+- [x] Frontend: Map provider abstraction (MapProvider interface)
 - [x] Frontend: OSM provider (react-leaflet, Nominatim geocoding)
 - [ ] Frontend: Mapbox provider (react-map-gl)
 - [ ] Frontend: Google Maps provider (@react-google-maps/api)
-- [ ] Frontend: Map container component (provider-agnostic wrapper)
+- [x] Frontend: Map container component (provider-agnostic wrapper)
 - [x] Frontend: Property marker component (with popup)
 - [ ] Frontend: Draw-to-search component (polygon area selection)
 - [x] Frontend: Map panel on properties page (split view: cards + map)
-- [ ] Frontend: Map store (Zustand - active provider, viewport)
-- [ ] Frontend: useMapProvider hook
+- [x] Frontend: Map store (Zustand - active provider, viewport)
+- [x] Frontend: useMapProvider hook
 - [ ] Backend: Bounding-box queries for map viewport
 - [ ] Backend: Radius-based amenity detection
 - [ ] Backend: Geocoding service enhancements
@@ -341,8 +341,8 @@
 - **Phase 2.5:** 11 tasks (11 done ✅)
 - **Phase 3:** 40 tasks (19 done, 21 pending — infra/queue/deploy/frontend/tests)
 - **Phase 4:** 21 tasks (19 done, 2 pending — deploy + tests)
-- **Phase 4.5:** 3 tasks (0 done)
-- **Phase 5:** 16 tasks (3 done, 13 pending)
+- **Phase 4.5:** 3 tasks (3 done)
+- **Phase 5:** 16 tasks (7 done, 9 pending)
 - **Phase 6:** 22 tasks (0 done)
 - **Phase 7:** 38 tasks (15 done)
 - **Phase 8:** 15 tasks (0 done)

@@ -154,22 +154,22 @@
 
 /* Font utility classes */
 .font-display {
-  font-family: "Space Grotesk", sans-serif;
+  font-family: var(--font-display);
 }
 
 .font-body {
-  font-family: "Outfit", sans-serif;
+  font-family: var(--font-body);
 }
 
 /* Base styles */
 body {
-  font-family: "Outfit", sans-serif;
+  font-family: var(--font-body);
   background-color: var(--background);
   color: var(--foreground);
 }
 
 h1, h2, h3, h4, h5, h6 {
-  font-family: "Space Grotesk", sans-serif;
+  font-family: var(--font-display);
 }
 
 /* Price styling */

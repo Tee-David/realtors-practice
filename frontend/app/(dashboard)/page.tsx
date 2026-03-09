@@ -29,6 +29,7 @@ import TextType from "@/components/ui/TextType";
 import { SideSheet, SideSheetContent } from "@/components/ui/side-sheet";
 import { PropertyDetailPanel } from "@/components/property/property-detail-panel";
 import type { Property, PropertyCategory, ListingType } from "@/types/property";
+import { SiteQualityWidget } from "@/components/dashboard/site-quality-widget";
 
 // Lazy load heavy charting libraries to reduce initial bundle size
 const RechartsAreaChart = dynamic(() => import("recharts").then((mod) => mod.AreaChart), { ssr: false });
@@ -820,33 +821,37 @@ export default function DashboardPage() {
         <div className="lg:col-span-2">
           <PropertiesStatsChart />
         </div>
-        <div className="grid grid-rows-2 gap-4">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.7 }}
-          >
-            <ValueCard
-              label="Properties for Sale Value"
-              value={saleValue}
-              icon={TrendingUp}
-              iconColor="var(--success)"
-              isLoading={statsLoading || recentLoading}
-            />
-          </motion.div>
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.8 }}
-          >
-            <ValueCard
-              label="Properties for Rent Value"
-              value={rentValue}
-              icon={Home}
-              iconColor="var(--accent)"
-              isLoading={statsLoading || recentLoading}
-            />
-          </motion.div>
+        <div className="flex flex-col gap-4 h-full">
+          <SiteQualityWidget />
+          
+          <div className="grid grid-rows-2 gap-4 h-[240px]">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.7 }}
+            >
+              <ValueCard
+                label="Properties for Sale Value"
+                value={saleValue}
+                icon={TrendingUp}
+                iconColor="var(--success)"
+                isLoading={statsLoading || recentLoading}
+              />
+            </motion.div>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.8 }}
+            >
+              <ValueCard
+                label="Properties for Rent Value"
+                value={rentValue}
+                icon={Home}
+                iconColor="var(--accent)"
+                isLoading={statsLoading || recentLoading}
+              />
+            </motion.div>
+          </div>
         </div>
       </motion.div>
 

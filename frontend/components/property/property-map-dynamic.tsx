@@ -10,15 +10,18 @@ interface Props {
 }
 
 const PropertyMap = dynamic<Props>(
-  () => import("./property-map-mapcn").then((mod) => ({ default: mod.PropertyMapCN })),
+  () => import("../map/property-map").then((mod) => ({ default: mod.PropertyMap })),
   {
     ssr: false,
     loading: () => (
       <div
-        className="w-full h-full rounded-xl flex items-center justify-center"
-        style={{ backgroundColor: "var(--secondary)" }}
+        className="w-full h-full rounded-xl flex items-center justify-center p-6 border"
+        style={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }}
       >
-        <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--primary)", borderTopColor: "transparent" }} />
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--primary)", borderTopColor: "transparent" }} />
+          <p className="text-xs text-muted-foreground animate-pulse font-medium">Initializing Map Engine...</p>
+        </div>
       </div>
     ),
   }

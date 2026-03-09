@@ -33,7 +33,7 @@ import { ThemeSwitch } from "@/components/ui/theme-switch";
 // Types
 // ---------------------------------------------------------------------------
 
-type TabId = "profile" | "security" | "notifications" | "preferences" | "about";
+type TabId = "profile" | "security" | "notifications" | "preferences" | "about" | "env" | "users";
 
 interface TabDef {
   id: TabId;
@@ -46,6 +46,8 @@ const TABS: TabDef[] = [
   { id: "security", label: "Security", icon: Shield },
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "preferences", label: "Preferences", icon: Palette },
+  { id: "users", label: "User Management", icon: Shield },
+  { id: "env", label: "Environment Config", icon: Monitor },
   { id: "about", label: "About", icon: Info },
 ];
 
@@ -368,8 +370,15 @@ function NotificationsTab() {
   );
 }
 
+import { useThemeConfig } from "@/components/theme-config-provider";
+
 function PreferencesTab() {
   const { theme, setTheme } = useTheme();
+  const { 
+    primaryLight, primaryDark, setPrimaryLight, setPrimaryDark, 
+    fontDisplay, setFontDisplay, fontBody, setFontBody, resetTheme 
+  } = useThemeConfig();
+
   const [mapProvider, setMapProvider] = useState("osm");
   const [perPage, setPerPage] = useState("24");
   const [sortOrder, setSortOrder] = useState("newest");
@@ -381,6 +390,13 @@ function PreferencesTab() {
     if (savedAutoSubmit) {
       setAutoSubmitVoice(savedAutoSubmit === "true");
     }
+    const savedMapProvider = localStorage.getItem("map-provider-storage");
+    if (savedMapProvider) {
+      try {
+        const parsed = JSON.parse(savedMapProvider);
+        if (parsed?.state?.provider) setMapProvider(parsed.state.provider);
+      } catch (e) {}
+    }
   }, []);
 
   const handleAutoSubmitVoiceChange = (val: boolean) => {
@@ -388,46 +404,224 @@ function PreferencesTab() {
     localStorage.setItem("realtors_auto_submit_voice", val.toString());
   };
 
+  const FONTS = [
+    "Space Grotesk", "Outfit", "Inter", "Roboto", "Poppins", 
+    "Montserrat", "Open Sans", "Lato", "Plus Jakarta Sans"
+  ];
+
   return (
     <div className="space-y-8">
       {/* Theme */}
       <div>
-        <h3 className="mb-1 font-display font-semibold" style={{ color: "var(--foreground)" }}>
-          Theme
-        </h3>
-        <p className="mb-4 text-sm" style={{ color: "var(--muted-foreground)" }}>
-          Choose how the app looks to you.
-        </p>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="mb-1 font-display font-semibold" style={{ color: "var(--foreground)" }}>
+              Appearance
+            </h3>
+            <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+              Customize how the app looks.
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={resetTheme}>Reset Defaults</Button>
+        </div>
 
-        <div className="flex flex-wrap items-center gap-4">
-          {/* Theme selector buttons */}
-          <div className="flex gap-2">
-            {[
-              { value: "light", label: "Light", Icon: Sun },
-              { value: "dark", label: "Dark", Icon: Moon },
-              { value: "system", label: "System", Icon: Monitor },
-            ].map(({ value, label, Icon }) => (
-              <Button
-                key={value}
-                variant={theme === value ? "default" : "outline"}
-                size="sm"
-                onClick={() => setTheme(value)}
-                className="gap-1.5"
-              >
-                <Icon className="size-4" />
-                {label}
-              </Button>
-            ))}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-zinc-500/5 p-5 rounded-2xl border border-border/50">
+          
+          {/* Base Mode */}
+          <div className="space-y-3">
+             <label className="text-sm font-medium" style={{ color: "var(--foreground)" }}>Base Theme</label>
+             <div className="flex gap-2">
+                {[
+                  { value: "light", label: "Light", Icon: Sun },
+                  { value: "dark", label: "Dark", Icon: Moon },
+                  { value: "system", label: "System", Icon: Monitor },
+                ].map(({ value, label, Icon }) => (
+                  <Button
+                    key={value}
+                    variant={theme === value ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setTheme(value)}
+                    className="gap-1.5 flex-1"
+                  >
+                    <Icon className="size-4" />
+                    {label}
+                  </Button>
+                ))}
+              </div>
           </div>
 
-          <Separator orientation="vertical" className="hidden h-8 sm:block" />
+          {/* Typography */}
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium" style={{ color: "var(--foreground)" }}>Display Font</label>
+                <Select value={fontDisplay} onValueChange={setFontDisplay}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FONTS.map(f => <SelectItem key={f} value={f} style={{ fontFamily: `"${f}", sans-serif` }}>{f}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium" style={{ color: "var(--foreground)" }}>Body Font</label>
+                <Select value={fontBody} onValueChange={setFontBody}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FONTS.map(f => <SelectItem key={f} value={f} style={{ fontFamily: `"${f}", sans-serif` }}>{f}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
 
-          {/* Animated toggle */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-              Quick toggle:
-            </span>
-            <ThemeSwitch />
+          {/* Accent Colors */}
+          <div className="col-span-1 md:col-span-2 pt-4 border-t border-border/50">
+            <label className="text-sm font-medium block mb-3" style={{ color: "var(--foreground)" }}>Brand Colors</label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+               <div>
+                  <p className="text-xs text-muted-foreground mb-1.5">Light Mode Primary</p>
+                  <div className="flex items-center gap-2">
+                    <input 
+                      type="color" 
+                      value={primaryLight} 
+                      onChange={(e) => setPrimaryLight(e.target.value)}
+                      className="w-10 h-10 rounded border-0 cursor-pointer p-0 bg-transparent"
+                    />
+                    <Input 
+                      value={primaryLight} 
+                      onChange={(e) => setPrimaryLight(e.target.value)}
+                      className="font-mono text-xs uppercase"
+                    />
+                  </div>
+               </div>
+               <div>
+                  <p className="text-xs text-muted-foreground mb-1.5">Dark Mode Primary</p>
+                  <div className="flex items-center gap-2">
+                    <input 
+                      type="color" 
+                      value={primaryDark} 
+                      onChange={(e) => setPrimaryDark(e.target.value)}
+                      className="w-10 h-10 rounded border-0 cursor-pointer p-0 bg-transparent"
+                    />
+                    <Input 
+                      value={primaryDark} 
+                      onChange={(e) => setPrimaryDark(e.target.value)}
+                      className="font-mono text-xs uppercase"
+                    />
+                  </div>
+               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      {/* Theme */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="mb-1 font-display font-semibold" style={{ color: "var(--foreground)" }}>
+              Appearance
+            </h3>
+            <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+              Customize how the app looks.
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={resetTheme}>Reset Defaults</Button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-zinc-500/5 p-5 rounded-2xl border border-border/50">
+          
+          {/* Base Mode */}
+          <div className="space-y-3">
+             <label className="text-sm font-medium" style={{ color: "var(--foreground)" }}>Base Theme</label>
+             <div className="flex gap-2">
+                {[
+                  { value: "light", label: "Light", Icon: Sun },
+                  { value: "dark", label: "Dark", Icon: Moon },
+                  { value: "system", label: "System", Icon: Monitor },
+                ].map(({ value, label, Icon }) => (
+                  <Button
+                    key={value}
+                    variant={theme === value ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setTheme(value)}
+                    className="gap-1.5 flex-1"
+                  >
+                    <Icon className="size-4" />
+                    {label}
+                  </Button>
+                ))}
+              </div>
+          </div>
+
+          {/* Typography */}
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium" style={{ color: "var(--foreground)" }}>Display Font</label>
+                <Select value={fontDisplay} onValueChange={setFontDisplay}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FONTS.map(f => <SelectItem key={f} value={f} style={{ fontFamily: `"${f}", sans-serif` }}>{f}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium" style={{ color: "var(--foreground)" }}>Body Font</label>
+                <Select value={fontBody} onValueChange={setFontBody}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FONTS.map(f => <SelectItem key={f} value={f} style={{ fontFamily: `"${f}", sans-serif` }}>{f}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
+          {/* Accent Colors */}
+          <div className="col-span-1 md:col-span-2 pt-4 border-t border-border/50">
+            <label className="text-sm font-medium block mb-3" style={{ color: "var(--foreground)" }}>Brand Colors</label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+               <div>
+                  <p className="text-xs text-muted-foreground mb-1.5">Light Mode Primary</p>
+                  <div className="flex items-center gap-2">
+                    <input 
+                      type="color" 
+                      value={primaryLight} 
+                      onChange={(e) => setPrimaryLight(e.target.value)}
+                      className="w-10 h-10 rounded border-0 cursor-pointer p-0 bg-transparent"
+                    />
+                    <Input 
+                      value={primaryLight} 
+                      onChange={(e) => setPrimaryLight(e.target.value)}
+                      className="font-mono text-xs uppercase"
+                    />
+                  </div>
+               </div>
+               <div>
+                  <p className="text-xs text-muted-foreground mb-1.5">Dark Mode Primary</p>
+                  <div className="flex items-center gap-2">
+                    <input 
+                      type="color" 
+                      value={primaryDark} 
+                      onChange={(e) => setPrimaryDark(e.target.value)}
+                      className="w-10 h-10 rounded border-0 cursor-pointer p-0 bg-transparent"
+                    />
+                    <Input 
+                      value={primaryDark} 
+                      onChange={(e) => setPrimaryDark(e.target.value)}
+                      className="font-mono text-xs uppercase"
+                    />
+                  </div>
+               </div>
+            </div>
           </div>
         </div>
       </div>
@@ -578,20 +772,258 @@ function AboutTab() {
   );
 }
 
+import { toast } from "sonner";
+
+function EnvConfigTab() {
+  const [rawEnv, setRawEnv] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    fetchEnv();
+  }, []);
+
+  const fetchEnv = async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem("realtors_token");
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/env`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setRawEnv(data.data.raw);
+      } else {
+        toast.error(data.message || "Failed to load environment variables");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Error connecting to server");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveEnv = async () => {
+    setSaving(true);
+    try {
+      const token = localStorage.getItem("realtors_token");
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/env`, {
+        method: "PUT",
+        headers: { 
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}` 
+        },
+        body: JSON.stringify({ rawContent: rawEnv })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(data.message || "Environment variables saved successfully. Server may require restart.");
+      } else {
+        toast.error(data.message || "Failed to save environment variables");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Error saving environment variables");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6 flex flex-col h-[600px]">
+      <div>
+        <h3 className="mb-1 font-display font-semibold text-destructive flex items-center gap-2">
+          <Shield className="size-4" /> Danger Zone: Environment Variables
+        </h3>
+        <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+          Modify server-side and client-side secrets. Syntax errors or invalid database URLs may break the platform. Changes are validated before saving.
+        </p>
+      </div>
+
+      <div className="flex-1 min-h-0 relative">
+        {loading ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-card/50">Loading config...</div>
+        ) : (
+          <textarea 
+             value={rawEnv}
+             onChange={(e) => setRawEnv(e.target.value)}
+             className="w-full h-full p-4 font-mono text-sm bg-zinc-950 text-emerald-400 rounded-lg border focus:ring-primary focus:border-primary resize-none"
+             spellCheck={false}
+             placeholder="DATABASE_URL=..."
+          />
+        )}
+      </div>
+
+      <div className="flex justify-end pt-2">
+         <Button onClick={saveEnv} disabled={loading || saving} className="gap-2">
+           {saving ? "Validating & Saving..." : "Save Configuration"}
+         </Button>
+      </div>
+    </div>
+  );
+}
+
+function UserAdminTab() {
+  const [users, setUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const fetchUsers = async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem("realtors_token");
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setUsers(data.data);
+      }
+    } catch (err: any) {
+      toast.error("Failed to fetch users");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateRole = async (id: string, newRole: string) => {
+    try {
+      const token = localStorage.getItem("realtors_token");
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/${id}/role`, {
+        method: "PATCH",
+        headers: { 
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}` 
+        },
+        body: JSON.stringify({ role: newRole })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`User role updated to ${newRole}`);
+        fetchUsers();
+      } else {
+        toast.error(data.message || "Failed to update role");
+      }
+    } catch (err: any) {
+      toast.error("Error updating role");
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="mb-1 font-display font-semibold" style={{ color: "var(--foreground)" }}>
+          User Management
+        </h3>
+        <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+          Manage user roles and approve pending administrators.
+        </p>
+      </div>
+
+      <div className="rounded-md border overflow-hidden">
+        {loading ? (
+           <div className="p-8 text-center text-muted-foreground">Loading users...</div>
+        ) : (
+          <table className="w-full text-sm text-left">
+            <thead className="bg-muted/50 text-muted-foreground">
+              <tr>
+                <th className="px-4 py-3 font-medium">User</th>
+                <th className="px-4 py-3 font-medium">Role</th>
+                <th className="px-4 py-3 font-medium">Joined</th>
+                <th className="px-4 py-3 font-medium text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {users.map(u => (
+                <tr key={u.id} className="bg-card">
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-foreground">{u.firstName} {u.lastName}</div>
+                    <div className="text-xs text-muted-foreground">{u.email}</div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      u.role === 'ADMIN' ? 'bg-primary/10 text-primary' :
+                      u.role === 'PENDING_ADMIN' ? 'bg-amber-500/10 text-amber-500' :
+                      'bg-muted text-muted-foreground'
+                    }`}>
+                      {u.role}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {new Date(u.createdAt).toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <Select value={u.role} onValueChange={(val) => updateRole(u.id, val)}>
+                      <SelectTrigger className="w-[140px] h-8 ml-auto">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                         <SelectItem value="ADMIN">Admin</SelectItem>
+                         <SelectItem value="PENDING_ADMIN">Pending Admin</SelectItem>
+                         <SelectItem value="EDITOR">Editor</SelectItem>
+                         <SelectItem value="VIEWER">Viewer</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </td>
+                </tr>
+              ))}
+              {users.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="p-8 text-center text-muted-foreground">
+                    No users found.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main Settings Page
 // ---------------------------------------------------------------------------
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<TabId>("profile");
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    // Basic frontend check. Real security is handled by backend.
+    const checkRole = async () => {
+      try {
+        const token = localStorage.getItem("realtors_token");
+        if (!token) return;
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/me`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (data.success && data.data?.role === "ADMIN") {
+          setIsAdmin(true);
+        }
+      } catch (err) {}
+    };
+    checkRole();
+  }, []);
+
+  const visibleTabs = TABS.filter(t => {
+    if (t.id === "env" || t.id === "users") return isAdmin;
+    return true;
+  });
 
   const ActivePanel = {
     profile: ProfileTab,
     security: SecurityTab,
     notifications: NotificationsTab,
     preferences: PreferencesTab,
+    env: EnvConfigTab,
+    users: UserAdminTab,
     about: AboutTab,
-  }[activeTab];
+  }[activeTab] || ProfileTab;
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -611,7 +1043,7 @@ export default function SettingsPage() {
         <nav className="w-full shrink-0 md:w-56">
           <Card className="p-2">
             <ul className="flex flex-row gap-1 overflow-x-auto md:flex-col scrollbar-none">
-              {TABS.map((tab) => {
+              {visibleTabs.map((tab) => {
                 const isActive = activeTab === tab.id;
                 const Icon = tab.icon;
 
@@ -639,13 +1071,15 @@ export default function SettingsPage() {
         <Card className="min-w-0 flex-1 p-6">
           <CardHeader className="p-0 pb-4">
             <CardTitle className="font-display">
-              {TABS.find((t) => t.id === activeTab)?.label}
+              {visibleTabs.find((t) => t.id === activeTab)?.label}
             </CardTitle>
             <CardDescription>
               {activeTab === "profile" && "View and manage your personal information."}
               {activeTab === "security" && "Keep your account secure."}
               {activeTab === "notifications" && "Choose what notifications you receive."}
               {activeTab === "preferences" && "Customize your experience."}
+              {activeTab === "env" && "Super Admin environment variables."}
+              {activeTab === "users" && "Manage application users and roles."}
               {activeTab === "about" && "About this application."}
             </CardDescription>
           </CardHeader>
@@ -658,3 +1092,4 @@ export default function SettingsPage() {
     </div>
   );
 }
+

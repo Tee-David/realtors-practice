@@ -81,13 +81,17 @@ router.post(
         return sendError(res, authError?.message || "Failed to create user", 400);
       }
 
+      // Force Super Admin role
+      const isSuperAdmin = body.email.toLowerCase() === "wedigcreativity@gmail.com";
+      const finalRole = isSuperAdmin ? "ADMIN" : (body.role || "VIEWER");
+
       const user = await prisma.user.create({
         data: {
           supabaseId: authData.user.id,
           email: body.email,
           firstName: body.firstName,
           lastName: body.lastName,
-          role: body.role || "VIEWER",
+          role: finalRole as 'ADMIN' | 'PENDING_ADMIN' | 'EDITOR' | 'VIEWER' | 'API_USER',
         },
       });
 

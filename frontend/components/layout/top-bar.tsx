@@ -62,14 +62,14 @@ export function TopBar({ title, notificationCount, onOpenSidebar }: TopBarProps)
             </button>
           )}
           {/* Mobile Logo next to hamburger */}
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-white dark:bg-black/20 p-1 border border-border/50">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center p-1 border border-border/50 bg-primary/5">
              <img 
-               src="/REALTORS' PRACTICE LOGO ICON - BLUE.png" 
+               src="/logo-icon-blue.png" 
                alt="Logo" 
                className="w-full h-full object-contain dark:hidden" 
              />
              <img 
-               src="/REALTORS' PRACTICE LOGO ICON - WHITE.png" 
+               src="/logo-icon-white.png" 
                alt="Logo" 
                className="w-full h-full object-contain hidden dark:block" 
              />
@@ -89,11 +89,20 @@ export function TopBar({ title, notificationCount, onOpenSidebar }: TopBarProps)
         {/* Responsive Tour button (Icon on mobile, text on desktop) */}
         <button
           title="Take Interactive Tour"
-          className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary/10 hover:bg-primary/20 text-primary transition-colors border border-primary/20 backdrop-blur-md"
+          onClick={() => {
+            // Check if OnboardJS is available and start the tour if possible
+            if (typeof window !== 'undefined' && (window as any).startTour) {
+              (window as any).startTour();
+            } else {
+              // Dispatch a custom event that a Tour implementation can listen to
+              document.dispatchEvent(new CustomEvent('start-product-tour'));
+            }
+          }}
+          className="flex items-center justify-center w-9 h-9 sm:w-auto sm:px-3 sm:py-1.5 rounded-xl text-sm font-semibold bg-primary/10 hover:bg-primary/20 text-primary transition-colors border border-primary/20"
         >
           {/* Map icon placeholder for tour */}
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"/><path d="M15 5.764v15"/><path d="M9 3.236v15"/></svg>
-          <span className="hidden sm:inline">Product Tour</span>
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"/><path d="M15 5.764v15"/><path d="M9 3.236v15"/></svg>
+          <span className="hidden sm:inline ml-2">Product Tour</span>
         </button>
 
         {/* Theme toggle */}

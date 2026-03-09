@@ -55,7 +55,7 @@ interface PropertyMapProps {
   onMarkerClick: (id: string) => void;
 }
 
-export function PropertyMap({ properties, hoveredId, onMarkerClick }: PropertyMapProps) {
+export function OSMMap({ properties, hoveredId, onMarkerClick }: PropertyMapProps) {
   const geoProperties = properties.filter((p) => p.latitude && p.longitude);
   const defaultCenter: [number, number] = [6.5244, 3.3792];
 

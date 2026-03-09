@@ -101,7 +101,7 @@ export function JotformAgent() {
     };
   }, []);
 
-  if (!isReady || !isAuthenticated) return null;
+  if (!isReady) return null;
 
   // Set the container right before rendering the script
   if (typeof window !== "undefined") {
