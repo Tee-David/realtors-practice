@@ -76,3 +76,35 @@ export function useAddSite() {
     },
   });
 }
+
+export function useBulkToggleSites() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ ids, enable }: { ids: string[], enable: boolean }) => {
+      // If backend doesn't support bulk yet, we'll Promise.all it.
+      // But ideally we'd hit /sites/bulk/toggle later. For now, Promise.all on existing patch
+      const promises = ids.map(id => api.patch(`/sites/${id}/toggle`));
+      await Promise.all(promises);
+      return { success: true };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sites"] });
+    },
+  });
+}
+
+export function useBulkDeleteSites() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      const promises = ids.map(id => api.delete(`/sites/${id}`));
+      await Promise.all(promises);
+      return { success: true };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sites"] });
+    },
+  });
+}

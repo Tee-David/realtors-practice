@@ -33,9 +33,12 @@ export function Preloader() {
   if (!show) return null;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-primary text-primary-foreground transition-opacity duration-500">
+    <div 
+      className="fixed inset-0 z-[9999] flex items-center justify-center text-primary-foreground transition-opacity duration-500"
+      style={{ backgroundColor: '#1a1a1a' }}
+    >
       <div className="w-full max-w-sm px-8 flex items-center justify-center">
-        <svg viewBox="0 0 320 300" xmlns="http://www.w3.org/2000/svg" className="w-48 md:w-64 h-auto">
+        <svg viewBox="0 0 320 300" xmlns="http://www.w3.org/2000/svg" className="w-48 md:w-64 h-auto text-white">
           <style dangerouslySetInnerHTML={{ __html: `
             .preload-line {
               stroke: currentColor;

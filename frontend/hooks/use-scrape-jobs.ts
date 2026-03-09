@@ -41,11 +41,21 @@ export function useScrapeJob(id: string) {
   });
 }
 
+export interface StartScrapeParams {
+  type: string;
+  siteIds?: string[];
+  searchQuery?: string;
+  maxListingsPerSite?: number;
+  parameters?: Record<string, any>;
+  fullSync?: boolean; // legacy
+  siteId?: string; // legacy
+}
+
 export function useStartScrape() {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async (params: { siteId?: string; fullSync?: boolean }) => {
+    mutationFn: async (params: StartScrapeParams) => {
       const { data } = await api.post("/scrape/start", params);
       return data.data;
     },

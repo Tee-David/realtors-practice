@@ -54,9 +54,15 @@ export default function DashboardLayout({
       <MobileBottomNav 
         onOpenSidebar={() => setMobileSidebarOpen(true)} 
         extraButton={
-          (pathname === "/properties" || pathname === "/search") ? (
+          (pathname === "/properties" || pathname === "/search" || pathname === "/scraper") ? (
             <button
-              onClick={() => document.dispatchEvent(new CustomEvent("toggle-mobile-filters"))}
+              onClick={() => {
+                if (pathname === "/scraper") {
+                  document.dispatchEvent(new CustomEvent("toggle-scraper-config"));
+                } else {
+                  document.dispatchEvent(new CustomEvent("toggle-mobile-filters"));
+                }
+              }}
               className="flex items-center justify-center w-10 h-10 rounded-full transition-all"
               style={{
                 color: "var(--foreground)",

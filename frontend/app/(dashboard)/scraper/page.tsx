@@ -3,19 +3,52 @@
 import { useState, useEffect, useRef } from "react";
 import { useScrapeJobs, useStartScrape, useStopScrape } from "@/hooks/use-scrape-jobs";
 import { useSocket } from "@/hooks/use-socket";
-import { Play, Square, RefreshCcw, Terminal, Activity, CheckCircle2, AlertCircle, Clock, Coffee, Sparkles } from "lucide-react";
+import { Play, Square, RefreshCcw, Terminal, Activity, CheckCircle2, AlertCircle, Clock, Coffee, Sparkles, SlidersHorizontal, Settings2, CalendarDays, X, Globe2, Search } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { useSites } from "@/hooks/use-sites";
+import ModernLoader from "@/components/ui/modern-loader";
+import {
+  SideSheet,
+  SideSheetContent,
+} from "@/components/ui/side-sheet";
+import {
+  BottomSheet,
+  BottomSheetContent,
+} from "@/components/ui/bottom-sheet";
 
 export default function ScraperControlPage() {
   const { data: jobs, isLoading, refetch } = useScrapeJobs();
   const startScrape = useStartScrape();
   const stopScrape = useStopScrape();
+  const { data: allSites } = useSites(100);
   const { socket, isConnected } = useSocket({ namespace: "/scrape" });
   
   const [logs, setLogs] = useState<{ id: number; message: string; timestamp: string; level: string }[]>([]);
   const logsEndRef = useRef<HTMLDivElement>(null);
+  
+  // Scraper Configuration State
+  const [isConfigOpen, setIsConfigOpen] = useState(false);
+  const [scrapeMode, setScrapeMode] = useState<"PASSIVE_BULK" | "ACTIVE_INTENT">("PASSIVE_BULK");
+  const [selectedSiteIds, setSelectedSiteIds] = useState<string[]>([]);
+  const [searchQueryParam, setSearchQueryParam] = useState("");
+  const [maxDepth, setMaxDepth] = useState<number>(100);
+  const [scheduleTime, setScheduleTime] = useState("");
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 1024); // Desktop starts at lg for SideSheet consistency usually, or md (768). Let's use 768.
+    setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", () => setIsMobile(window.innerWidth < 768));
+    return () => window.removeEventListener("resize", () => setIsMobile(window.innerWidth < 768));
+  }, []);
+
+  useEffect(() => {
+    const handleToggle = () => setIsConfigOpen(prev => !prev);
+    document.addEventListener("toggle-scraper-config", handleToggle);
+    return () => document.removeEventListener("toggle-scraper-config", handleToggle);
+  }, []);
 
   // Active job is the most recent one if it's running/pending
   const activeJob = jobs?.find(j => j.status === "RUNNING" || j.status === "PENDING");
@@ -52,13 +85,32 @@ export default function ScraperControlPage() {
     logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [logs]);
 
-  const handleStart = () => {
+  const handleStart = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    
+    if (scrapeMode === "PASSIVE_BULK" && selectedSiteIds.length === 0) {
+       toast.error("Please select at least one source for bulk scraping.");
+       return;
+    }
+    
+    if (scrapeMode === "ACTIVE_INTENT" && !searchQueryParam) {
+       toast.error("A search query is required for active intent scraping.");
+       return;
+    }
+
     startScrape.mutate(
-      { fullSync: true }, 
+      { 
+        type: scrapeMode,
+        siteIds: scrapeMode === "PASSIVE_BULK" ? selectedSiteIds : (allSites?.map(s => s.id) || []),
+        searchQuery: scrapeMode === "ACTIVE_INTENT" ? searchQueryParam : undefined,
+        maxListingsPerSite: maxDepth,
+        parameters: scheduleTime ? { scheduledAt: scheduleTime } : undefined
+      }, 
       {
         onSuccess: () => {
           toast.success("Scraping job started successfully!");
           setLogs([]); // Clear logs on new start
+          setIsConfigOpen(false);
         },
         onError: (err: any) => {
           toast.error(err.response?.data?.message || "Failed to start scraping job");
@@ -77,6 +129,154 @@ export default function ScraperControlPage() {
       }
     });
   };
+
+  const configContent = (
+    <div className="flex flex-col h-full bg-card relative">
+      <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-primary to-accent z-20" />
+      
+      <div className="px-6 pb-6 pt-6 border-b border-border/50 shrink-0 flex justify-between items-start">
+        <div>
+          <h3 className="font-display font-bold text-xl md:text-2xl flex items-center gap-2">
+            <SlidersHorizontal className="w-5 h-5 text-primary" />
+            Engine Configuration
+          </h3>
+          <p className="text-sm text-muted-foreground mt-1">Set parameters before dispatching traversal workers.</p>
+        </div>
+        <button onClick={() => setIsConfigOpen(false)} className="p-2 rounded-full hover:bg-secondary/80 transition-colors text-muted-foreground shrink-0 bg-secondary/30 hidden md:block">
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+
+      <form onSubmit={handleStart} className="flex-1 overflow-y-auto p-6 space-y-8 scroller relative">
+        {/* Mode Selection */}
+        <div className="space-y-3">
+          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+            <Settings2 className="w-4 h-4" /> Traversal Mode
+          </label>
+          <div className="grid grid-cols-1 gap-4">
+            <div 
+              onClick={() => setScrapeMode("PASSIVE_BULK")}
+              className={`cursor-pointer border rounded-xl p-4 transition-all ${scrapeMode === "PASSIVE_BULK" ? 'bg-primary/5 border-primary shadow-[0_0_15px_rgba(var(--primary-rgb),0.2)] ring-1 ring-primary' : 'bg-background hover:border-white/20'}`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                  <span className={`text-sm font-bold ${scrapeMode === 'PASSIVE_BULK' ? 'text-primary' : 'text-foreground'}`}>Passive Bulk</span>
+                  <Globe2 className={`w-4 h-4 ${scrapeMode === 'PASSIVE_BULK' ? 'text-primary' : 'text-muted-foreground'}`} />
+              </div>
+              <p className="text-xs text-muted-foreground">Systematic crawling of selected sources for all property available. Best for general index updates.</p>
+            </div>
+            
+            <div 
+              onClick={() => setScrapeMode("ACTIVE_INTENT")}
+              className={`cursor-pointer border rounded-xl p-4 transition-all ${scrapeMode === "ACTIVE_INTENT" ? 'bg-accent/5 border-accent shadow-[0_0_15px_rgba(var(--accent-rgb),0.2)] ring-1 ring-accent' : 'bg-background hover:border-white/20'}`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                  <span className={`text-sm font-bold ${scrapeMode === 'ACTIVE_INTENT' ? 'text-accent' : 'text-foreground'}`}>Active Intent</span>
+                  <Search className={`w-4 h-4 ${scrapeMode === 'ACTIVE_INTENT' ? 'text-accent' : 'text-muted-foreground'}`} />
+              </div>
+              <p className="text-xs text-muted-foreground">Targeted scraping across all sources based on a specific Natural Language search query.</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Conditional Inputs */}
+        {scrapeMode === "ACTIVE_INTENT" && (
+          <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
+            <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Search Query</label>
+            <input
+              type="text"
+              required
+              value={searchQueryParam}
+              onChange={e => setSearchQueryParam(e.target.value)}
+              placeholder="e.g. '3 bedroom flat in Lekki under 5 million'"
+              className="w-full px-4 py-3 rounded-xl border bg-secondary/30 focus:bg-background transition-colors focus:ring-2 focus:ring-accent outline-none text-sm"
+            />
+          </div>
+        )}
+
+        {scrapeMode === "PASSIVE_BULK" && (
+          <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
+            <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex justify-between">
+              <span>Target Sources</span>
+              <button type="button" onClick={() => setSelectedSiteIds(allSites?.map(s => s.id) || [])} className="text-primary hover:underline">Select All</button>
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-1 scroller">
+                {allSites?.filter(s => s.isActive).map(site => (
+                  <label key={site.id} className="flex items-center gap-2 p-3 rounded-lg border bg-secondary/10 hover:bg-secondary/50 cursor-pointer transition-colors">
+                    <input 
+                      type="checkbox" 
+                      className="rounded border-zinc-600 w-4 h-4 text-primary focus:ring-primary"
+                      checked={selectedSiteIds.includes(site.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) setSelectedSiteIds([...selectedSiteIds, site.id]);
+                        else setSelectedSiteIds(selectedSiteIds.filter(id => id !== site.id));
+                      }}
+                    />
+                    <span className="text-sm font-medium truncate" title={site.name}>{site.name}</span>
+                  </label>
+                ))}
+            </div>
+            {(!allSites || allSites.filter(s => s.isActive).length === 0) && (
+                <p className="text-xs text-red-400 p-3 bg-red-500/10 rounded-lg">No active sources available. Please enable sources in the Data Sources tab.</p>
+            )}
+          </div>
+        )}
+
+        <div className="space-y-6">
+          {/* Max Depth */}
+          <div className="space-y-3">
+            <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Listings Depth per Source</label>
+            <div className="flex items-center gap-4 bg-secondary/20 p-3 rounded-xl border border-white/5">
+              <input
+                type="range"
+                min="10"
+                max="1000"
+                step="10"
+                value={maxDepth}
+                onChange={e => setMaxDepth(parseInt(e.target.value))}
+                className="flex-1 accent-primary"
+              />
+              <div className="w-14 text-center bg-background py-1 rounded-md text-sm font-bold text-foreground border border-border">
+                {maxDepth}
+              </div>
+            </div>
+            <p className="text-[10px] text-muted-foreground pl-1">Maximum listings to parse per target website.</p>
+          </div>
+
+          {/* Scheduling */}
+          <div className="space-y-3">
+            <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+              <CalendarDays className="w-4 h-4" /> Queue Schedule (Optional)
+            </label>
+            <input
+              type="datetime-local"
+              value={scheduleTime}
+              onChange={e => setScheduleTime(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl border bg-secondary/30 focus:bg-background transition-colors focus:ring-2 focus:ring-primary outline-none text-sm dark:[color-scheme:dark]"
+            />
+            <p className="text-[10px] text-muted-foreground pl-1">Leave empty to dispatch immediately.</p>
+          </div>
+        </div>
+      </form>
+      
+      <div className="p-4 md:p-6 border-t border-border/50 shrink-0 bg-secondary/10 flex flex-col md:flex-row gap-3">
+          <button
+            type="button"
+            onClick={() => setIsConfigOpen(false)}
+            className="w-full md:flex-1 px-4 py-3.5 md:py-3 rounded-xl font-semibold border hover:bg-secondary transition-colors text-sm order-2 md:order-1"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleStart}
+            disabled={startScrape.isPending || (scrapeMode === "PASSIVE_BULK" && selectedSiteIds.length === 0)}
+            className={`w-full md:flex-1 px-4 py-3.5 md:py-3 rounded-xl font-bold transition-all shadow-lg hover:-translate-y-0.5 disabled:opacity-50 text-sm flex items-center justify-center gap-2 text-white order-1 md:order-2 ${scrapeMode === 'ACTIVE_INTENT' ? 'bg-accent hover:bg-accent/90' : 'bg-primary hover:bg-primary/90'}`}
+          >
+            {startScrape.isPending ? <RefreshCcw className="w-4 h-4 animate-spin" /> : scheduleTime ? "Schedule" : "Dispatch"}
+          </button>
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto px-4 md:px-8 py-8 animate-in fade-in duration-700">
@@ -107,7 +307,7 @@ export default function ScraperControlPage() {
           </div>
           
           <button
-            onClick={activeJob ? () => handleStop(activeJob.id) : handleStart}
+            onClick={activeJob ? () => handleStop(activeJob.id) : () => setIsConfigOpen(true)}
             disabled={startScrape.isPending || stopScrape.isPending}
             className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all hover:-translate-y-1 shadow-lg ${
               activeJob 
@@ -282,7 +482,28 @@ export default function ScraperControlPage() {
               </div>
             </CardHeader>
             <CardContent className="p-5 flex-1 overflow-y-auto font-mono text-xs sm:text-sm bg-[#0A0A0B] text-zinc-300 relative z-0 scroller">
-              {logs.length === 0 ? (
+              {activeJob && logs.length < 3 && activeJob.status !== "FAILED" ? (
+                <div className="flex-1 flex items-center justify-center p-8 relative h-full">
+                  <div className="absolute inset-0 z-0">
+                    <div className="absolute top-1/4 left-1/4 w-32 h-32 bg-primary/20 rounded-full blur-3xl opacity-50 animate-pulse" />
+                    <div className="absolute bottom-1/4 right-1/4 w-32 h-32 bg-accent/20 rounded-full blur-3xl opacity-50 animate-pulse delay-1000" />
+                  </div>
+                  <div className="relative z-10 scale-90 md:scale-100">
+                    <ModernLoader
+                      words={[
+                        "Waking up the web crawlers...",
+                        "Bribing the proxies with digital coffee ☕",
+                        "Bypassing the anti-bot captchas seamlessly...",
+                        "Negotiating with Cloudflare 🛡️",
+                        "Fetching your shiny new properties...",
+                        "Summoning the JSON spirits 🪄",
+                        "Writing magic into the database...",
+                        "Just a few more milliseconds..."
+                      ]}
+                    />
+                  </div>
+                </div>
+              ) : logs.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-zinc-700">
                   <Terminal className="w-10 h-10 mb-4 opacity-20" />
                   <p className="italic">Awaiting stdout stream...</p>
@@ -321,6 +542,26 @@ export default function ScraperControlPage() {
           </Card>
         </div>
       </div>
+
+      {/* Scraper Configuration Responsive Sheets */}
+      {isMobile ? (
+        <BottomSheet open={isConfigOpen} onOpenChange={setIsConfigOpen} height="85vh">
+          <BottomSheetContent className="p-0 bg-transparent border-none">
+             <div className="h-full bg-card rounded-t-3xl overflow-hidden shadow-2xl relative border border-white/10">
+               {configContent}
+             </div>
+          </BottomSheetContent>
+        </BottomSheet>
+      ) : (
+        <SideSheet open={isConfigOpen} onOpenChange={setIsConfigOpen} side="right" width="480px">
+          <SideSheetContent className="p-0 bg-transparent border-none shadow-2xl">
+            <div className="h-full bg-card shadow-2xl border-l border-white/10 relative">
+              {configContent}
+            </div>
+          </SideSheetContent>
+        </SideSheet>
+      )}
+
     </div>
   );
 }

@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useSites, useToggleSite, useDeleteSite, useAddSite } from "@/hooks/use-sites";
-import { Plus, Search, MoreVertical, Trash2, Power, Globe, RefreshCcw, Database, Code, Zap, X, Copy } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
+import { useSites, useToggleSite, useDeleteSite, useAddSite, useBulkToggleSites, useBulkDeleteSites } from "@/hooks/use-sites";
+import { Plus, Search, MoreVertical, Trash2, Power, Globe, RefreshCcw, Database, Code, Zap, X, Copy, CheckSquare, Square, Layers, ListPlus } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import {
   DropdownMenu,
@@ -17,15 +17,20 @@ import {
 export default function SitesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [selectedSites, setSelectedSites] = useState<string[]>([]);
   
   // Add Form State
   const [newSiteName, setNewSiteName] = useState("");
   const [newSiteUrl, setNewSiteUrl] = useState("");
+  const [bulkUrls, setBulkUrls] = useState("");
+  const [addMode, setAddMode] = useState<"single" | "bulk">("single");
   
   const { data: sites, isLoading } = useSites(50);
   const toggleSite = useToggleSite();
   const deleteSite = useDeleteSite();
   const addSite = useAddSite();
+  const bulkToggle = useBulkToggleSites();
+  const bulkDelete = useBulkDeleteSites();
 
   const filteredSites = sites?.filter(site => 
     site.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -48,29 +53,95 @@ export default function SitesPage() {
     }
   };
 
-  const handleAddSubmit = (e: React.FormEvent) => {
+  const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newSiteName || !newSiteUrl) {
-      toast.error("Name and URL are required.");
-      return;
-    }
-    
-    addSite.mutate({
-      name: newSiteName,
-      url: newSiteUrl,
-      isActive: true,
-      selectors: {},
-    }, {
-      onSuccess: () => {
-        toast.success("New extraction source initialized!");
-        setIsAddModalOpen(false);
-        setNewSiteName("");
-        setNewSiteUrl("");
-      },
-      onError: (err: any) => {
-        toast.error(err.response?.data?.message || "Failed to initialize source.");
+    if (addMode === "single") {
+      if (!newSiteName || !newSiteUrl) {
+        toast.error("Name and URL are required.");
+        return;
       }
+      addSite.mutate({
+        name: newSiteName,
+        url: newSiteUrl,
+        isActive: true,
+        selectors: {},
+      }, {
+        onSuccess: () => {
+          toast.success("New extraction source initialized!");
+          setIsAddModalOpen(false);
+          setNewSiteName("");
+          setNewSiteUrl("");
+        },
+        onError: (err: any) => {
+          toast.error(err.response?.data?.message || "Failed to initialize source.");
+        }
+      });
+    } else {
+      // Bulk Mode
+      const urls = bulkUrls.split(/\n|,/).map(u => u.trim()).filter(Boolean);
+      if (urls.length === 0) {
+        toast.error("Please enter at least one URL.");
+        return;
+      }
+      
+      const toastId = toast.loading(`Adding ${urls.length} sources...`);
+      let successCount = 0;
+      
+      for (const url of urls) {
+        try {
+          // Attempt to extract a decent name from URL
+          const hostname = new URL(url).hostname.replace('www.', '');
+          await addSite.mutateAsync({
+             name: hostname,
+             url: url,
+             isActive: true,
+             selectors: {},
+          });
+          successCount++;
+        } catch (err) {
+          console.error(`Failed to add ${url}`, err);
+        }
+      }
+      
+      toast.dismiss(toastId);
+      if (successCount > 0) {
+        toast.success(`Successfully added ${successCount} sources!`);
+        setIsAddModalOpen(false);
+        setBulkUrls("");
+      } else {
+        toast.error("Failed to add sources. Check URLs.");
+      }
+    }
+  };
+
+  const handleSelectAll = () => {
+    if (selectedSites.length === filteredSites.length) {
+      setSelectedSites([]); // Deselect all
+    } else {
+      setSelectedSites(filteredSites.map(s => s.id));
+    }
+  };
+
+  const handleBulkToggle = (enable: boolean) => {
+    bulkToggle.mutate({ ids: selectedSites, enable }, {
+      onSuccess: () => {
+        toast.success(`${selectedSites.length} sources ${enable ? 'enabled' : 'disabled'}!`);
+        setSelectedSites([]);
+      },
+      onError: () => toast.error("Bulk toggle failed")
     });
+  };
+
+  const handleBulkDelete = () => {
+    if (window.confirm(`Are you sure you want to completely erase ${selectedSites.length} sources?`)) {
+      bulkDelete.mutate(selectedSites, {
+        onSuccess: () => {
+          toast.success(`${selectedSites.length} sources purged!`);
+          setSelectedSites([]);
+        },
+        onError: () => toast.error("Bulk purge failed")
+      });
+    }
   };
 
   return (
@@ -138,9 +209,25 @@ export default function SitesPage() {
           </div>
         ) : (
           filteredSites.map((site) => (
-            <Card key={site.id} className="bg-background/80 backdrop-blur-xl border border-white/10 shadow-lg hover:shadow-xl transition-all duration-300 group overflow-hidden flex flex-col hover:-translate-y-1">
+            <Card 
+              key={site.id} 
+              className={`bg-background/80 backdrop-blur-xl border shadow-lg hover:shadow-xl transition-all duration-300 group overflow-hidden flex flex-col hover:-translate-y-1 relative ${selectedSites.includes(site.id) ? 'border-primary ring-1 ring-primary/50' : 'border-white/10'}`}
+            >
               <CardHeader className="p-5 pb-0 border-b border-white/5 relative z-10 flex-row items-start justify-between space-y-0 shrink-0">
                 <div className="flex items-center gap-3 w-full pr-8">
+                  <div 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedSites(prev => prev.includes(site.id) ? prev.filter(id => id !== site.id) : [...prev, site.id])
+                    }}
+                    className="cursor-pointer -ml-2 p-2 hover:bg-secondary/50 rounded-lg transition-colors"
+                  >
+                    {selectedSites.includes(site.id) ? (
+                       <CheckSquare className="w-5 h-5 text-primary" />
+                    ) : (
+                       <Square className="w-5 h-5 text-muted-foreground/50 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    )}
+                  </div>
                   <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 flex justify-center items-center shrink-0 border border-white/10 shadow-inner group-hover:scale-110 transition-transform duration-500">
                     <Globe className="w-5 h-5 text-foreground/80 group-hover:text-primary transition-colors" />
                   </div>
@@ -258,29 +345,64 @@ export default function SitesPage() {
               </div>
 
               <form onSubmit={handleAddSubmit} className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Internal Name</label>
-                  <input
-                    type="text"
-                    required
-                    value={newSiteName}
-                    onChange={e => setNewSiteName(e.target.value)}
-                    placeholder="e.g. PropertyPro NG"
-                    className="w-full px-4 py-3 rounded-xl border bg-secondary/30 focus:bg-background transition-colors focus:ring-2 focus:ring-primary outline-none text-sm"
-                  />
+                <div className="flex items-center bg-secondary/30 p-1 rounded-xl mb-6">
+                  <button
+                    type="button"
+                    onClick={() => setAddMode("single")}
+                    className={`flex-1 flex justify-center gap-2 py-2 px-3 rounded-lg text-sm font-bold transition-colors ${addMode === "single" ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                  >
+                    <Plus className="w-4 h-4" /> Single URL
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAddMode("bulk")}
+                    className={`flex-1 flex justify-center gap-2 py-2 px-3 rounded-lg text-sm font-bold transition-colors ${addMode === "bulk" ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                  >
+                    <Layers className="w-4 h-4" /> Bulk Import
+                  </button>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Target URL</label>
-                  <input
-                    type="url"
-                    required
-                    value={newSiteUrl}
-                    onChange={e => setNewSiteUrl(e.target.value)}
-                    placeholder="https://example.com/properties"
-                    className="w-full px-4 py-3 rounded-xl border bg-secondary/30 focus:bg-background transition-colors focus:ring-2 focus:ring-primary outline-none text-sm"
-                  />
-                  <p className="text-[10px] text-muted-foreground pl-1">Must include https:// or http://</p>
-                </div>
+
+                {addMode === "single" ? (
+                  <>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Internal Name</label>
+                      <input
+                        type="text"
+                        required={addMode === "single"}
+                        value={newSiteName}
+                        onChange={e => setNewSiteName(e.target.value)}
+                        placeholder="e.g. PropertyPro NG"
+                        className="w-full px-4 py-3 rounded-xl border bg-secondary/30 focus:bg-background transition-colors focus:ring-2 focus:ring-primary outline-none text-sm"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Target URL</label>
+                      <input
+                        type="url"
+                        required={addMode === "single"}
+                        value={newSiteUrl}
+                        onChange={e => setNewSiteUrl(e.target.value)}
+                        placeholder="https://example.com/properties"
+                        className="w-full px-4 py-3 rounded-xl border bg-secondary/30 focus:bg-background transition-colors focus:ring-2 focus:ring-primary outline-none text-sm"
+                      />
+                      <p className="text-[10px] text-muted-foreground pl-1">Must include https:// or http://</p>
+                    </div>
+                  </>
+                ) : (
+                  <div className="space-y-2 min-h-32">
+                     <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                       <ListPlus className="w-3.5 h-3.5" /> URL List
+                     </label>
+                     <textarea
+                       required={addMode === "bulk"}
+                       value={bulkUrls}
+                       onChange={e => setBulkUrls(e.target.value)}
+                       placeholder={"https://site1.com/properties\nhttps://site2.com/real-estate\nhttps://site3.com/homes"}
+                       className="w-full h-36 px-4 py-3 rounded-xl border bg-secondary/30 focus:bg-background transition-colors focus:ring-2 focus:ring-primary outline-none text-sm resize-none"
+                     />
+                     <p className="text-[10px] text-muted-foreground pl-1">Enter URLs separated by commas or new lines. Site names will be auto-generated.</p>
+                  </div>
+                )}
                 
                 <div className="pt-4 flex gap-3">
                   <button
@@ -303,6 +425,51 @@ export default function SitesPage() {
           </div>
         </div>
       )}
+
+    {/* Bulk Actions Toolbar (Fixed Bottom) */}
+    {selectedSites.length > 0 && (
+      <div className="fixed bottom-6 xl:bottom-10 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-5 fade-in duration-300">
+        <div className="bg-foreground text-background shadow-2xl rounded-full px-6 py-3 flex items-center gap-6 border border-white/20">
+          <div className="flex items-center gap-2 font-semibold">
+            <span className="bg-background text-foreground w-6 h-6 flex items-center justify-center rounded-full text-xs">
+              {selectedSites.length}
+            </span>
+            <span className="text-sm">Selected</span>
+          </div>
+          <div className="w-px h-6 bg-background/20" />
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => handleBulkToggle(true)}
+              disabled={bulkToggle.isPending}
+              className="px-4 py-1.5 rounded-full hover:bg-background/20 transition-colors text-sm font-semibold flex items-center gap-2"
+            >
+              <Power className="w-3.5 h-3.5" /> Resume
+            </button>
+            <button 
+              onClick={() => handleBulkToggle(false)}
+              disabled={bulkToggle.isPending}
+              className="px-4 py-1.5 rounded-full hover:bg-background/20 transition-colors text-sm font-semibold flex items-center gap-2 text-zinc-400 hover:text-zinc-200"
+            >
+              Suspend
+            </button>
+            <div className="w-px h-4 bg-background/20 mx-1" />
+            <button 
+              onClick={handleBulkDelete}
+              disabled={bulkDelete.isPending}
+              className="px-4 py-1.5 rounded-full hover:bg-red-500/20 text-red-400 hover:text-red-300 transition-colors text-sm font-semibold flex items-center gap-2"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Purge
+            </button>
+          </div>
+          <button 
+            onClick={() => setSelectedSites([])}
+            className="ml-2 p-1.5 hover:bg-background/20 rounded-full transition-colors opacity-70 hover:opacity-100"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    )}
 
     </div>
   );
