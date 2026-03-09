@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useScrapeJobs, useStartScrape, useStopScrape } from "@/hooks/use-scrape-jobs";
 import { useSocket } from "@/hooks/use-socket";
-import { Play, Square, RefreshCcw, Terminal, Activity, CheckCircle2, AlertCircle, Clock, Coffee } from "lucide-react";
+import { Play, Square, RefreshCcw, Terminal, Activity, CheckCircle2, AlertCircle, Clock, Coffee, Sparkles } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -79,179 +79,234 @@ export default function ScraperControlPage() {
   };
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
+    <div className="space-y-8 max-w-7xl mx-auto px-4 md:px-8 py-8 animate-in fade-in duration-700">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl font-bold" style={{ color: "var(--foreground)" }}>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative">
+        <div className="relative z-10">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-bold uppercase tracking-widest mb-3">
+            <Sparkles className="w-3.5 h-3.5" />
+            Core Systems
+          </div>
+          <h1 className="font-display text-3xl md:text-4xl font-bold tracking-tight text-foreground">
             Extraction Engine
           </h1>
-          <p className="text-sm mt-1" style={{ color: "var(--muted-foreground)" }}>
-            Manage web scraping jobs, monitor live tasks, and review crawler logs.
+          <p className="text-muted-foreground mt-2 max-w-xl text-sm md:text-base">
+            Command center for distributed web scraping tasks. Monitor live data streams, control worker nodes, and review crawler logs in real-time.
           </p>
         </div>
         
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border" style={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }}>
-            <span className={`w-2 h-2 rounded-full ${isConnected ? "bg-green-500 animate-pulse" : "bg-red-500"}`} />
-            <span style={{ color: "var(--muted-foreground)" }}>
-              {isConnected ? "Engine Connected" : "Engine Disconnected"}
+        <div className="flex items-center gap-4 relative z-10">
+          <div className="hidden md:flex items-center gap-2 px-4 py-2 rounded-2xl bg-background/60 backdrop-blur-xl border border-white/10 shadow-sm text-sm font-medium">
+            <div className="relative flex items-center justify-center w-3 h-3">
+              <span className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${isConnected ? "bg-green-500 animate-ping duration-1000" : "bg-red-500"}`} />
+              <span className={`relative inline-flex rounded-full h-2 w-2 ${isConnected ? "bg-green-500" : "bg-red-500"}`} />
+            </div>
+            <span className="text-muted-foreground">
+              {isConnected ? "Engine Connected" : "Connection Lost"}
             </span>
           </div>
           
           <button
             onClick={activeJob ? () => handleStop(activeJob.id) : handleStart}
             disabled={startScrape.isPending || stopScrape.isPending}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+            className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all hover:-translate-y-1 shadow-lg ${
               activeJob 
-                ? "bg-red-500 hover:bg-red-600 text-white" 
-                : "bg-primary hover:bg-primary/90 text-primary-foreground"
-            }`}
+                ? "bg-red-500 hover:bg-red-600 text-white shadow-red-500/25" 
+                : "bg-primary hover:bg-primary/90 text-primary-foreground shadow-primary/25"
+            } disabled:opacity-50 disabled:hover:translate-y-0`}
           >
             {activeJob ? (
               <>
-                <Square className="w-4 h-4" /> Stop Crawler
+                <Square className="w-4 h-4 fill-current" /> Terminate Signal
               </>
             ) : (
               <>
-                <Play className="w-4 h-4 fill-current" /> Start Crawl
+                <Play className="w-4 h-4 fill-current" /> Dispatch Crawler
               </>
             )}
           </button>
         </div>
+        
+        {/* Background glow for header */}
+        <div className="absolute top-1/2 left-0 -translate-y-1/2 w-64 h-64 bg-primary/10 rounded-full blur-[100px] pointer-events-none -z-10" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 relative">
         {/* Left Column: Job Progress & Stats */}
-        <div className="space-y-6 lg:col-span-1">
+        <div className="space-y-6 lg:col-span-4 flex flex-col">
           {/* Active Job Progress */}
-          <Card className="bg-card border-border shadow-sm">
-            <CardHeader className="pb-3 border-b border-border">
+          <Card className="bg-background/80 backdrop-blur-xl border border-white/10 shadow-2xl relative overflow-hidden group">
+            {/* Animated border gradient line at top */}
+            <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${activeJob ? "from-blue-500 via-primary to-blue-500 background-pan" : "from-border to-border"} transition-colors`} />
+            
+            <CardHeader className="pb-4">
               <CardTitle className="text-base font-semibold flex items-center justify-between">
-                Current Task Status
-                {activeJob && (
-                  <span className="flex items-center gap-1.5 px-2 py-1 rounded bg-blue-500/10 text-blue-500 text-[10px] uppercase font-bold tracking-wider">
+                Current Operation
+                {activeJob ? (
+                  <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-500 text-[10px] uppercase font-bold tracking-wider relative overflow-hidden">
+                    <span className="absolute inset-0 bg-blue-500/10 animate-pulse" />
                     <Activity className="w-3 h-3 animate-pulse" />
                     Running
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-zinc-500/10 text-zinc-500 text-[10px] uppercase font-bold tracking-wider">
+                    <Coffee className="w-3 h-3" />
+                    Idle
                   </span>
                 )}
               </CardTitle>
             </CardHeader>
-            <CardContent className="pt-5 space-y-5">
+            <CardContent className="pt-2">
               {!activeJob ? (
-                <div className="text-center py-6 text-sm" style={{ color: "var(--muted-foreground)" }}>
-                  <Coffee className="w-8 h-8 mx-auto mb-3 opacity-20" />
-                  No active extraction jobs running.
+                <div className="text-center py-8">
+                  <div className="w-16 h-16 rounded-2xl bg-secondary/50 flex items-center justify-center mx-auto mb-4 border border-border/50 shadow-inner group-hover:scale-110 transition-transform duration-500">
+                    <Activity className="w-8 h-8 text-muted-foreground/30" />
+                  </div>
+                  <p className="text-sm font-medium text-foreground mb-1">System Standby</p>
+                  <p className="text-xs text-muted-foreground">Ready to dispatch new extraction workers.</p>
                 </div>
               ) : (
-                <>
+                <div className="space-y-6 fade-in animate-in">
                   <div>
-                    <div className="flex justify-between text-xs mb-1.5" style={{ color: "var(--muted-foreground)" }}>
-                      <span className="font-medium text-foreground">Processing Properties</span>
-                      <span>{activeJob.processedItems} / {activeJob.totalItems || "?"}</span>
+                    <div className="flex justify-between text-sm mb-2 font-medium">
+                      <span className="text-muted-foreground">Properties Scraped</span>
+                      <span className="text-foreground">{activeJob.processedItems} <span className="text-muted-foreground/50">/</span> {activeJob.totalItems || "?"}</span>
                     </div>
-                    <div className="w-full bg-secondary h-2.5 rounded-full overflow-hidden">
+                    <div className="w-full bg-secondary/50 border border-border/50 h-3 rounded-full overflow-hidden relative shadow-inner">
                       <div 
-                        className="bg-primary h-full transition-all duration-500 rounded-full"
+                        className="absolute top-0 left-0 bottom-0 bg-gradient-to-r from-primary/80 to-primary rounded-full transition-all duration-700 ease-out"
                         style={{ width: `${Math.min(100, (activeJob.processedItems / (activeJob.totalItems || 1)) * 100)}%` }}
-                      />
+                      >
+                         <div className="absolute inset-0 bg-white/20 background-pan translate-z-0" style={{ backgroundImage: 'linear-gradient(45deg,rgba(255,255,255,.15) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.15) 50%,rgba(255,255,255,.15) 75%,transparent 75%,transparent)', backgroundSize: '1rem 1rem' }} />
+                      </div>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
-                      <div className="flex items-center gap-1.5 text-green-600 mb-1">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span className="text-[10px] font-bold uppercase tracking-wider">Success</span>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-4 rounded-2xl bg-green-500/5 border border-green-500/10 shadow-inner relative overflow-hidden group/stat hover:bg-green-500/10 transition-colors">
+                      <div className="absolute -right-4 -bottom-4 bg-green-500/10 w-16 h-16 rounded-full blur-2xl group-hover/stat:bg-green-500/20 transition-colors" />
+                      <div className="flex items-center gap-2 text-green-600 mb-2">
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span className="text-xs font-bold uppercase tracking-wider">Success</span>
                       </div>
-                      <p className="text-lg font-bold text-green-700 dark:text-green-500">{activeJob.successfulItems}</p>
+                      <p className="text-2xl font-bold text-foreground">
+                        {activeJob.successfulItems}
+                      </p>
                     </div>
-                    <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
-                      <div className="flex items-center gap-1.5 text-red-600 mb-1">
-                        <AlertCircle className="w-3.5 h-3.5" />
-                        <span className="text-[10px] font-bold uppercase tracking-wider">Failed</span>
+                    <div className="p-4 rounded-2xl bg-red-500/5 border border-red-500/10 shadow-inner relative overflow-hidden group/stat hover:bg-red-500/10 transition-colors">
+                      <div className="absolute -right-4 -bottom-4 bg-red-500/10 w-16 h-16 rounded-full blur-2xl group-hover/stat:bg-red-500/20 transition-colors" />
+                      <div className="flex items-center gap-2 text-red-600 mb-2">
+                        <AlertCircle className="w-4 h-4" />
+                        <span className="text-xs font-bold uppercase tracking-wider">Failed</span>
                       </div>
-                      <p className="text-lg font-bold text-red-700 dark:text-red-500">{activeJob.failedItems}</p>
+                      <p className="text-2xl font-bold text-foreground">
+                        {activeJob.failedItems}
+                      </p>
                     </div>
                   </div>
-                </>
+                </div>
               )}
             </CardContent>
           </Card>
 
           {/* Recent Jobs History */}
-          <Card className="bg-card border-border shadow-sm">
-            <CardHeader className="pb-3 border-b border-border">
-              <CardTitle className="text-base font-semibold flex items-center gap-2">
+          <Card className="bg-background/60 backdrop-blur-md border border-white/10 shadow-lg flex-1">
+            <CardHeader className="pb-3 border-b border-white/5">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
                 <Clock className="w-4 h-4 text-muted-foreground" />
-                Recent Jobs
+                Execution History
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-0 px-0">
               {isLoading ? (
-                <div className="p-5 flex justify-center"><RefreshCcw className="w-4 h-4 animate-spin text-muted-foreground" /></div>
+                <div className="p-8 flex flex-col items-center justify-center text-muted-foreground">
+                  <RefreshCcw className="w-5 h-5 animate-spin mb-3 opacity-50" />
+                  <span className="text-xs">Loading history...</span>
+                </div>
               ) : !jobs || jobs.length === 0 ? (
-                <div className="p-5 text-sm text-center text-muted-foreground">No historical jobs found.</div>
+                <div className="p-8 text-sm text-center text-muted-foreground flex flex-col items-center">
+                  <Terminal className="w-6 h-6 mb-2 opacity-20" />
+                  No historical logs found.
+                </div>
               ) : (
-                <ul className="divide-y divide-border">
+                <div className="divide-y divide-white/5">
                   {jobs.slice(0, 5).map(job => (
-                    <li key={job.id} className="p-4 hover:bg-secondary/50 transition-colors">
-                      <div className="flex justify-between items-start mb-1">
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
-                          job.status === 'COMPLETED' ? 'bg-green-500/10 text-green-600' :
-                          job.status === 'FAILED' ? 'bg-red-500/10 text-red-600' :
-                          'bg-zinc-500/10 text-zinc-600'
-                        }`}>
-                          {job.status}
-                        </span>
-                        <span className="text-[11px] text-muted-foreground">
-                          {formatDistanceToNow(new Date(job.createdAt), { addSuffix: true })}
-                        </span>
+                    <div key={job.id} className="p-4 hover:bg-secondary/30 transition-colors flex items-center justify-between group">
+                      <div>
+                         <div className="flex items-center gap-2 mb-1.5">
+                           <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                             job.status === 'COMPLETED' ? 'bg-green-500/10 text-green-600 border border-green-500/20' :
+                             job.status === 'FAILED' ? 'bg-red-500/10 text-red-600 border border-red-500/20' :
+                             'bg-zinc-500/10 text-zinc-500 border border-zinc-500/20'
+                           }`}>
+                             {job.status === 'COMPLETED' && <CheckCircle2 className="w-3 h-3" />}
+                             {job.status === 'FAILED' && <AlertCircle className="w-3 h-3" />}
+                             {job.status}
+                           </span>
+                           <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">
+                             {formatDistanceToNow(new Date(job.createdAt), { addSuffix: true })}
+                           </span>
+                         </div>
+                         <p className="text-xs text-muted-foreground/80 mt-1">
+                           <strong className="text-foreground">{job.successfulItems}</strong> indexed &bull; {job.failedItems} errors
+                         </p>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        {job.successfulItems} saved &bull; {job.failedItems} failed
-                      </p>
-                    </li>
+                      <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Terminal className="w-3 h-3 text-muted-foreground" />
+                      </div>
+                    </div>
                   ))}
-                </ul>
+                </div>
               )}
             </CardContent>
           </Card>
         </div>
 
         {/* Right Column: Live Logs Feed */}
-        <div className="lg:col-span-2">
-          <Card className="bg-zinc-950 border-zinc-900 shadow-sm h-full flex flex-col min-h-[500px] overflow-hidden">
-            <CardHeader className="pb-3 border-b border-zinc-900 bg-zinc-950/80 backdrop-blur z-10 flex-shrink-0">
-              <CardTitle className="text-sm font-semibold flex items-center justify-between text-zinc-300">
-                <div className="flex items-center gap-2">
-                  <Terminal className="w-4 h-4 text-zinc-500" />
-                  Terminal Logs
+        <div className="lg:col-span-8 flex flex-col h-full min-h-[500px] lg:min-h-0">
+          <Card className="bg-[#0A0A0B] border border-white/10 shadow-2xl relative overflow-hidden flex-1 flex flex-col rounded-3xl group">
+             {/* Decorative glow */}
+            <div className={`absolute -top-40 -right-40 w-96 h-96 rounded-full blur-[120px] pointer-events-none transition-colors duration-1000 ${activeJob ? "bg-primary/20" : "bg-zinc-800/20"}`} />
+            
+            <CardHeader className="pb-3 border-b border-white/10 bg-[#0A0A0B]/80 backdrop-blur-xl z-10 flex-shrink-0 relative">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-xs font-mono font-medium flex items-center gap-2 text-zinc-400">
+                  <Terminal className="w-3.5 h-3.5" />
+                  root@extraction-engine:~$ tail -f /var/log/crawler.log
+                </CardTitle>
+                <div className="flex items-center gap-1.5 opacity-50">
+                  <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
+                  <div className="w-2.5 h-2.5 rounded-full bg-yellow-500" />
+                  <div className="w-2.5 h-2.5 rounded-full bg-green-500" />
                 </div>
-                {activeJob && <span className="flex w-2 h-2 rounded-full bg-blue-500 animate-ping" />}
-              </CardTitle>
+              </div>
             </CardHeader>
-            <CardContent className="p-4 flex-1 overflow-y-auto font-mono text-[11px] lg:text-xs">
+            <CardContent className="p-5 flex-1 overflow-y-auto font-mono text-xs sm:text-sm bg-[#0A0A0B] text-zinc-300 relative z-0 scroller">
               {logs.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-zinc-700 italic">
-                  Waiting for crawler dispatch...
+                <div className="h-full flex flex-col items-center justify-center text-zinc-700">
+                  <Terminal className="w-10 h-10 mb-4 opacity-20" />
+                  <p className="italic">Awaiting stdout stream...</p>
                 </div>
               ) : (
-                <div className="space-y-1.5 pb-4">
+                <div className="space-y-2 pb-6">
                   {logs.map((log) => (
-                    <div key={log.id} className="flex items-start gap-3 break-words">
-                      <span className="text-zinc-600 shrink-0">
-                        {new Date(log.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    <div key={log.id} className="flex items-start gap-4 break-words hover:bg-white/[0.02] p-1 -mx-1 rounded transition-colors group/log">
+                      <span className="text-zinc-600 shrink-0 select-none hidden sm:inline">
+                        {new Date(log.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 })}
                       </span>
-                      <span className={`shrink-0 lowercase w-12 ${
+                      <span className={`shrink-0 uppercase w-16 text-[10px] font-bold tracking-wider pt-0.5 ${
                         log.level === 'error' ? 'text-red-400' : 
                         log.level === 'warn' ? 'text-yellow-400' : 
                         log.level === 'success' ? 'text-green-400' :
                         'text-blue-400'
                       }`}>
-                        [{log.level}]
+                        {log.level}
                       </span>
-                      <span className="text-zinc-300">
+                      <span className={`flex-1 ${
+                        log.level === 'error' ? 'text-red-200' : 
+                        log.level === 'warn' ? 'text-yellow-200' : 
+                        'text-zinc-300'
+                      }`}>
                         {log.message}
                       </span>
                     </div>
@@ -260,6 +315,9 @@ export default function ScraperControlPage() {
                 </div>
               )}
             </CardContent>
+            
+            {/* Scroll fade overlay */}
+            <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-[#0A0A0B] to-transparent pointer-events-none z-10" />
           </Card>
         </div>
       </div>

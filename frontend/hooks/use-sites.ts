@@ -62,3 +62,17 @@ export function useDeleteSite() {
     },
   });
 }
+
+export function useAddSite() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (data: Partial<Site>) => {
+      const response = await api.post(`/sites`, data);
+      return response.data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sites"] });
+    },
+  });
+}
