@@ -5,6 +5,7 @@ import { Toaster } from "sonner";
 import { Providers } from "@/components/providers";
 import SmoothCursor from "@/components/ui/smooth-cursor";
 import { JotformAgent } from "@/components/ui/jotform-agent";
+import { Preloader } from "@/components/ui/preloader";
 
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-space-grotesk",
@@ -40,6 +41,7 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         <Providers>
+          <Preloader />
           <SmoothCursor 
             size={16} 
             showTrail={true} 

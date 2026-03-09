@@ -29,3 +29,20 @@ services:
         sync: false
       - key: INTERNAL_API_KEY
         sync: false
+
+  - type: pserver
+    name: meilisearch
+    env: docker
+    image:
+      url: getmeili/meilisearch:v1.11.2
+    disk:
+      name: meili-data
+      mountPath: /meili_data
+      sizeGB: 10
+    envVars:
+      - key: MEILI_ENV
+        value: production
+      - key: MEILI_MASTER_KEY
+        generateValue: true
+      - key: MEILI_NO_ANALYTICS
+        value: "true"

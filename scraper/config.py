@@ -14,6 +14,9 @@ class Config:
     host: str = os.getenv("SCRAPER_HOST", "0.0.0.0")
     port: int = int(os.getenv("SCRAPER_PORT", "8000"))
 
+    # Celery / Redis
+    redis_url: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+
     # Playwright
     headless: bool = os.getenv("PLAYWRIGHT_HEADLESS", "true").lower() == "true"
     browser_timeout: int = int(os.getenv("BROWSER_TIMEOUT", "30000"))

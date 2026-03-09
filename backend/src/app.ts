@@ -1,12 +1,29 @@
 import express, { type Application } from "express";
+import * as Sentry from "@sentry/node";
+import { nodeProfilingIntegration } from "@sentry/profiling-node";
+
+// Initialize Sentry early
+Sentry.init({
+  dsn: process.env.SENTRY_DSN || "",
+  integrations: [
+    nodeProfilingIntegration(),
+  ],
+  tracesSampleRate: process.env.NODE_ENV === "production" ? 0.2 : 1.0,
+  profilesSampleRate: process.env.NODE_ENV === "production" ? 0.2 : 1.0,
+});
+
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { config } from "./config/env";
+import { setupSwagger } from "./config/swagger";
 import routes from "./routes/index";
 import { errorHandler, notFoundHandler } from "./middlewares/error.middleware";
 
 const app: Application = express();
+
+// Initialize Swagger documentation
+setupSwagger(app);
 
 // Security headers
 app.use(helmet());
@@ -37,10 +54,12 @@ app.use(
   })
 );
 
+import mongoSanitize from "express-mongo-sanitize";
+
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: config.env === "production" ? 500 : 2000,
+  max: config.env === "production" ? 300 : 2000, // Tightened from 500 to 300
   message: "Too many requests from this IP, please try again later.",
   standardHeaders: true,
   legacyHeaders: false,
@@ -52,7 +71,7 @@ app.use("/api/", limiter);
 // Stricter rate limiting for auth routes
 const authLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  max: config.env === "production" ? 20 : 100,
+  max: config.env === "production" ? 10 : 100, // Tightened from 20 to 10
   message: "Too many authentication attempts, please try again in an hour.",
   standardHeaders: true,
   legacyHeaders: false,
@@ -65,6 +84,10 @@ app.use("/api/auth/register", authLimiter);
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
+// Data sanitization against NoSQL query injection / parameter pollution
+// Even with Prisma, it's good practice to strip out keys starting with '$' or '.'
+app.use(mongoSanitize());
+
 // Root health check
 app.get("/health", (_req, res) => {
   res.status(200).json({
@@ -74,8 +97,16 @@ app.get("/health", (_req, res) => {
   });
 });
 
+// Sentry debug route (optional, to test sentry)
+app.get("/debug-sentry", function mainHandler(req, res) {
+  throw new Error("My first Sentry error!");
+});
+
 // API routes
 app.use("/api", routes);
+
+// The error handler must be registered before any other error middleware and after all controllers
+Sentry.setupExpressErrorHandler(app);
 
 // Error handling
 app.use(notFoundHandler);

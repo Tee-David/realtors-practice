@@ -533,9 +533,9 @@ function PreferencesTab() {
 function AboutTab() {
   const info: { label: string; value: string }[] = [
     { label: "App Name", value: "Realtors' Practice" },
-    { label: "Version", value: "1.0.0" },
-    { label: "Build", value: "2026.03.08-main" },
-    { label: "Frontend", value: "Next.js 16 / React 19" },
+    { label: "Version", value: "3.0.0" },
+    { label: "Developed By", value: "WDC Solutions Hub" },
+    { label: "Frontend", value: "Next.js 15 / React 19" },
     { label: "Backend", value: "Node.js / Express / Prisma" },
     { label: "Database", value: "CockroachDB" },
     { label: "Search Engine", value: "Meilisearch" },
@@ -571,9 +571,8 @@ function AboutTab() {
 
       <Separator />
 
-      <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
-        Nigerian property intelligence platform. Scrape, validate, enrich, and discover real estate
-        listings across Nigeria.
+      <p className="text-xs leading-relaxed" style={{ color: "var(--muted-foreground)" }}>
+        Realtors' Practice is a comprehensive Nigerian property intelligence platform. It provides automated scraping, data validation, property enrichment, advanced search, and intelligent analytics for real estate listings across Nigeria. Built to empower modern realtors with actionable property insights.
       </p>
     </div>
   );

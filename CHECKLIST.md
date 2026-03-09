@@ -95,7 +95,7 @@
   - [x] Improved list view card design
 - [x] Frontend: Login page redesign (split layout with visual panel)
 - [x] Frontend: Forgot password page redesign
-- [x] Frontend: Admin register page
+- [x] Frontend: Admin register page (Manual Approval Flow)
 - [x] Frontend: Dashboard page (KPI cards, category chart, status donut, explore section)
 - [x] Frontend: Mobile bottom navigation (Dashboard, Properties, Scrape, Search, More)
 - [x] Frontend: Desktop top bar (notifications, theme switch, profile)
@@ -145,7 +145,7 @@
 - [x] Write price_parser.py (Nigerian price parsing: ₦, "million", "per annum")
 - [x] Write location_parser.py (location hierarchy: estate > area > LGA > state)
 - [x] Write feature_extractor.py (amenity extraction)
-- [ ] Add LLM-assisted parsing fallback (when universal extractor confidence is low)
+- [x] Add LLM-assisted parsing fallback (when universal extractor confidence is low)
 
 ### Pipeline
 - [x] Write validator.py (field validation + quality scoring 0-100)
@@ -159,7 +159,7 @@
 - [ ] Add raw HTML snapshot storage (save failed parses for debugging, auto-purge after 7 days)
 
 ### Task Queue (Celery + Redis)
-- [ ] Set up Celery with Redis broker for parallel site scraping
+- [x] Set up Celery with Redis broker for parallel site scraping
 - [ ] Configure task retries with exponential backoff
 - [ ] Add task priority (active-intent jobs > scheduled bulk scrapes)
 - [ ] Add concurrency limits per site (avoid hammering single domain)
@@ -200,7 +200,7 @@
 - [ ] Test: Celery task queue processes sites in parallel
 
 ## Phase 4: Search + Dashboard (MVP Complete)
-- [ ] Deploy Meilisearch on Render (private service)
+- [x] Deploy Meilisearch on Render (private service)
 - [x] Backend: Meilisearch client setup (utils/meili.util.ts)
 - [x] Backend: Meili service (index config, sync, upsert, delete, batch sync, full re-index)
 - [x] Backend: Search service (NL query parser + Meilisearch integration)
@@ -276,21 +276,21 @@
 - [ ] Test: CSV/XLSX export generates valid files
 
 ## Phase 7: Production Hardening
-- [ ] Backend: Query optimization (analyze slow queries, add missing indexes)
-- [ ] Backend: Response caching (Redis or in-memory for analytics)
-- [ ] Backend: Meilisearch weekly full re-index cron
-- [ ] Backend: Sentry error tracking integration
-- [ ] Frontend: Sentry error tracking integration
-- [ ] GitHub Actions: CI pipeline (lint, type-check, build)
-- [ ] GitHub Actions: CD pipeline (auto-deploy on push to main)
-- [ ] GitHub Actions: Scheduled scraping workflow (from old project pattern)
-- [ ] Security: Rate limiting tuning for production
-- [ ] Security: Input sanitization audit
-- [ ] Security: CORS configuration review
-- [ ] Security: Environment variable audit (no secrets in code)
-- [ ] Performance: Frontend bundle analysis
-- [ ] Performance: Image optimization
-- [ ] Performance: Lazy loading for heavy components (maps, charts)
+- [x] Backend: Query optimization (analyze slow queries, add missing indexes)
+- [x] Backend: Response caching (Redis or in-memory for analytics)
+- [x] Backend: Meilisearch weekly full re-index cron
+- [x] Backend: Sentry error tracking integration
+- [x] Frontend: Sentry error tracking integration
+- [x] GitHub Actions: CI pipeline (lint, type-check, build)
+- [x] GitHub Actions: CD pipeline (auto-deploy on push to main)
+- [x] GitHub Actions: Scheduled scraping workflow (from old project pattern)
+- [x] Security: Rate limiting tuning for production
+- [x] Security: Input sanitization audit
+- [x] Security: CORS configuration review
+- [x] Security: Environment variable audit (no secrets in code)
+- [x] Performance: Frontend bundle analysis
+- [x] Performance: Image optimization
+- [x] Performance: Lazy loading for heavy components (maps, charts)
 - [ ] Documentation: API documentation (Swagger/OpenAPI spec)
 - [ ] Documentation: Deployment guide
 - [ ] Documentation: README.md update
@@ -339,11 +339,11 @@
 - **Phase 1:** 42 tasks (40 done, 2 deployment pending)
 - **Phase 2:** 30 tasks (30 done ✅)
 - **Phase 2.5:** 11 tasks (11 done ✅)
-- **Phase 3:** 40 tasks (18 done, 22 pending — infra/queue/deploy/frontend/tests)
-- **Phase 4:** 21 tasks (18 done, 3 pending — deploy + tests)
+- **Phase 3:** 40 tasks (19 done, 21 pending — infra/queue/deploy/frontend/tests)
+- **Phase 4:** 21 tasks (19 done, 2 pending — deploy + tests)
 - **Phase 4.5:** 3 tasks (0 done)
 - **Phase 5:** 16 tasks (3 done, 13 pending)
 - **Phase 6:** 22 tasks (0 done)
-- **Phase 7:** 38 tasks (0 done)
+- **Phase 7:** 38 tasks (15 done)
 - **Phase 8:** 15 tasks (0 done)
 - **TOTAL:** ~238 tasks (~118 done, ~120 remaining)

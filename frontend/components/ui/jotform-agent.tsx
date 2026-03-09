@@ -14,11 +14,13 @@ declare global {
     AgentClientSDK?: {
       resetUser: () => void;
     };
+    _jfAgentContainerSelector?: string;
   }
 }
 
 export function JotformAgent() {
   const [isReady, setIsReady] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const agentId = process.env.NEXT_PUBLIC_JOTFORM_AGENT_ID || "019cd1bb37647d8d9261ffea7104c7527f23";
 
   useEffect(() => {
@@ -33,7 +35,10 @@ export function JotformAgent() {
           if (window.AgentClientSDK?.resetUser) {
              window.AgentClientSDK.resetUser();
           }
-          if (mounted) setIsReady(true);
+          if (mounted) {
+             setIsAuthenticated(false);
+             setIsReady(true);
+          }
           return;
         }
 
@@ -60,11 +65,17 @@ export function JotformAgent() {
           userHash: hash
         };
 
-        if (mounted) setIsReady(true);
+        if (mounted) {
+            setIsAuthenticated(true);
+            setIsReady(true);
+        }
       } catch (err) {
         console.error("Failed to init Jotform Agent User", err);
         // Let it load anonymously if auth fetch fails
-        if (mounted) setIsReady(true);
+        if (mounted) {
+           setIsAuthenticated(false);
+           setIsReady(true);
+        }
       }
     }
 
@@ -77,8 +88,9 @@ export function JotformAgent() {
           window.AgentClientSDK.resetUser();
         }
         delete window._jfAgentIdentifiedUser;
+        if (mounted) setIsAuthenticated(false);
       } else if (event === 'SIGNED_IN') {
-        // Re-init to get the new hash
+        // Re-init to get the new hash and set auth state
         initAgentUser();
       }
     });
@@ -89,12 +101,33 @@ export function JotformAgent() {
     };
   }, []);
 
-  if (!isReady) return null;
+  if (!isReady || !isAuthenticated) return null;
 
+  // Set the container right before rendering the script
+  if (typeof window !== "undefined") {
+    window._jfAgentContainerSelector = '.jf-agent-my-container';
+  }
+
+  // The JotForm script often injects fixed elements directly into body despite the selector.
+  // We'll wrap our target in a fixed container that respects the bottom nav.
   return (
-    <Script 
-      src={`https://cdn.jotfor.ms/agent/embedjs/${agentId}/embed.js`}
-      strategy="afterInteractive"
-    />
+    <div className="fixed md:bottom-6 md:right-6 bottom-24 right-4 z-[60] pointer-events-none [&>*]:pointer-events-auto">
+      <div className="jf-agent-my-container relative w-full h-full">
+         {/* The chatbot will be injected inside this relative container if it respects the selector */}
+      </div>
+      <style dangerouslySetInnerHTML={{ __html: `
+        /* Force any Jotform injected iframe to respect the padding on mobile */
+        @media (max-width: 768px) {
+          iframe[src*="agent/embed"], div[id^="Jotform"], div[id^="jotform"] {
+            margin-bottom: 90px !important;
+            margin-right: 10px !important;
+          }
+        }
+      `}} />
+      <Script 
+        src={`https://cdn.jotfor.ms/agent/embedjs/${agentId}/embed.js`}
+        strategy="afterInteractive"
+      />
+    </div>
   );
 }

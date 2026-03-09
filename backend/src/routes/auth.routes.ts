@@ -8,6 +8,13 @@ import { z } from "zod";
 
 const router = Router();
 
+/**
+ * @swagger
+ * tags:
+ *   name: Auth
+ *   description: Authentication and User Management
+ */
+
 const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
@@ -16,7 +23,45 @@ const registerSchema = z.object({
   role: z.enum(["ADMIN", "EDITOR", "VIEWER", "API_USER"]).optional(),
 });
 
-// POST /api/auth/register (admin only)
+/**
+ * @swagger
+ * /auth/register:
+ *   post:
+ *     summary: Register a new user (Admin only)
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *             properties:
+ *               email:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *               firstName:
+ *                 type: string
+ *               lastName:
+ *                 type: string
+ *               role:
+ *                 type: string
+ *                 enum: [ADMIN, EDITOR, VIEWER, API_USER]
+ *     responses:
+ *       201:
+ *         description: User created successfully
+ *       400:
+ *         description: Invalid input or user already exists
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden (Admin role required)
+ */
 router.post(
   "/register",
   authenticate,
@@ -53,7 +98,42 @@ router.post(
   }
 );
 
-// GET /api/auth/me
+/**
+ * @swagger
+ * /auth/me:
+ *   get:
+ *     summary: Get current authenticated user profile
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Current user profile
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                     email:
+ *                       type: string
+ *                     firstName:
+ *                       type: string
+ *                     lastName:
+ *                       type: string
+ *                     role:
+ *                       type: string
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: User not found in database
+ */
 router.get("/me", authenticate, async (req: Request, res: Response) => {
   try {
     const user = await prisma.user.findUnique({

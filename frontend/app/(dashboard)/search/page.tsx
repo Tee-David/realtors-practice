@@ -282,12 +282,12 @@ export default function SearchPage() {
                  </div>
 
                  {/* Quick search suggestions */}
-                 <div className="flex flex-wrap justify-center gap-2">
+                 <div className="flex flex-wrap justify-center gap-3 w-full px-2">
                     {dynamicPills.map((suggestion) => (
                       <button
                         key={suggestion}
                         onClick={() => handleSearch(suggestion)}
-                        className="px-4 py-2 rounded-full text-xs font-semibold transition-all hover:-translate-y-0.5 border bg-secondary/50 hover:bg-primary hover:text-white hover:border-primary text-foreground"
+                        className="px-5 py-2.5 rounded-full text-sm font-semibold transition-all hover:-translate-y-0.5 border-2 border-border bg-background hover:bg-primary hover:text-white hover:border-primary text-foreground shadow-sm whitespace-nowrap"
                       >
                         {suggestion}
                       </button>

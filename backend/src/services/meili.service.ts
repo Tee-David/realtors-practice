@@ -179,4 +179,50 @@ export class MeiliService {
       Logger.error(`Batch sync failed: ${err.message}`);
     }
   }
+
+  /**
+   * Full re-index. Used mainly via cron jobs.
+   * This wipes the active indices and re-imports everything.
+   */
+  static async fullReindex() {
+    if (!meiliClient) {
+      Logger.error("Cannot full reindex: Meilisearch client not initialized");
+      return;
+    }
+
+    Logger.info("Starting full Meilisearch re-index...");
+    try {
+      const index = meiliClient.index(this.INDEX_NAME);
+      await index.deleteAllDocuments();
+      
+      let cursor: string | undefined = undefined;
+      const batchSize = 1000;
+      let totalProcessed = 0;
+      
+      while (true) {
+        const properties: any[] = await prisma.property.findMany({
+          take: batchSize,
+          skip: cursor ? 1 : 0,
+          cursor: cursor ? { id: cursor } : undefined,
+          where: { deletedAt: null },
+          orderBy: { id: "asc" },
+        });
+        
+        if (properties.length === 0) break;
+        
+        const documents = properties.map((p) => this.formatPropertyForSearch(p));
+        await index.addDocuments(documents);
+        
+        totalProcessed += properties.length;
+        cursor = properties[properties.length - 1].id;
+        
+        Logger.info(`Re-indexed ${totalProcessed} properties so far...`);
+      }
+      
+      Logger.info(`Full Meilisearch re-index complete. Total: ${totalProcessed}`);
+    } catch (error: any) {
+      Logger.error(`Failed full Meilisearch re-index: ${error.message}`);
+      throw error;
+    }
+  }
 }

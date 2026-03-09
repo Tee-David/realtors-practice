@@ -21,6 +21,7 @@ import {
   Calendar,
   ImageIcon,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { MOCK_PROPERTIES } from "@/lib/mock-data";
 import { motion } from "motion/react";
@@ -28,6 +29,16 @@ import TextType from "@/components/ui/TextType";
 import { SideSheet, SideSheetContent } from "@/components/ui/side-sheet";
 import { PropertyDetailPanel } from "@/components/property/property-detail-panel";
 import type { Property, PropertyCategory, ListingType } from "@/types/property";
+
+// Lazy load heavy charting libraries to reduce initial bundle size
+const RechartsAreaChart = dynamic(() => import("recharts").then((mod) => mod.AreaChart), { ssr: false });
+const RechartsArea = dynamic(() => import("recharts").then((mod) => mod.Area), { ssr: false });
+const RechartsXAxis = dynamic(() => import("recharts").then((mod) => mod.XAxis), { ssr: false });
+const RechartsYAxis = dynamic(() => import("recharts").then((mod) => mod.YAxis), { ssr: false });
+const RechartsTooltip = dynamic(() => import("recharts").then((mod) => mod.Tooltip), { ssr: false });
+const RechartsResponsiveContainer = dynamic(() => import("recharts").then((mod) => mod.ResponsiveContainer), { ssr: false });
+const RechartsRadialBarChart = dynamic(() => import("recharts").then((mod) => mod.RadialBarChart), { ssr: false });
+const RechartsRadialBar = dynamic(() => import("recharts").then((mod) => mod.RadialBar), { ssr: false });
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -316,96 +327,97 @@ function StatusDot({ label, count, color }: { label: string; count: number; colo
 /* ------------------------------------------------------------------ */
 
 function PropertiesStatsChart() {
-  const years = ["2021", "2022", "2023", "2024", "2025", "2026"];
-  const saleData = [30, 45, 60, 55, 70, 85];
-  const rentData = [20, 35, 40, 50, 55, 60];
-  const maxVal = 100;
-  const barWidth = 16;
-  const gap = 6;
-  const chartHeight = 160;
-  const groupWidth = barWidth * 2 + gap;
+  const chartData = [
+    { name: "Jan", sale: 400, rent: 240 },
+    { name: "Feb", sale: 300, rent: 139 },
+    { name: "Mar", sale: 200, rent: 980 },
+    { name: "Apr", sale: 278, rent: 390 },
+    { name: "May", sale: 189, rent: 480 },
+    { name: "Jun", sale: 239, rent: 380 },
+    { name: "Jul", sale: 349, rent: 430 },
+  ];
 
   return (
     <div
-      className="rounded-xl p-6 shadow-sm"
+      className="rounded-2xl p-6 shadow-md border border-white/5 transition-all hover:shadow-lg"
       style={{ backgroundColor: "var(--card)" }}
     >
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-2">
-          <BarChart3 size={16} style={{ color: "var(--primary)" }} />
-          <h2
-            className="font-display font-semibold text-sm"
-            style={{ color: "var(--foreground)" }}
-          >
-            Properties Stats
-          </h2>
+          <div className="w-10 h-10 rounded-xl bg-[rgba(0,1,252,0.08)] flex items-center justify-center">
+            <BarChart3 size={20} style={{ color: "var(--primary)" }} />
+          </div>
+          <div>
+            <h2
+              className="font-display font-semibold text-lg"
+              style={{ color: "var(--foreground)" }}
+            >
+              Revenue Analytics
+            </h2>
+            <p className="text-xs text-muted-foreground mt-0.5">Monthly breakdown</p>
+          </div>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1.5">
-            <div
-              className="w-2.5 h-2.5 rounded-full"
-              style={{ backgroundColor: "var(--primary)" }}
-            />
-            <span className="text-[11px]" style={{ color: "var(--muted-foreground)" }}>
-              All
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div
-              className="w-2.5 h-2.5 rounded-full"
-              style={{ backgroundColor: "var(--success)" }}
-            />
-            <span className="text-[11px]" style={{ color: "var(--muted-foreground)" }}>
-              For Sale
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div
-              className="w-2.5 h-2.5 rounded-full"
-              style={{ backgroundColor: "var(--accent)" }}
-            />
-            <span className="text-[11px]" style={{ color: "var(--muted-foreground)" }}>
-              For Rent
-            </span>
-          </div>
+        <div className="flex bg-secondary/50 p-1.5 rounded-xl text-xs font-semibold">
+          <div className="px-3 py-1.5 rounded-lg bg-background text-foreground shadow-sm">Sales</div>
+          <div className="px-3 py-1.5 text-muted-foreground mr-1">Rents</div>
         </div>
       </div>
 
-      <div className="flex items-end justify-between" style={{ height: chartHeight }}>
-        {years.map((year, idx) => {
-          const saleH = (saleData[idx] / maxVal) * chartHeight;
-          const rentH = (rentData[idx] / maxVal) * chartHeight;
-          return (
-            <div key={year} className="flex flex-col items-center gap-2">
-              <div className="flex items-end" style={{ gap, height: chartHeight }}>
-                <div
-                  className="rounded-t"
-                  style={{
-                    width: barWidth,
-                    height: saleH,
-                    backgroundColor: "var(--primary)",
-                    opacity: 0.85,
-                  }}
-                />
-                <div
-                  className="rounded-t"
-                  style={{
-                    width: barWidth,
-                    height: rentH,
-                    backgroundColor: "var(--accent)",
-                    opacity: 0.7,
-                  }}
-                />
-              </div>
-              <span
-                className="text-[10px] font-medium"
-                style={{ color: "var(--muted-foreground)" }}
-              >
-                {year}
-              </span>
-            </div>
-          );
-        })}
+      <div className="h-[240px] w-full">
+        <RechartsResponsiveContainer width="100%" height="100%">
+          <RechartsAreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+            <defs>
+              <linearGradient id="colorSale" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
+              </linearGradient>
+              <linearGradient id="colorRent" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="var(--accent)" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="var(--accent)" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <RechartsXAxis 
+              dataKey="name" 
+              axisLine={false} 
+              tickLine={false} 
+              tick={{ fontSize: 12, fill: "var(--muted-foreground)" }} 
+              dy={10}
+            />
+            <RechartsYAxis 
+              axisLine={false} 
+              tickLine={false} 
+              tick={{ fontSize: 12, fill: "var(--muted-foreground)" }}
+              tickFormatter={(value) => `₦${value}M`}
+            />
+            <RechartsTooltip
+              contentStyle={{ 
+                backgroundColor: "var(--card)", 
+                borderRadius: "12px", 
+                border: "1px solid var(--border)",
+                boxShadow: "0 4px 20px rgba(0,0,0,0.1)"
+              }}
+              itemStyle={{ color: "var(--foreground)", fontSize: "14px", fontWeight: "bold" }}
+              labelStyle={{ color: "var(--muted-foreground)", fontSize: "12px", marginBottom: "4px" }}
+              cursor={{ stroke: "var(--border)", strokeWidth: 1, strokeDasharray: "4 4" }}
+            />
+            <RechartsArea
+              type="monotone"
+              dataKey="rent"
+              stroke="var(--accent)"
+              strokeWidth={3}
+              fillOpacity={1}
+              fill="url(#colorRent)"
+            />
+            <RechartsArea
+              type="monotone"
+              dataKey="sale"
+              stroke="var(--primary)"
+              strokeWidth={3}
+              fillOpacity={1}
+              fill="url(#colorSale)"
+            />
+          </RechartsAreaChart>
+        </RechartsResponsiveContainer>
       </div>
     </div>
   );
@@ -929,58 +941,35 @@ export default function DashboardPage() {
           ) : (
             <div className="flex items-center gap-8">
               <div className="relative w-36 h-36 shrink-0">
-                <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
-                  {(() => {
-                    let offset = 0;
-                    const items =
-                      byStatus.length > 0
-                        ? byStatus
+                <ResponsiveContainer width="100%" height="100%">
+                  <RadialBarChart
+                    cx="50%"
+                    cy="50%"
+                    innerRadius="70%"
+                    outerRadius="100%"
+                    barSize={14}
+                    data={
+                      byStatus.length > 0 
+                        ? byStatus.map((item: { status: string; count: number }) => ({
+                            name: item.status,
+                            value: item.count,
+                            fill: STATUS_COLORS[item.status] || "#d1d5db"
+                          }))
                         : [
-                            { status: "AVAILABLE", count: 70 },
-                            { status: "SOLD", count: 15 },
-                            { status: "RENTED", count: 10 },
-                            { status: "WITHDRAWN", count: 5 },
-                          ];
-                    const statusTotal =
-                      items.reduce(
-                        (s: number, i: { count: number }) => s + i.count,
-                        0
-                      ) || 1;
-
-                    return items.map(
-                      (item: { status: string; count: number }) => {
-                        const pct = (item.count / statusTotal) * 100;
-                        const circumference = 2 * Math.PI * 40;
-                        const dashArray = `${(pct / 100) * circumference} ${circumference}`;
-                        const dashOffset =
-                          -(offset / 100) * circumference;
-                        const delay = (item.count / statusTotal) * 0.5; // Stagger slightly based on size
-                        const currentOffset = offset;
-                        offset += pct;
-
-                        return (
-                          <motion.circle
-                            key={item.status}
-                            cx="50"
-                            cy="50"
-                            r="40"
-                            fill="none"
-                            stroke={
-                              STATUS_COLORS[item.status] || "#d1d5db"
-                            }
-                            strokeWidth="14"
-                            strokeDasharray={dashArray}
-                            initial={{ strokeDashoffset: circumference }}
-                            whileInView={{ strokeDashoffset: dashOffset }}
-                            viewport={{ once: true }}
-                            transition={{ duration: 1.5, ease: "easeOut", delay: currentOffset * 0.01 }}
-                            strokeLinecap="round"
-                          />
-                        );
-                      }
-                    );
-                  })()}
-                </svg>
+                            { name: "AVAILABLE", value: 70, fill: STATUS_COLORS["AVAILABLE"] },
+                            { name: "SOLD", value: 15, fill: STATUS_COLORS["SOLD"] },
+                            { name: "RENTED", value: 10, fill: STATUS_COLORS["RENTED"] },
+                            { name: "WITHDRAWN", value: 5, fill: STATUS_COLORS["WITHDRAWN"] },
+                          ]
+                    }
+                  >
+                    <RadialBar
+                      background
+                      dataKey="value"
+                      cornerRadius={10}
+                    />
+                  </RadialBarChart>
+                </ResponsiveContainer>
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
                   <AnimatedCounter
                     value={total}
@@ -1001,10 +990,10 @@ export default function DashboardPage() {
                 {(byStatus.length > 0
                   ? byStatus
                   : [
-                      { status: "AVAILABLE", count: 0 },
-                      { status: "SOLD", count: 0 },
-                      { status: "RENTED", count: 0 },
-                      { status: "UNDER_OFFER", count: 0 },
+                      { status: "AVAILABLE", count: 70 },
+                      { status: "SOLD", count: 15 },
+                      { status: "RENTED", count: 10 },
+                      { status: "WITHDRAWN", count: 5 },
                     ]
                 ).map((item: { status: string; count: number }) => (
                   <StatusDot

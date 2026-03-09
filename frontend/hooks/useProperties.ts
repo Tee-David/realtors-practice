@@ -15,7 +15,8 @@ export function useProperties(filters: PropertyFilters = {}) {
         );
         const { data } = await properties.list(cleanFilters);
         return data;
-      } catch (err) {
+      } catch (err: any) {
+        if (process.env.NODE_ENV !== "development") throw err;
         console.warn("Using mock properties due to API fetch failure:", err);
         
         // Client-side filtering of mock data
@@ -76,6 +77,7 @@ export function useProperty(id: string) {
         const { data } = await properties.get(id);
         return data.data;
       } catch (err) {
+        if (process.env.NODE_ENV !== "development") throw err;
         console.warn(`Using mock property for ${id} due to API fetch failure:`, err);
         return MOCK_PROPERTIES.find((p) => p.id === id) || null;
       }
@@ -114,6 +116,7 @@ export function usePropertyStats() {
         const { data } = await properties.stats();
         return data.data;
       } catch (err) {
+        if (process.env.NODE_ENV !== "development") throw err;
         console.warn("Using mock property stats due to API fetch failure:", err);
         return {
           total: MOCK_PROPERTIES.length,

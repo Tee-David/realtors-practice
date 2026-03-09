@@ -89,9 +89,10 @@ export default function PropertiesPage() {
   const { data, isLoading } = useProperties(filters);
 
   const apiProperties = data?.data || [];
-  const properties = apiProperties.length > 0 ? apiProperties : MOCK_PROPERTIES;
-  const total = data?.meta?.total || (apiProperties.length === 0 ? MOCK_PROPERTIES.length : 0);
-  const totalPages = data?.meta?.totalPages || (apiProperties.length === 0 ? 1 : 1);
+  const useMock = process.env.NODE_ENV === "development" && apiProperties.length === 0;
+  const properties = useMock ? MOCK_PROPERTIES : apiProperties;
+  const total = data?.meta?.total || (useMock ? MOCK_PROPERTIES.length : 0);
+  const totalPages = data?.meta?.totalPages || 1;
 
   const selectedProperty = useMemo(
     () => properties.find((p: Property) => p.id === selectedPropertyId) || null,

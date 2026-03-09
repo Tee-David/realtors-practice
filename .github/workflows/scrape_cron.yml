@@ -1,0 +1,22 @@
+name: Scheduled Scraping Workflow
+
+on:
+  schedule:
+    # Run at 1:00 AM UTC every day
+    - cron: '0 1 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  trigger-scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Scrape API
+        run: |
+          if [ -n "${{ secrets.PROD_API_URL }}" ] && [ -n "${{ secrets.INTERNAL_API_KEY }}" ]; then
+            curl -X POST "${{ secrets.PROD_API_URL }}/api/scrape/start" \
+              -H "Content-Type: application/json" \
+              -H "X-Internal-Key: ${{ secrets.INTERNAL_API_KEY }}" \
+              -d '{"type": "SCHEDULED"}'
+          else
+            echo "PROD_API_URL or INTERNAL_API_KEY secret not set. Skipping."
+          fi

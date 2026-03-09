@@ -28,8 +28,12 @@ from utils.logger import get_logger
 
 logger = get_logger("scraper")
 
-# In-memory job tracking
-active_jobs: dict[str, dict[str, Any]] = {}
+from utils.logger import get_logger
+import redis
+
+logger = get_logger("scraper")
+
+redis_client = redis.Redis.from_url(config.redis_url, decode_responses=True)
 
 
 @asynccontextmanager
@@ -92,7 +96,7 @@ async def health():
     return {
         "status": "OK",
         "service": "scraper",
-        "activeJobs": len(active_jobs),
+        "redis_connected": redis_client.ping()
     }
 
 
@@ -102,19 +106,11 @@ async def start_job(
     x_internal_key: str = Header(...),
 ):
     verify_internal_key(x_internal_key)
-
-    if request.jobId in active_jobs:
-        raise HTTPException(status_code=409, detail="Job already running")
-
-    active_jobs[request.jobId] = {
-        "status": "RUNNING",
-        "processed": 0,
-        "total": 0,
-        "errors": 0,
-    }
-
-    # Run scrape in background
-    asyncio.create_task(_run_scrape_job(request))
+    
+    # We no longer start jobs via API (Backend pushes directly to Celery/Redis)
+    # But we keep this for backwards compatibility
+    from tasks import process_job
+    process_job.delay(request.dict())
 
     return {"jobId": request.jobId, "status": "STARTED"}
 
@@ -122,18 +118,16 @@ async def start_job(
 @app.get("/api/jobs/{job_id}")
 async def get_job_status(job_id: str, x_internal_key: str = Header(...)):
     verify_internal_key(x_internal_key)
-    if job_id not in active_jobs:
-        raise HTTPException(status_code=404, detail="Job not found")
-    job = active_jobs[job_id]
-    return JobStatus(jobId=job_id, **job)
+    
+    # Check if job was stopped
+    is_stopped = redis_client.exists(f"job:stop:{job_id}")
+    return JobStatus(jobId=job_id, status="STOPPING" if is_stopped else "UNKNOWN")
 
 
 @app.post("/api/jobs/{job_id}/stop")
 async def stop_job(job_id: str, x_internal_key: str = Header(...)):
     verify_internal_key(x_internal_key)
-    if job_id not in active_jobs:
-        raise HTTPException(status_code=404, detail="Job not found")
-    active_jobs[job_id]["status"] = "STOPPING"
+    redis_client.setex(f"job:stop:{job_id}", 86400, "1") # Expire after 24h
     return {"jobId": job_id, "status": "STOPPING"}
 
 
@@ -150,7 +144,7 @@ async def _run_scrape_job(request: ScrapeJobRequest) -> None:
         await report_log(job_id, "INFO", f"Starting scrape job with {len(request.sites)} site(s)")
 
         for site_idx, site in enumerate(request.sites):
-            if active_jobs.get(job_id, {}).get("status") == "STOPPING":
+            if redis_client.exists(f"job:stop:{job_id}"):
                 await report_log(job_id, "WARN", "Job stopped by user")
                 break
 
@@ -161,7 +155,7 @@ async def _run_scrape_job(request: ScrapeJobRequest) -> None:
                 # Fetch listing pages
                 page_num = 0
                 while page_num < site.maxPages:
-                    if active_jobs.get(job_id, {}).get("status") == "STOPPING":
+                    if redis_client.exists(f"job:stop:{job_id}"):
                         break
 
                     page_url = _build_page_url(site, page_num)
@@ -186,7 +180,7 @@ async def _run_scrape_job(request: ScrapeJobRequest) -> None:
                     for listing_url in listing_urls:
                         if len(site_properties) >= request.maxListingsPerSite:
                             break
-                        if active_jobs.get(job_id, {}).get("status") == "STOPPING":
+                        if redis_client.exists(f"job:stop:{job_id}"):
                             break
 
                         try:
@@ -200,6 +194,18 @@ async def _run_scrape_job(request: ScrapeJobRequest) -> None:
                             if not raw_data:
                                 total_errors += 1
                                 continue
+                                
+                            # LLM Fallback if crucial data is missing (like price, bedrooms, or location)
+                            if not raw_data.get("price_text") or not raw_data.get("bedrooms") or not raw_data.get("location_text"):
+                                await report_log(job_id, "DEBUG", f"Missing data for {listing_url}, attempting LLM fallback...")
+                                from extractors.llm_extractor import extract_with_llm
+                                
+                                # Use description or raw HTML text for LLM (bs4 get_text to strip tags)
+                                from bs4 import BeautifulSoup
+                                soup = BeautifulSoup(listing_html, "lxml")
+                                page_text = soup.get_text(separator=" ", strip=True)
+                                
+                                raw_data = extract_with_llm(page_text, raw_data)
 
                             # NLP: detect listing type
                             raw_data["listingType"] = detect_listing_type(
@@ -237,7 +243,6 @@ async def _run_scrape_job(request: ScrapeJobRequest) -> None:
                             site_properties.append(validated)
 
                             # Update progress
-                            active_jobs[job_id]["processed"] = len(all_properties) + len(site_properties)
                             await report_progress(
                                 job_id,
                                 processed=len(all_properties) + len(site_properties),
@@ -274,13 +279,8 @@ async def _run_scrape_job(request: ScrapeJobRequest) -> None:
         await report_results(job_id, all_properties, stats)
         await report_log(job_id, "INFO", f"Job complete: {len(all_properties)} properties, {total_errors} errors")
 
-        active_jobs[job_id]["status"] = "COMPLETED"
-        active_jobs[job_id]["processed"] = len(all_properties)
-        active_jobs[job_id]["errors"] = total_errors
-
     except Exception as e:
         logger.exception(f"Fatal error in job {job_id}")
-        active_jobs[job_id]["status"] = "FAILED"
         await report_error(job_id, str(e))
 
     finally:

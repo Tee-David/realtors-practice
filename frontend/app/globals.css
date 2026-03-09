@@ -201,3 +201,28 @@ h1, h2, h3, h4, h5, h6 {
     @apply hidden!;
   }
 }
+
+/* ========================================= */
+/* Jotform AI Widget Customizations          */
+/* ========================================= */
+div[id^="JFAgent"], 
+iframe[id^="JFAgent"], 
+iframe[src*="jotfor"], 
+.jf-AgentClientSDK-button {
+  bottom: 100px !important;
+  right: 24px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+@media (min-width: 768px) {
+  div[id^="JFAgent"], 
+  iframe[id^="JFAgent"], 
+  iframe[src*="jotfor"], 
+  .jf-AgentClientSDK-button {
+    bottom: 24px !important;
+    right: 24px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+}

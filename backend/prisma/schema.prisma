@@ -72,6 +72,7 @@ enum ScrapeJobType {
 
 enum UserRole {
   ADMIN
+  PENDING_ADMIN
   EDITOR
   VIEWER
   API_USER
@@ -287,6 +288,8 @@ model Property {
   @@index([listingType, price])
   @@index([category, bedrooms, price])
   @@index([state, area, listingType, price])
+  @@index([listingType, category, status])
+  @@index([isPremium, isFeatured])
 }
 
 model PropertyVersion {

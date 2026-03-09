@@ -41,6 +41,10 @@ async function startServer() {
       Logger.info(`Environment: ${config.env}`);
       Logger.info(`Health check: http://localhost:${PORT}/health`);
       Logger.info(`Socket.io: ws://localhost:${PORT}/ws`);
+      
+      // Initialize Cron Jobs
+      const { CronService } = require("./services/cron.service");
+      CronService.init();
     });
   } catch (error) {
     Logger.error("Failed to start server:", error);

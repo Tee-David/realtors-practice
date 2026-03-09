@@ -14,7 +14,6 @@ export default function AdminRegisterPage() {
     email: "",
     password: "",
     confirmPassword: "",
-    inviteCode: "",
   });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -54,12 +53,6 @@ export default function AdminRegisterPage() {
       setError("Password must be at least 8 characters");
       return;
     }
-    
-    // Admin Security Check
-    if (formData.inviteCode !== process.env.NEXT_PUBLIC_ADMIN_INVITE_CODE) {
-      setError("Invalid admin invite code. Please contact the system administrator.");
-      return;
-    }
 
     setLoading(true);
 
@@ -70,8 +63,7 @@ export default function AdminRegisterPage() {
         data: {
           first_name: formData.firstName,
           last_name: formData.lastName,
-          invite_code: formData.inviteCode,
-          role: "ADMIN",
+          role: "PENDING_ADMIN",
         },
       },
     });
@@ -109,8 +101,7 @@ export default function AdminRegisterPage() {
           Account created
         </h1>
         <p className="text-sm mt-2 leading-relaxed" style={{ color: "var(--muted-foreground)" }}>
-          Check your email to verify your account. Once verified, an administrator will
-          review and activate your access.
+          Your account request has been received. Please check your email to verify your email address. Once verified, a Super Admin will review your details and manually approve your account before you can log in.
         </p>
         <Link
           href="/login"
@@ -352,27 +343,6 @@ export default function AdminRegisterPage() {
           />
         </div>
 
-        {/* Invite code */}
-        <div>
-          <label className="block text-sm font-medium mb-2" style={{ color: "var(--foreground)" }}>
-            Admin invite code
-          </label>
-          <input
-            type="text"
-            value={formData.inviteCode}
-            onChange={(e) => updateField("inviteCode", e.target.value)}
-            required
-            className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-all focus:ring-2"
-            style={{
-              border: "1px solid var(--border)",
-              backgroundColor: "var(--background)",
-              color: "var(--foreground)",
-            }}
-            placeholder="Enter your authorized admin code"
-          />
-        </div>
-
-        {/* Submit */}
         <button
           type="submit"
           disabled={loading}
