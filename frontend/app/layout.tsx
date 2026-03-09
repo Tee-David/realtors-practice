@@ -4,6 +4,7 @@ import "./globals.css";
 import { Toaster } from "sonner";
 import { Providers } from "@/components/providers";
 import SmoothCursor from "@/components/ui/smooth-cursor";
+import { JotformAgent } from "@/components/ui/jotform-agent";
 
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-space-grotesk",
@@ -48,6 +49,7 @@ export default function RootLayout({
             magneticElements="button, a, [role='button'], [data-magnetic]"
             glowEffect={true}
           />
+          <JotformAgent />
           {children}
         </Providers>
         <Toaster richColors position="top-right" duration={5000} />

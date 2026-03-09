@@ -12,10 +12,10 @@ const FullscreenMap = dynamic(
   { ssr: false, loading: () => <div className="w-full h-full bg-secondary animate-pulse" /> }
 );
 import { SideSheet, SideSheetContent } from "@/components/ui/side-sheet";
-import { BottomSheet, BottomSheetContent } from "@/components/ui/bottom-sheet";
+import { BottomSheet, BottomSheetContent, BottomSheetClose } from "@/components/ui/bottom-sheet";
 import { PropertyDetailPanel } from "@/components/property/property-detail-panel";
 import { useSearch } from "@/hooks/use-search";
-import { MapPin, ChevronUp, ChevronDown, Sparkles } from "lucide-react";
+import { MapPin, ChevronUp, ChevronDown, Sparkles, X } from "lucide-react";
 import type { Property, PropertyCategory } from "@/types/property";
 
 const QUICK_SEARCHES = [
@@ -45,6 +45,7 @@ export default function SearchPage() {
   const [isMobile, setIsMobile] = useState(false);
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [hasDismissedSplash, setHasDismissedSplash] = useState(false);
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -138,7 +139,7 @@ export default function SearchPage() {
         />
         
         {/* Top Search Bar Overlay (Only when results are showing) */}
-        {hasSearched && (
+        {(hasSearched || hasDismissedSplash) && (
           <div className="absolute top-4 left-0 right-0 z-10 px-4 md:px-8 pointer-events-none flex justify-center">
              <div className="max-w-3xl w-full pointer-events-auto drop-shadow-xl">
                 <SearchBar onSearch={handleSearch} initialQuery={query} initialCategory={selectedCategory} />
@@ -147,23 +148,30 @@ export default function SearchPage() {
         )}
 
         {/* Results Panel Container */}
-        {hasSearched && (
+        {(hasSearched || hasDismissedSplash) && (
            <>
              {isMobile ? (
                <BottomSheet open={mobileSheetOpen} onOpenChange={setMobileSheetOpen} height="85vh">
                  <BottomSheetContent>
-                   <div className="flex flex-col h-full overflow-hidden">
+                   <div className="flex flex-col h-full overflow-hidden pt-6">
                      {/* Sidebar Header */}
-                     <div className="p-4 border-b shrink-0 flex items-center gap-3">
-                       <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                         <Sparkles size={18} className="text-primary" />
+                     <div className="p-4 border-b shrink-0 flex items-center justify-between gap-3">
+                       <div className="flex items-center gap-3 min-w-0">
+                         <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                           <Sparkles size={18} className="text-primary" />
+                         </div>
+                         <div className="min-w-0">
+                           <h2 className="font-bold text-lg leading-tight truncate">{totalHits} results</h2>
+                           <p className="text-xs text-muted-foreground truncate">
+                             {parsedInfo ? `Showing ${parsedInfo.bedrooms ? `${parsedInfo.bedrooms} bed ` : ""}${parsedInfo.propertyType || 'properties'}` : query}
+                           </p>
+                         </div>
                        </div>
-                       <div className="min-w-0">
-                         <h2 className="font-bold text-lg leading-tight truncate">{totalHits} results</h2>
-                         <p className="text-xs text-muted-foreground truncate">
-                           {parsedInfo ? `Showing ${parsedInfo.bedrooms ? `${parsedInfo.bedrooms} bed ` : ""}${parsedInfo.propertyType || 'properties'}` : query}
-                         </p>
-                       </div>
+                       <BottomSheetClose asChild>
+                         <button className="p-2 rounded-full hover:bg-secondary/80 transition-colors">
+                           <X className="w-5 h-5 text-muted-foreground" />
+                         </button>
+                       </BottomSheetClose>
                      </div>
 
                      {/* Scrollable Results List */}
@@ -241,10 +249,24 @@ export default function SearchPage() {
         )}
 
         {/* Empty State Overlay */}
-        {!hasSearched && (
-           <div className="absolute inset-0 z-10 pointer-events-none flex flex-col items-center justify-center bg-background/20 backdrop-blur-sm">
-              <div className="bg-background/95 backdrop-blur-md p-8 md:p-10 rounded-3xl shadow-2xl border pointer-events-auto max-w-lg w-full text-center flex flex-col items-center mx-4 transition-all hover:shadow-primary/5">
-                 <div className="w-20 h-20 rounded-2xl flex items-center justify-center bg-primary/10 mb-6 rotate-3">
+        {!hasSearched && !hasDismissedSplash && (
+           <div 
+             className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-background/20 backdrop-blur-sm px-4"
+             onClick={(e) => {
+               if (e.target === e.currentTarget) setHasDismissedSplash(true);
+             }}
+           >
+              <div className="bg-background/95 backdrop-blur-md px-6 py-10 sm:px-10 sm:py-12 rounded-[2rem] shadow-2xl border pointer-events-auto max-w-md w-full text-center flex flex-col items-center relative transition-all hover:shadow-primary/5">
+                 
+                 <button 
+                   onClick={() => setHasDismissedSplash(true)}
+                   className="absolute top-4 right-4 p-2 rounded-full hover:bg-secondary/80 transition-colors text-muted-foreground hover:text-foreground"
+                   aria-label="Dismiss"
+                 >
+                   <X size={20} />
+                 </button>
+
+                 <div className="w-20 h-20 rounded-2xl flex items-center justify-center bg-primary/10 mb-6 mt-2 rotate-3">
                     <MapPin size={36} className="text-primary -rotate-3" />
                  </div>
                  <h2 className="font-display font-bold text-2xl md:text-3xl mb-2 text-foreground tracking-tight">

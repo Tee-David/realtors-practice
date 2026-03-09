@@ -54,6 +54,12 @@ export default function AdminRegisterPage() {
       setError("Password must be at least 8 characters");
       return;
     }
+    
+    // Admin Security Check
+    if (formData.inviteCode !== process.env.NEXT_PUBLIC_ADMIN_INVITE_CODE) {
+      setError("Invalid admin invite code. Please contact the system administrator.");
+      return;
+    }
 
     setLoading(true);
 
@@ -349,22 +355,20 @@ export default function AdminRegisterPage() {
         {/* Invite code */}
         <div>
           <label className="block text-sm font-medium mb-2" style={{ color: "var(--foreground)" }}>
-            Invite code
-            <span className="text-xs font-normal ml-1" style={{ color: "var(--muted-foreground)" }}>
-              (optional)
-            </span>
+            Admin invite code
           </label>
           <input
             type="text"
             value={formData.inviteCode}
             onChange={(e) => updateField("inviteCode", e.target.value)}
+            required
             className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-all focus:ring-2"
             style={{
               border: "1px solid var(--border)",
               backgroundColor: "var(--background)",
               color: "var(--foreground)",
             }}
-            placeholder="Enter code if you have one"
+            placeholder="Enter your authorized admin code"
           />
         </div>
 
