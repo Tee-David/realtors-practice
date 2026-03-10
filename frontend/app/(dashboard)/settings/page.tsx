@@ -3,131 +3,73 @@
 import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
 import {
-  User,
-  Shield,
-  Bell,
-  Palette,
-  Info,
-  Eye,
-  EyeOff,
-  Monitor,
-  Sun,
-  Moon,
-  MapPin,
-  Globe,
+  User, Shield, Bell, Palette, Info, Eye, EyeOff, Monitor, Sun, Moon,
+  MapPin, Globe, ChevronRight, ArrowLeft, Save, Link2, Unlink2,
+  Database, Mail, Server, HardDrive, Clock, Trash2, Plus, Download,
+  RefreshCcw, Settings2, Mic, SortAsc, LayoutGrid, FileCode,
+  Users, CheckCircle2, AlertCircle, X,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { ThemeSwitch } from "@/components/ui/theme-switch";
+import { toast } from "sonner";
+import { supabase } from "@/lib/supabase";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type TabId = "profile" | "security" | "notifications" | "preferences" | "about" | "env" | "users";
+type TabId = "profile" | "security" | "notifications" | "preferences" | "data" | "email" | "backup" | "about" | "env" | "users";
 
 interface TabDef {
   id: TabId;
   label: string;
+  description: string;
   icon: React.ElementType;
+  adminOnly?: boolean;
 }
 
 const TABS: TabDef[] = [
-  { id: "profile", label: "My Profile", icon: User },
-  { id: "security", label: "Security", icon: Shield },
-  { id: "notifications", label: "Notifications", icon: Bell },
-  { id: "preferences", label: "Preferences", icon: Palette },
-  { id: "users", label: "User Management", icon: Shield },
-  { id: "env", label: "Environment Config", icon: Monitor },
-  { id: "about", label: "About", icon: Info },
+  { id: "profile", label: "Profile", description: "Personal information & avatar", icon: User },
+  { id: "security", label: "Security", description: "Passwords, 2FA & linked accounts", icon: Shield },
+  { id: "notifications", label: "Notifications", description: "Email & in-app alerts", icon: Bell },
+  { id: "preferences", label: "Appearance", description: "Theme, fonts & colors", icon: Palette },
+  { id: "data", label: "Data & Display", description: "Map, pagination, sorting & voice", icon: Settings2 },
+  { id: "email", label: "Email Settings", description: "Templates & email configuration", icon: Mail },
+  { id: "backup", label: "Backups", description: "Create & manage data backups", icon: HardDrive },
+  { id: "users", label: "User Management", description: "Manage users & roles", icon: Users, adminOnly: true },
+  { id: "env", label: "Environment", description: "Server environment variables", icon: Server, adminOnly: true },
+  { id: "about", label: "About", description: "App info & tech stack", icon: Info },
 ];
 
 // ---------------------------------------------------------------------------
-// Reusable small components
+// Small reusable components
 // ---------------------------------------------------------------------------
 
-function FormField({
-  label,
-  value,
-  type = "text",
-  disabled = true,
-}: {
-  label: string;
-  value: string;
-  type?: string;
-  disabled?: boolean;
-}) {
+function ToggleSwitch({ checked, onChange, disabled = false }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   return (
-    <div className="space-y-1.5">
-      <label className="text-sm font-medium" style={{ color: "var(--foreground)" }}>
-        {label}
-      </label>
-      <Input type={type} defaultValue={value} disabled={disabled} className="max-w-md" />
-    </div>
-  );
-}
-
-function ToggleSwitch({
-  checked,
-  onChange,
-  disabled = false,
-}: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      disabled={disabled}
+    <button type="button" role="switch" aria-checked={checked} disabled={disabled}
       onClick={() => onChange(!checked)}
-      className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-      style={{ backgroundColor: checked ? "var(--primary)" : "var(--muted)" }}
-    >
-      <span
-        className="pointer-events-none inline-block h-5 w-5 rounded-full shadow-lg ring-0 transition-transform duration-200 ease-in-out"
-        style={{
-          backgroundColor: "var(--card)",
-          transform: checked ? "translateX(1.25rem)" : "translateX(0)",
-        }}
-      />
+      className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+      style={{ backgroundColor: checked ? "var(--primary)" : "var(--muted)" }}>
+      <span className="pointer-events-none inline-block h-5 w-5 rounded-full shadow-lg ring-0 transition-transform"
+        style={{ backgroundColor: "var(--card)", transform: checked ? "translateX(1.25rem)" : "translateX(0)" }} />
     </button>
   );
 }
 
-function PasswordInput({
-  label,
-  placeholder,
-}: {
-  label: string;
-  placeholder: string;
-}) {
+function PasswordInput({ label, placeholder, value, onChange }: { label: string; placeholder: string; value?: string; onChange?: (v: string) => void }) {
   const [show, setShow] = useState(false);
-
   return (
     <div className="space-y-1.5">
-      <label className="text-sm font-medium" style={{ color: "var(--foreground)" }}>
-        {label}
-      </label>
+      <label className="text-sm font-medium text-foreground">{label}</label>
       <div className="relative max-w-md">
-        <Input type={show ? "text" : "password"} placeholder={placeholder} />
-        <button
-          type="button"
-          onClick={() => setShow((v) => !v)}
-          className="absolute right-3 top-1/2 -translate-y-1/2"
-          style={{ color: "var(--muted-foreground)" }}
-        >
+        <Input type={show ? "text" : "password"} placeholder={placeholder} value={value} onChange={e => onChange?.(e.target.value)} />
+        <button type="button" onClick={() => setShow(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
           {show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
         </button>
       </div>
@@ -135,74 +77,146 @@ function PasswordInput({
   );
 }
 
+function SettingRow({ label, description, children }: { label: string; description?: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between rounded-lg border p-4 border-border">
+      <div className="min-w-0 flex-1 mr-4">
+        <p className="text-sm font-medium text-foreground">{label}</p>
+        {description && <p className="text-xs text-muted-foreground mt-0.5">{description}</p>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function SectionHeader({ title, description }: { title: string; description?: string }) {
+  return (
+    <div className="mb-4">
+      <h3 className="font-display font-semibold text-foreground">{title}</h3>
+      {description && <p className="text-sm text-muted-foreground mt-0.5">{description}</p>}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
-// Tab content panels
+// Tab Panels
 // ---------------------------------------------------------------------------
 
 function ProfileTab() {
-  const initials = "JD";
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [profile, setProfile] = useState({
+    firstName: "", lastName: "", email: "", phone: "", bio: "", country: "Nigeria", city: "Lagos",
+  });
+
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          setProfile(p => ({
+            ...p,
+            firstName: user.user_metadata?.first_name || user.user_metadata?.full_name?.split(' ')[0] || "",
+            lastName: user.user_metadata?.last_name || user.user_metadata?.full_name?.split(' ').slice(1).join(' ') || "",
+            email: user.email || "",
+            phone: user.phone || user.user_metadata?.phone || "",
+            bio: user.user_metadata?.bio || "",
+            country: user.user_metadata?.country || "Nigeria",
+            city: user.user_metadata?.city || "Lagos",
+          }));
+        }
+      } catch {}
+    };
+    loadProfile();
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const { error } = await supabase.auth.updateUser({
+        data: {
+          first_name: profile.firstName,
+          last_name: profile.lastName,
+          full_name: `${profile.firstName} ${profile.lastName}`,
+          phone: profile.phone,
+          bio: profile.bio,
+          country: profile.country,
+          city: profile.city,
+        },
+      });
+      if (error) throw error;
+      toast.success("Profile updated!");
+      setEditing(false);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update profile");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const initials = (profile.firstName[0] || "") + (profile.lastName[0] || "");
 
   return (
-    <div className="space-y-8">
-      {/* Avatar + name header */}
+    <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <div
-          className="flex size-20 shrink-0 items-center justify-center rounded-full text-2xl font-display font-bold"
-          style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
-        >
-          {initials}
+        <div className="flex size-16 sm:size-20 shrink-0 items-center justify-center rounded-full text-xl sm:text-2xl font-display font-bold bg-primary text-primary-foreground">
+          {initials || "?"}
         </div>
-        <div>
-          <h3 className="text-lg font-display font-semibold" style={{ color: "var(--foreground)" }}>
-            John Doe
+        <div className="min-w-0 flex-1">
+          <h3 className="text-lg font-display font-semibold text-foreground truncate">
+            {profile.firstName} {profile.lastName}
           </h3>
-          <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-            Real Estate Agent
-          </p>
+          <p className="text-sm text-muted-foreground truncate">{profile.email}</p>
+        </div>
+        <Button variant={editing ? "default" : "outline"} size="sm" onClick={() => editing ? handleSave() : setEditing(true)} disabled={saving} className="shrink-0">
+          {saving ? <RefreshCcw className="size-4 animate-spin mr-1" /> : editing ? <Save className="size-4 mr-1" /> : null}
+          {editing ? "Save" : "Edit"}
+        </Button>
+      </div>
+
+      <Separator />
+
+      <div>
+        <SectionHeader title="Personal Information" />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">First Name</label>
+            <Input value={profile.firstName} disabled={!editing} onChange={e => setProfile(p => ({ ...p, firstName: e.target.value }))} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Last Name</label>
+            <Input value={profile.lastName} disabled={!editing} onChange={e => setProfile(p => ({ ...p, lastName: e.target.value }))} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground flex items-center gap-2">
+              Email <span className="text-[10px] text-muted-foreground bg-secondary px-1.5 py-0.5 rounded">Cannot be changed</span>
+            </label>
+            <Input value={profile.email} disabled className="opacity-60" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Phone</label>
+            <Input value={profile.phone} disabled={!editing} onChange={e => setProfile(p => ({ ...p, phone: e.target.value }))} placeholder="+234 801 234 5678" />
+          </div>
+        </div>
+        <div className="mt-4 space-y-1.5">
+          <label className="text-sm font-medium text-foreground">Bio / Role</label>
+          <Input value={profile.bio} disabled={!editing} onChange={e => setProfile(p => ({ ...p, bio: e.target.value }))} placeholder="e.g. Real Estate Agent" />
         </div>
       </div>
 
       <Separator />
 
-      {/* Personal Information */}
       <div>
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="font-display font-semibold" style={{ color: "var(--foreground)" }}>
-            Personal Information
-          </h3>
-          <Button variant="outline" size="sm" disabled>
-            Edit
-          </Button>
-        </div>
-
+        <SectionHeader title="Location" />
         <div className="grid gap-4 sm:grid-cols-2">
-          <FormField label="First Name" value="John" />
-          <FormField label="Last Name" value="Doe" />
-          <FormField label="Email" value="john.doe@example.com" type="email" />
-          <FormField label="Phone" value="+234 801 234 5678" type="tel" />
-        </div>
-
-        <div className="mt-4">
-          <FormField label="Bio / Role" value="Real Estate Agent" />
-        </div>
-      </div>
-
-      <Separator />
-
-      {/* Address */}
-      <div>
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="font-display font-semibold" style={{ color: "var(--foreground)" }}>
-            Address
-          </h3>
-          <Button variant="outline" size="sm" disabled>
-            Edit
-          </Button>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FormField label="Country" value="Nigeria" />
-          <FormField label="City" value="Lagos" />
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Country</label>
+            <Input value={profile.country} disabled={!editing} onChange={e => setProfile(p => ({ ...p, country: e.target.value }))} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">City</label>
+            <Input value={profile.city} disabled={!editing} onChange={e => setProfile(p => ({ ...p, city: e.target.value }))} />
+          </div>
         </div>
       </div>
     </div>
@@ -211,89 +225,115 @@ function ProfileTab() {
 
 function SecurityTab() {
   const [twoFA, setTwoFA] = useState(false);
+  const [currentPw, setCurrentPw] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
+  const [savingPw, setSavingPw] = useState(false);
+  const [googleLinked, setGoogleLinked] = useState(false);
+  const [checkingGoogle, setCheckingGoogle] = useState(true);
+
+  useEffect(() => {
+    const checkGoogle = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const identities = user.identities || [];
+          setGoogleLinked(identities.some(i => i.provider === "google"));
+        }
+      } catch {}
+      setCheckingGoogle(false);
+    };
+    checkGoogle();
+  }, []);
+
+  const handlePasswordChange = async () => {
+    if (newPw !== confirmPw) { toast.error("Passwords don't match"); return; }
+    if (newPw.length < 8) { toast.error("Password must be at least 8 characters"); return; }
+    setSavingPw(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPw });
+      if (error) throw error;
+      toast.success("Password updated!");
+      setCurrentPw(""); setNewPw(""); setConfirmPw("");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update password");
+    } finally { setSavingPw(false); }
+  };
+
+  const handleGoogleLink = async () => {
+    const { error } = await supabase.auth.linkIdentity({ provider: "google", options: { redirectTo: window.location.href } });
+    if (error) toast.error(error.message);
+  };
+
+  const handleGoogleUnlink = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const googleIdentity = user?.identities?.find(i => i.provider === "google");
+      if (!googleIdentity) { toast.error("No Google account linked"); return; }
+      const { error } = await supabase.auth.unlinkIdentity(googleIdentity);
+      if (error) throw error;
+      setGoogleLinked(false);
+      toast.success("Google account unlinked");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to unlink Google");
+    }
+  };
 
   return (
-    <div className="space-y-8">
-      {/* Change Password */}
+    <div className="space-y-6">
       <div>
-        <h3 className="mb-4 font-display font-semibold" style={{ color: "var(--foreground)" }}>
-          Change Password
-        </h3>
-
-        <div className="space-y-4">
-          <PasswordInput label="Current Password" placeholder="Enter current password" />
-          <PasswordInput label="New Password" placeholder="Enter new password" />
-          <PasswordInput label="Confirm New Password" placeholder="Confirm new password" />
+        <SectionHeader title="Change Password" />
+        <div className="space-y-3">
+          <PasswordInput label="Current Password" placeholder="Enter current password" value={currentPw} onChange={setCurrentPw} />
+          <PasswordInput label="New Password" placeholder="Enter new password" value={newPw} onChange={setNewPw} />
+          <PasswordInput label="Confirm New Password" placeholder="Confirm new password" value={confirmPw} onChange={setConfirmPw} />
         </div>
-
-        <Button className="mt-4" disabled>
+        <Button className="mt-4" onClick={handlePasswordChange} disabled={savingPw || !newPw || !confirmPw}>
+          {savingPw ? <RefreshCcw className="size-4 animate-spin mr-1" /> : <Save className="size-4 mr-1" />}
           Update Password
         </Button>
       </div>
 
       <Separator />
 
-      {/* Two-Factor Authentication */}
       <div>
-        <h3 className="mb-1 font-display font-semibold" style={{ color: "var(--foreground)" }}>
-          Two-Factor Authentication
-        </h3>
-        <p className="mb-4 text-sm" style={{ color: "var(--muted-foreground)" }}>
-          Add an extra layer of security to your account.
-        </p>
-
-        <div className="flex items-center justify-between rounded-lg border p-4" style={{ borderColor: "var(--border)" }}>
-          <div>
-            <p className="text-sm font-medium" style={{ color: "var(--foreground)" }}>
-              Enable 2FA
-            </p>
-            <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
-              Coming soon
-            </p>
-          </div>
-          <ToggleSwitch checked={twoFA} onChange={setTwoFA} disabled />
-        </div>
+        <SectionHeader title="Linked Accounts" description="Connect external accounts for easier sign-in." />
+        <SettingRow label="Google Account" description={googleLinked ? "Your Google account is connected" : "Link your Google account for SSO sign-in"}>
+          {checkingGoogle ? (
+            <RefreshCcw className="size-4 animate-spin text-muted-foreground" />
+          ) : googleLinked ? (
+            <Button variant="outline" size="sm" onClick={handleGoogleUnlink} className="gap-1.5 text-red-500 hover:text-red-600 hover:bg-red-500/10">
+              <Unlink2 className="size-3.5" /> Unlink
+            </Button>
+          ) : (
+            <Button variant="outline" size="sm" onClick={handleGoogleLink} className="gap-1.5">
+              <Link2 className="size-3.5" /> Link Google
+            </Button>
+          )}
+        </SettingRow>
       </div>
 
       <Separator />
 
-      {/* Active Sessions */}
       <div>
-        <h3 className="mb-1 font-display font-semibold" style={{ color: "var(--foreground)" }}>
-          Active Sessions
-        </h3>
-        <p className="mb-4 text-sm" style={{ color: "var(--muted-foreground)" }}>
-          Manage devices where you are currently logged in.
-        </p>
+        <SectionHeader title="Two-Factor Authentication" description="Add an extra layer of security." />
+        <SettingRow label="Enable 2FA" description="Coming soon">
+          <ToggleSwitch checked={twoFA} onChange={setTwoFA} disabled />
+        </SettingRow>
+      </div>
 
-        <div className="space-y-3">
+      <Separator />
+
+      <div>
+        <SectionHeader title="Active Sessions" description="Manage devices where you are logged in." />
+        <div className="space-y-2">
           {[
-            { device: "Chrome on Windows", location: "Lagos, Nigeria", current: true },
-            { device: "Safari on iPhone", location: "Lagos, Nigeria", current: false },
-          ].map((session) => (
-            <div
-              key={session.device}
-              className="flex items-center justify-between rounded-lg border p-4"
-              style={{ borderColor: "var(--border)" }}
-            >
-              <div className="flex items-center gap-3">
-                <Globe className="size-5" style={{ color: "var(--muted-foreground)" }} />
-                <div>
-                  <p className="text-sm font-medium" style={{ color: "var(--foreground)" }}>
-                    {session.device}
-                  </p>
-                  <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
-                    {session.location}
-                    {session.current && " \u2014 Current session"}
-                  </p>
-                </div>
-              </div>
-              {!session.current && (
-                <Button variant="outline" size="sm" disabled>
-                  Revoke
-                </Button>
-              )}
-            </div>
+            { device: "Current Browser", location: "This device", current: true },
+          ].map((s) => (
+            <SettingRow key={s.device} label={s.device} description={`${s.location}${s.current ? " — Current session" : ""}`}>
+              {!s.current && <Button variant="outline" size="sm">Revoke</Button>}
+              {s.current && <span className="text-xs text-green-500 font-medium flex items-center gap-1"><CheckCircle2 className="size-3" /> Active</span>}
+            </SettingRow>
           ))}
         </div>
       </div>
@@ -302,70 +342,31 @@ function SecurityTab() {
 }
 
 function NotificationsTab() {
-  const [emailNotifs, setEmailNotifs] = useState(true);
-  const [inAppNotifs, setInAppNotifs] = useState(true);
-  const [scraperAlerts, setScraperAlerts] = useState(false);
-  const [newPropertyAlerts, setNewPropertyAlerts] = useState(true);
-  const [savedSearchAlerts, setSavedSearchAlerts] = useState(false);
+  const [notifs, setNotifs] = useState({
+    email: true, inApp: true, scraper: false, newProperty: true, savedSearch: false,
+  });
 
-  const toggles: { label: string; description: string; checked: boolean; onChange: (v: boolean) => void }[] = [
-    {
-      label: "Email Notifications",
-      description: "Receive important updates via email.",
-      checked: emailNotifs,
-      onChange: setEmailNotifs,
-    },
-    {
-      label: "In-App Notifications",
-      description: "Get notified inside the application.",
-      checked: inAppNotifs,
-      onChange: setInAppNotifs,
-    },
-    {
-      label: "Scraper Alerts",
-      description: "Be notified when a scraping job completes or fails.",
-      checked: scraperAlerts,
-      onChange: setScraperAlerts,
-    },
-    {
-      label: "New Property Alerts",
-      description: "Get alerts when new properties are added.",
-      checked: newPropertyAlerts,
-      onChange: setNewPropertyAlerts,
-    },
-    {
-      label: "Saved Search Match Alerts",
-      description: "Be notified when new listings match your saved searches.",
-      checked: savedSearchAlerts,
-      onChange: setSavedSearchAlerts,
-    },
+  const toggles: { key: keyof typeof notifs; label: string; description: string }[] = [
+    { key: "email", label: "Email Notifications", description: "Receive important updates via email." },
+    { key: "inApp", label: "In-App Notifications", description: "Get notified inside the application." },
+    { key: "scraper", label: "Scraper Alerts", description: "Be notified when scraping jobs complete or fail." },
+    { key: "newProperty", label: "New Property Alerts", description: "Get alerts when new properties are added." },
+    { key: "savedSearch", label: "Saved Search Alerts", description: "Notified when new listings match saved searches." },
   ];
 
-  return (
-    <div className="space-y-2">
-      <h3 className="mb-4 font-display font-semibold" style={{ color: "var(--foreground)" }}>
-        Notification Preferences
-      </h3>
+  const handleSave = () => { localStorage.setItem("rp-notif-prefs", JSON.stringify(notifs)); toast.success("Notification preferences saved!"); };
 
-      <div className="space-y-1">
-        {toggles.map((t) => (
-          <div
-            key={t.label}
-            className="flex items-center justify-between rounded-lg border p-4"
-            style={{ borderColor: "var(--border)" }}
-          >
-            <div>
-              <p className="text-sm font-medium" style={{ color: "var(--foreground)" }}>
-                {t.label}
-              </p>
-              <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
-                {t.description}
-              </p>
-            </div>
-            <ToggleSwitch checked={t.checked} onChange={t.onChange} />
-          </div>
+  return (
+    <div className="space-y-4">
+      <SectionHeader title="Notification Preferences" />
+      <div className="space-y-2">
+        {toggles.map(t => (
+          <SettingRow key={t.key} label={t.label} description={t.description}>
+            <ToggleSwitch checked={notifs[t.key]} onChange={v => setNotifs(p => ({ ...p, [t.key]: v }))} />
+          </SettingRow>
         ))}
       </div>
+      <Button onClick={handleSave} className="gap-1.5"><Save className="size-4" /> Save Preferences</Button>
     </div>
   );
 }
@@ -374,327 +375,318 @@ import { useThemeConfig } from "@/components/theme-config-provider";
 
 function PreferencesTab() {
   const { theme, setTheme } = useTheme();
-  const { 
-    primaryLight, primaryDark, setPrimaryLight, setPrimaryDark, 
-    fontDisplay, setFontDisplay, fontBody, setFontBody, resetTheme 
-  } = useThemeConfig();
+  const { primaryLight, primaryDark, setPrimaryLight, setPrimaryDark, fontDisplay, setFontDisplay, fontBody, setFontBody, resetTheme } = useThemeConfig();
+  const FONTS = ["Space Grotesk", "Outfit", "Inter", "Roboto", "Poppins", "Montserrat", "Open Sans", "Lato", "Plus Jakarta Sans"];
 
+  const handleSave = () => { toast.success("Appearance settings are saved automatically."); };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <SectionHeader title="Appearance" description="Customize how the app looks." />
+          <Button variant="outline" size="sm" onClick={resetTheme}>Reset</Button>
+        </div>
+
+        <div className="space-y-6 bg-secondary/20 p-4 sm:p-5 rounded-xl border border-border/50">
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-foreground">Base Theme</label>
+            <div className="flex gap-2">
+              {[{ value: "light", label: "Light", Icon: Sun }, { value: "dark", label: "Dark", Icon: Moon }, { value: "system", label: "System", Icon: Monitor }].map(({ value, label, Icon }) => (
+                <Button key={value} variant={theme === value ? "default" : "outline"} size="sm" onClick={() => setTheme(value)} className="gap-1.5 flex-1">
+                  <Icon className="size-4" /> {label}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">Display Font</label>
+              <Select value={fontDisplay} onValueChange={setFontDisplay}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{FONTS.map(f => <SelectItem key={f} value={f} style={{ fontFamily: `"${f}", sans-serif` }}>{f}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">Body Font</label>
+              <Select value={fontBody} onValueChange={setFontBody}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{FONTS.map(f => <SelectItem key={f} value={f} style={{ fontFamily: `"${f}", sans-serif` }}>{f}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="pt-3 border-t border-border/50">
+            <label className="text-sm font-medium text-foreground block mb-3">Brand Colors</label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs text-muted-foreground mb-1.5">Light Mode Primary</p>
+                <div className="flex items-center gap-2">
+                  <input type="color" value={primaryLight} onChange={e => setPrimaryLight(e.target.value)} className="w-10 h-10 rounded border-0 cursor-pointer p-0 bg-transparent" />
+                  <Input value={primaryLight} onChange={e => setPrimaryLight(e.target.value)} className="font-mono text-xs uppercase" />
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1.5">Dark Mode Primary</p>
+                <div className="flex items-center gap-2">
+                  <input type="color" value={primaryDark} onChange={e => setPrimaryDark(e.target.value)} className="w-10 h-10 rounded border-0 cursor-pointer p-0 bg-transparent" />
+                  <Input value={primaryDark} onChange={e => setPrimaryDark(e.target.value)} className="font-mono text-xs uppercase" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <Button onClick={handleSave} className="gap-1.5"><Save className="size-4" /> Save Appearance</Button>
+    </div>
+  );
+}
+
+function DataDisplayTab() {
   const [mapProvider, setMapProvider] = useState("osm");
   const [perPage, setPerPage] = useState("24");
   const [sortOrder, setSortOrder] = useState("newest");
   const [autoSubmitVoice, setAutoSubmitVoice] = useState(false);
 
-  // Load initial settings from localStorage on mount
   useEffect(() => {
-    const savedAutoSubmit = localStorage.getItem("realtors_auto_submit_voice");
-    if (savedAutoSubmit) {
-      setAutoSubmitVoice(savedAutoSubmit === "true");
-    }
-    const savedMapProvider = localStorage.getItem("map-provider-storage");
-    if (savedMapProvider) {
-      try {
-        const parsed = JSON.parse(savedMapProvider);
-        if (parsed?.state?.provider) setMapProvider(parsed.state.provider);
-      } catch (e) {}
-    }
+    const saved = localStorage.getItem("realtors_auto_submit_voice");
+    if (saved) setAutoSubmitVoice(saved === "true");
+    const savedMap = localStorage.getItem("map-provider-storage");
+    if (savedMap) { try { const p = JSON.parse(savedMap); if (p?.state?.provider) setMapProvider(p.state.provider); } catch {} }
+    const savedPerPage = localStorage.getItem("rp-per-page");
+    if (savedPerPage) setPerPage(savedPerPage);
+    const savedSort = localStorage.getItem("rp-sort-order");
+    if (savedSort) setSortOrder(savedSort);
   }, []);
 
-  const handleAutoSubmitVoiceChange = (val: boolean) => {
-    setAutoSubmitVoice(val);
-    localStorage.setItem("realtors_auto_submit_voice", val.toString());
+  const handleSave = () => {
+    localStorage.setItem("realtors_auto_submit_voice", autoSubmitVoice.toString());
+    localStorage.setItem("rp-per-page", perPage);
+    localStorage.setItem("rp-sort-order", sortOrder);
+    toast.success("Display settings saved!");
   };
 
-  const FONTS = [
-    "Space Grotesk", "Outfit", "Inter", "Roboto", "Poppins", 
-    "Montserrat", "Open Sans", "Lato", "Plus Jakarta Sans"
-  ];
-
   return (
-    <div className="space-y-8">
-
-      {/* Theme */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="mb-1 font-display font-semibold" style={{ color: "var(--foreground)" }}>
-              Appearance
-            </h3>
-            <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-              Customize how the app looks.
-            </p>
-          </div>
-          <Button variant="outline" size="sm" onClick={resetTheme}>Reset Defaults</Button>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-zinc-500/5 p-5 rounded-2xl border border-border/50">
-          
-          {/* Base Mode */}
-          <div className="space-y-3">
-             <label className="text-sm font-medium" style={{ color: "var(--foreground)" }}>Base Theme</label>
-             <div className="flex gap-2">
-                {[
-                  { value: "light", label: "Light", Icon: Sun },
-                  { value: "dark", label: "Dark", Icon: Moon },
-                  { value: "system", label: "System", Icon: Monitor },
-                ].map(({ value, label, Icon }) => (
-                  <Button
-                    key={value}
-                    variant={theme === value ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setTheme(value)}
-                    className="gap-1.5 flex-1"
-                  >
-                    <Icon className="size-4" />
-                    {label}
-                  </Button>
-                ))}
-              </div>
-          </div>
-
-          {/* Typography */}
-          <div className="space-y-3 mt-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <label className="text-sm font-medium" style={{ color: "var(--foreground)" }}>Display Font</label>
-                <Select value={fontDisplay} onValueChange={setFontDisplay}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-[250px] overflow-y-auto">
-                    {FONTS.map(f => <SelectItem key={f} value={f} style={{ fontFamily: `"${f}", sans-serif` }}>{f}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium" style={{ color: "var(--foreground)" }}>Body Font</label>
-                <Select value={fontBody} onValueChange={setFontBody}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-[250px] overflow-y-auto">
-                    {FONTS.map(f => <SelectItem key={f} value={f} style={{ fontFamily: `"${f}", sans-serif` }}>{f}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-
-          {/* Accent Colors */}
-          <div className="col-span-1 md:col-span-2 pt-4 border-t border-border/50">
-            <label className="text-sm font-medium block mb-3" style={{ color: "var(--foreground)" }}>Brand Colors</label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-               <div>
-                  <p className="text-xs text-muted-foreground mb-1.5">Light Mode Primary</p>
-                  <div className="flex items-center gap-2">
-                    <input 
-                      type="color" 
-                      value={primaryLight} 
-                      onChange={(e) => setPrimaryLight(e.target.value)}
-                      className="w-10 h-10 rounded border-0 cursor-pointer p-0 bg-transparent"
-                    />
-                    <Input 
-                      value={primaryLight} 
-                      onChange={(e) => setPrimaryLight(e.target.value)}
-                      className="font-mono text-xs uppercase"
-                    />
-                  </div>
-               </div>
-               <div>
-                  <p className="text-xs text-muted-foreground mb-1.5">Dark Mode Primary</p>
-                  <div className="flex items-center gap-2">
-                    <input 
-                      type="color" 
-                      value={primaryDark} 
-                      onChange={(e) => setPrimaryDark(e.target.value)}
-                      className="w-10 h-10 rounded border-0 cursor-pointer p-0 bg-transparent"
-                    />
-                    <Input 
-                      value={primaryDark} 
-                      onChange={(e) => setPrimaryDark(e.target.value)}
-                      className="font-mono text-xs uppercase"
-                    />
-                  </div>
-               </div>
-            </div>
-          </div>
-        </div>
-      </div>
+    <div className="space-y-6">
+      <SectionHeader title="Map Provider" description="Select the map service used across the application." />
+      <SettingRow label="Provider" description="OpenStreetMap is free and doesn't require API keys">
+        <Select value={mapProvider} onValueChange={setMapProvider}>
+          <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="osm">OpenStreetMap</SelectItem>
+            <SelectItem value="mapbox">Mapbox</SelectItem>
+            <SelectItem value="google">Google Maps</SelectItem>
+          </SelectContent>
+        </Select>
+      </SettingRow>
 
       <Separator />
 
-      {/* Default Map Provider */}
-      <div>
-        <h3 className="mb-1 font-display font-semibold" style={{ color: "var(--foreground)" }}>
-          Default Map Provider
-        </h3>
-        <p className="mb-4 text-sm" style={{ color: "var(--muted-foreground)" }}>
-          Select the map service used across the application.
-        </p>
-
-        <div className="flex items-center gap-3">
-          <MapPin className="size-5" style={{ color: "var(--muted-foreground)" }} />
-          <Select value={mapProvider} onValueChange={setMapProvider}>
-            <SelectTrigger className="w-48">
-              <SelectValue />
-            </SelectTrigger>
+      <SectionHeader title="Properties" />
+      <div className="space-y-2">
+        <SettingRow label="Per Page" description="Number of property listings per page">
+          <Select value={perPage} onValueChange={setPerPage}>
+            <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="osm">OpenStreetMap (Free)</SelectItem>
-              <SelectItem value="mapbox">Mapbox</SelectItem>
-              <SelectItem value="google">Google Maps</SelectItem>
+              {["12", "24", "48", "96"].map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}
             </SelectContent>
           </Select>
+        </SettingRow>
+        <SettingRow label="Default Sort" description="How listings are ordered by default">
+          <Select value={sortOrder} onValueChange={setSortOrder}>
+            <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="newest">Newest First</SelectItem>
+              <SelectItem value="oldest">Oldest First</SelectItem>
+              <SelectItem value="price-asc">Price: Low → High</SelectItem>
+              <SelectItem value="price-desc">Price: High → Low</SelectItem>
+            </SelectContent>
+          </Select>
+        </SettingRow>
+      </div>
+
+      <Separator />
+
+      <SectionHeader title="Voice Search" />
+      <SettingRow label="Auto-Submit" description="Automatically submit when you finish speaking">
+        <ToggleSwitch checked={autoSubmitVoice} onChange={setAutoSubmitVoice} />
+      </SettingRow>
+
+      <Button onClick={handleSave} className="gap-1.5"><Save className="size-4" /> Save Settings</Button>
+    </div>
+  );
+}
+
+function EmailSettingsTab() {
+  const [smtpHost, setSmtpHost] = useState("");
+  const [smtpPort, setSmtpPort] = useState("587");
+  const [smtpUser, setSmtpUser] = useState("");
+  const [smtpPass, setSmtpPass] = useState("");
+  const [fromEmail, setFromEmail] = useState("");
+  const [fromName, setFromName] = useState("Realtors' Practice");
+
+  const handleSave = () => { toast.success("Email settings saved! (Backend integration pending)"); };
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader title="SMTP Configuration" description="Configure outgoing email server for notifications and alerts." />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground">SMTP Host</label>
+          <Input value={smtpHost} onChange={e => setSmtpHost(e.target.value)} placeholder="smtp.resend.com" />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground">SMTP Port</label>
+          <Input value={smtpPort} onChange={e => setSmtpPort(e.target.value)} placeholder="587" />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground">Username</label>
+          <Input value={smtpUser} onChange={e => setSmtpUser(e.target.value)} placeholder="resend" />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground">Password / API Key</label>
+          <Input type="password" value={smtpPass} onChange={e => setSmtpPass(e.target.value)} placeholder="re_..." />
         </div>
       </div>
 
       <Separator />
 
-      {/* Properties per page */}
-      <div>
-        <h3 className="mb-1 font-display font-semibold" style={{ color: "var(--foreground)" }}>
-          Properties Per Page
-        </h3>
-        <p className="mb-4 text-sm" style={{ color: "var(--muted-foreground)" }}>
-          Number of property listings displayed per page.
-        </p>
-
-        <Select value={perPage} onValueChange={setPerPage}>
-          <SelectTrigger className="w-32">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="12">12</SelectItem>
-            <SelectItem value="24">24</SelectItem>
-            <SelectItem value="48">48</SelectItem>
-            <SelectItem value="96">96</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      <Separator />
-
-      {/* Default Sort Order */}
-      <div>
-        <h3 className="mb-1 font-display font-semibold" style={{ color: "var(--foreground)" }}>
-          Default Sort Order
-        </h3>
-        <p className="mb-4 text-sm" style={{ color: "var(--muted-foreground)" }}>
-          How property listings are ordered by default.
-        </p>
-
-        <Select value={sortOrder} onValueChange={setSortOrder}>
-          <SelectTrigger className="w-48">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="newest">Newest First</SelectItem>
-            <SelectItem value="oldest">Oldest First</SelectItem>
-            <SelectItem value="price-asc">Price: Low to High</SelectItem>
-            <SelectItem value="price-desc">Price: High to Low</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      <Separator />
-
-      {/* Voice Search Auto-submit */}
-      <div>
-        <h3 className="mb-1 font-display font-semibold" style={{ color: "var(--foreground)" }}>
-          Voice Search Auto-Submit
-        </h3>
-        <p className="mb-4 text-sm" style={{ color: "var(--muted-foreground)" }}>
-          Automatically submit search queries when you finish speaking.
-        </p>
-
-        <div className="flex items-center justify-between rounded-lg border p-4 max-w-sm" style={{ borderColor: "var(--border)" }}>
-          <div>
-            <p className="text-sm font-medium" style={{ color: "var(--foreground)" }}>
-              Enable Auto-Submit
-            </p>
-          </div>
-          <ToggleSwitch checked={autoSubmitVoice} onChange={handleAutoSubmitVoiceChange} />
+      <SectionHeader title="Sender Information" />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground">From Email</label>
+          <Input value={fromEmail} onChange={e => setFromEmail(e.target.value)} placeholder="noreply@realtorspractice.com" />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground">From Name</label>
+          <Input value={fromName} onChange={e => setFromName(e.target.value)} placeholder="Realtors' Practice" />
         </div>
       </div>
+
+      <Separator />
+
+      <SectionHeader title="Email Templates" description="Configure templates for different notification types." />
+      <div className="space-y-2">
+        {["New Property Alert", "Saved Search Match", "Scraper Job Complete", "Welcome Email", "Password Reset"].map(t => (
+          <SettingRow key={t} label={t} description="Default template">
+            <Button variant="outline" size="sm" disabled>Edit Template</Button>
+          </SettingRow>
+        ))}
+      </div>
+
+      <Button onClick={handleSave} className="gap-1.5"><Save className="size-4" /> Save Email Settings</Button>
+    </div>
+  );
+}
+
+function BackupTab() {
+  const [backups] = useState<{ id: string; date: string; size: string; type: string }[]>([]);
+  const [autoBackup, setAutoBackup] = useState(false);
+  const [backupFreq, setBackupFreq] = useState("weekly");
+
+  const handleCreateBackup = () => { toast.success("Manual backup initiated! (Backend integration pending)"); };
+  const handleSave = () => { toast.success("Backup settings saved!"); };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <SectionHeader title="Data Backups" description="Create and manage database backups." />
+        <Button onClick={handleCreateBackup} className="gap-1.5 shrink-0">
+          <Plus className="size-4" /> Create Backup
+        </Button>
+      </div>
+
+      <div className="space-y-2">
+        <SettingRow label="Automatic Backups" description="Schedule regular automated backups">
+          <ToggleSwitch checked={autoBackup} onChange={setAutoBackup} />
+        </SettingRow>
+        {autoBackup && (
+          <SettingRow label="Frequency" description="How often to run automatic backups">
+            <Select value={backupFreq} onValueChange={setBackupFreq}>
+              <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="daily">Daily</SelectItem>
+                <SelectItem value="weekly">Weekly</SelectItem>
+                <SelectItem value="monthly">Monthly</SelectItem>
+              </SelectContent>
+            </Select>
+          </SettingRow>
+        )}
+      </div>
+
+      <Separator />
+
+      <SectionHeader title="Backup History" />
+      {backups.length === 0 ? (
+        <div className="py-12 text-center text-muted-foreground border border-dashed rounded-lg">
+          <HardDrive className="size-8 mx-auto mb-3 opacity-30" />
+          <p className="text-sm font-medium">No backups yet</p>
+          <p className="text-xs mt-1">Create your first backup to get started.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {backups.map(b => (
+            <SettingRow key={b.id} label={`${b.type} Backup`} description={`${b.date} • ${b.size}`}>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm"><Download className="size-3.5" /></Button>
+                <Button variant="outline" size="sm" className="text-red-500"><Trash2 className="size-3.5" /></Button>
+              </div>
+            </SettingRow>
+          ))}
+        </div>
+      )}
+
+      <Button onClick={handleSave} className="gap-1.5"><Save className="size-4" /> Save Backup Settings</Button>
     </div>
   );
 }
 
 function AboutTab() {
-  const info: { label: string; value: string }[] = [
+  const info = [
     { label: "App Name", value: "Realtors' Practice" },
     { label: "Version", value: "3.0.0" },
     { label: "Developed By", value: "WDC Solutions Hub" },
-    { label: "Frontend", value: "Next.js 15 / React 19" },
+    { label: "Frontend", value: "Next.js 16 / React 19" },
     { label: "Backend", value: "Node.js / Express / Prisma" },
     { label: "Database", value: "CockroachDB" },
     { label: "Search Engine", value: "Meilisearch" },
+    { label: "Scraper", value: "Python / Playwright / Celery" },
   ];
 
   return (
     <div className="space-y-6">
-      <div>
-        <h3 className="mb-1 font-display font-semibold" style={{ color: "var(--foreground)" }}>
-          Application Information
-        </h3>
-        <p className="mb-4 text-sm" style={{ color: "var(--muted-foreground)" }}>
-          Details about this installation.
-        </p>
-      </div>
-
+      <SectionHeader title="Application Information" description="Details about this installation." />
       <div className="space-y-1">
-        {info.map((item) => (
-          <div
-            key={item.label}
-            className="flex items-center justify-between rounded-lg border p-4"
-            style={{ borderColor: "var(--border)" }}
-          >
-            <span className="text-sm font-medium" style={{ color: "var(--foreground)" }}>
-              {item.label}
-            </span>
-            <span className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-              {item.value}
-            </span>
-          </div>
+        {info.map(item => (
+          <SettingRow key={item.label} label={item.label}><span className="text-sm text-muted-foreground">{item.value}</span></SettingRow>
         ))}
       </div>
-
       <Separator />
-
-      <p className="text-xs leading-relaxed" style={{ color: "var(--muted-foreground)" }}>
-        Realtors' Practice is a comprehensive Nigerian property intelligence platform. It provides automated scraping, data validation, property enrichment, advanced search, and intelligent analytics for real estate listings across Nigeria. Built to empower modern realtors with actionable property insights.
+      <p className="text-xs text-muted-foreground leading-relaxed">
+        Realtors&apos; Practice is a comprehensive Nigerian property intelligence platform providing automated scraping, data validation, enrichment, advanced search, and analytics for real estate listings across Nigeria.
       </p>
     </div>
   );
 }
-
-import { toast } from "sonner";
 
 function EnvConfigTab() {
   const [rawEnv, setRawEnv] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    fetchEnv();
-  }, []);
+  useEffect(() => { fetchEnv(); }, []);
 
   const fetchEnv = async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem("realtors_token");
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/env`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/env`, { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
-      if (data.success) {
-        setRawEnv(data.data.raw);
-      } else {
-        toast.error(data.message || "Failed to load environment variables");
-      }
-    } catch (err: any) {
-      toast.error(err.message || "Error connecting to server");
-    } finally {
-      setLoading(false);
-    }
+      if (data.success) setRawEnv(data.data.raw);
+      else toast.error(data.message || "Failed to load env vars");
+    } catch (err: any) { toast.error(err.message || "Error connecting to server"); }
+    finally { setLoading(false); }
   };
 
   const saveEnv = async () => {
@@ -703,55 +695,32 @@ function EnvConfigTab() {
       const token = localStorage.getItem("realtors_token");
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/env`, {
         method: "PUT",
-        headers: { 
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}` 
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ rawContent: rawEnv })
       });
       const data = await res.json();
-      if (data.success) {
-        toast.success(data.message || "Environment variables saved successfully. Server may require restart.");
-      } else {
-        toast.error(data.message || "Failed to save environment variables");
-      }
-    } catch (err: any) {
-      toast.error(err.message || "Error saving environment variables");
-    } finally {
-      setSaving(false);
-    }
+      if (data.success) toast.success(data.message || "Environment variables saved.");
+      else toast.error(data.message || "Failed to save");
+    } catch (err: any) { toast.error(err.message || "Error saving"); }
+    finally { setSaving(false); }
   };
 
   return (
-    <div className="space-y-6 flex flex-col h-[600px]">
-      <div>
-        <h3 className="mb-1 font-display font-semibold text-destructive flex items-center gap-2">
-          <Shield className="size-4" /> Danger Zone: Environment Variables
-        </h3>
-        <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-          Modify server-side and client-side secrets. Syntax errors or invalid database URLs may break the platform. Changes are validated before saving.
-        </p>
-      </div>
-
+    <div className="space-y-4 flex flex-col" style={{ minHeight: "500px" }}>
+      <SectionHeader title="Environment Variables" description="Modify server-side and client-side secrets. Use caution — syntax errors may break the platform." />
       <div className="flex-1 min-h-0 relative">
         {loading ? (
-          <div className="absolute inset-0 flex items-center justify-center bg-card/50">Loading config...</div>
+          <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">Loading...</div>
         ) : (
-          <textarea 
-             value={rawEnv}
-             onChange={(e) => setRawEnv(e.target.value)}
-             className="w-full h-full p-4 font-mono text-sm bg-zinc-950 text-emerald-400 rounded-lg border focus:ring-primary focus:border-primary resize-none"
-             spellCheck={false}
-             placeholder="DATABASE_URL=..."
-          />
+          <textarea value={rawEnv} onChange={e => setRawEnv(e.target.value)}
+            className="w-full h-full min-h-[400px] p-4 font-mono text-sm bg-zinc-950 text-emerald-400 rounded-lg border focus:ring-primary resize-none"
+            spellCheck={false} placeholder="DATABASE_URL=..." />
         )}
       </div>
-
-      <div className="flex justify-end pt-2">
-         <Button onClick={saveEnv} disabled={loading || saving} className="gap-2">
-           {saving ? "Validating & Saving..." : "Save Configuration"}
-         </Button>
-      </div>
+      <Button onClick={saveEnv} disabled={loading || saving} className="gap-1.5 self-end">
+        {saving ? <RefreshCcw className="size-4 animate-spin" /> : <Save className="size-4" />}
+        {saving ? "Saving..." : "Save Configuration"}
+      </Button>
     </div>
   );
 }
@@ -760,26 +729,17 @@ function UserAdminTab() {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    fetchUsers();
-  }, []);
+  useEffect(() => { fetchUsers(); }, []);
 
   const fetchUsers = async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem("realtors_token");
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users`, { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
-      if (data.success) {
-        setUsers(data.data);
-      }
-    } catch (err: any) {
-      toast.error("Failed to fetch users");
-    } finally {
-      setLoading(false);
-    }
+      if (data.success) setUsers(data.data);
+    } catch { toast.error("Failed to fetch users"); }
+    finally { setLoading(false); }
   };
 
   const updateRole = async (id: string, newRole: string) => {
@@ -787,91 +747,62 @@ function UserAdminTab() {
       const token = localStorage.getItem("realtors_token");
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/${id}/role`, {
         method: "PATCH",
-        headers: { 
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}` 
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ role: newRole })
       });
       const data = await res.json();
-      if (data.success) {
-        toast.success(`User role updated to ${newRole}`);
-        fetchUsers();
-      } else {
-        toast.error(data.message || "Failed to update role");
-      }
-    } catch (err: any) {
-      toast.error("Error updating role");
-    }
+      if (data.success) { toast.success(`Role updated to ${newRole}`); fetchUsers(); }
+      else toast.error(data.message || "Failed to update role");
+    } catch { toast.error("Error updating role"); }
   };
 
   return (
     <div className="space-y-6">
-      <div>
-        <h3 className="mb-1 font-display font-semibold" style={{ color: "var(--foreground)" }}>
-          User Management
-        </h3>
-        <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-          Manage user roles and approve pending administrators.
-        </p>
-      </div>
-
-      <div className="rounded-md border overflow-hidden">
+      <SectionHeader title="User Management" description="Manage user roles and approve pending admins." />
+      <div className="rounded-lg border overflow-hidden">
         {loading ? (
-           <div className="p-8 text-center text-muted-foreground">Loading users...</div>
+          <div className="p-8 text-center text-muted-foreground">Loading users...</div>
         ) : (
-          <table className="w-full text-sm text-left">
-            <thead className="bg-muted/50 text-muted-foreground">
-              <tr>
-                <th className="px-4 py-3 font-medium">User</th>
-                <th className="px-4 py-3 font-medium">Role</th>
-                <th className="px-4 py-3 font-medium">Joined</th>
-                <th className="px-4 py-3 font-medium text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {users.map(u => (
-                <tr key={u.id} className="bg-card">
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-foreground">{u.firstName} {u.lastName}</div>
-                    <div className="text-xs text-muted-foreground">{u.email}</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      u.role === 'ADMIN' ? 'bg-primary/10 text-primary' :
-                      u.role === 'PENDING_ADMIN' ? 'bg-amber-500/10 text-amber-500' :
-                      'bg-muted text-muted-foreground'
-                    }`}>
-                      {u.role}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {new Date(u.createdAt).toLocaleDateString()}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <Select value={u.role} onValueChange={(val) => updateRole(u.id, val)}>
-                      <SelectTrigger className="w-[140px] h-8 ml-auto">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                         <SelectItem value="ADMIN">Admin</SelectItem>
-                         <SelectItem value="PENDING_ADMIN">Pending Admin</SelectItem>
-                         <SelectItem value="EDITOR">Editor</SelectItem>
-                         <SelectItem value="VIEWER">Viewer</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </td>
-                </tr>
-              ))}
-              {users.length === 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-secondary/50 text-muted-foreground">
                 <tr>
-                  <td colSpan={4} className="p-8 text-center text-muted-foreground">
-                    No users found.
-                  </td>
+                  <th className="px-4 py-3 text-left font-medium">User</th>
+                  <th className="px-4 py-3 text-left font-medium">Role</th>
+                  <th className="px-4 py-3 text-left font-medium hidden sm:table-cell">Joined</th>
+                  <th className="px-4 py-3 text-right font-medium">Actions</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {users.map(u => (
+                  <tr key={u.id}>
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-foreground">{u.firstName} {u.lastName}</div>
+                      <div className="text-xs text-muted-foreground">{u.email}</div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${u.role === 'ADMIN' ? 'bg-primary/10 text-primary' : u.role === 'PENDING_ADMIN' ? 'bg-amber-500/10 text-amber-500' : 'bg-muted text-muted-foreground'}`}>
+                        {u.role}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground hidden sm:table-cell">{new Date(u.createdAt).toLocaleDateString()}</td>
+                    <td className="px-4 py-3 text-right">
+                      <Select value={u.role} onValueChange={val => updateRole(u.id, val)}>
+                        <SelectTrigger className="w-[130px] h-8 ml-auto"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ADMIN">Admin</SelectItem>
+                          <SelectItem value="PENDING_ADMIN">Pending</SelectItem>
+                          <SelectItem value="EDITOR">Editor</SelectItem>
+                          <SelectItem value="VIEWER">Viewer</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </td>
+                  </tr>
+                ))}
+                {users.length === 0 && <tr><td colSpan={4} className="p-8 text-center text-muted-foreground">No users found.</td></tr>}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>
@@ -882,75 +813,132 @@ function UserAdminTab() {
 // Main Settings Page
 // ---------------------------------------------------------------------------
 
+const TAB_COMPONENTS: Record<TabId, React.FC> = {
+  profile: ProfileTab,
+  security: SecurityTab,
+  notifications: NotificationsTab,
+  preferences: PreferencesTab,
+  data: DataDisplayTab,
+  email: EmailSettingsTab,
+  backup: BackupTab,
+  about: AboutTab,
+  env: EnvConfigTab,
+  users: UserAdminTab,
+};
+
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<TabId>("profile");
+  const [activeTab, setActiveTab] = useState<TabId | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
-    // Basic frontend check. Real security is handled by backend.
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
+  useEffect(() => {
     const checkRole = async () => {
       try {
         const token = localStorage.getItem("realtors_token");
         if (!token) return;
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/me`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/me`, { headers: { Authorization: `Bearer ${token}` } });
         const data = await res.json();
-        if (data.success && data.data?.role === "ADMIN") {
-          setIsAdmin(true);
-        }
-      } catch (err) {}
+        if (data.success && data.data?.role === "ADMIN") setIsAdmin(true);
+      } catch {}
     };
     checkRole();
   }, []);
 
-  const visibleTabs = TABS.filter(t => {
-    if (t.id === "env" || t.id === "users") return isAdmin;
-    return true;
-  });
+  // On desktop, default to profile tab
+  useEffect(() => {
+    if (!isMobile && activeTab === null) setActiveTab("profile");
+  }, [isMobile, activeTab]);
 
-  const ActivePanel = {
-    profile: ProfileTab,
-    security: SecurityTab,
-    notifications: NotificationsTab,
-    preferences: PreferencesTab,
-    env: EnvConfigTab,
-    users: UserAdminTab,
-    about: AboutTab,
-  }[activeTab] || ProfileTab;
+  const visibleTabs = TABS.filter(t => !t.adminOnly || isAdmin);
+  const ActivePanel = activeTab ? TAB_COMPONENTS[activeTab] : null;
+  const activeTabDef = visibleTabs.find(t => t.id === activeTab);
 
+  // Mobile: show tab list or tab content (like the screenshot — each tab = full page)
+  if (isMobile) {
+    if (activeTab && ActivePanel) {
+      return (
+        <div className="min-h-screen">
+          {/* Mobile header with back button */}
+          <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-lg border-b border-border px-4 py-3 flex items-center gap-3">
+            <button onClick={() => setActiveTab(null)} className="p-2 -ml-2 rounded-lg hover:bg-secondary transition-colors">
+              <ArrowLeft className="size-5 text-foreground" />
+            </button>
+            <h2 className="font-display font-bold text-foreground">{activeTabDef?.label}</h2>
+          </div>
+          <div className="p-4">
+            <ActivePanel />
+          </div>
+        </div>
+      );
+    }
+
+    // Mobile tab list (like the screenshot design)
+    return (
+      <div className="px-4 py-6 space-y-6">
+        {/* Profile card at top */}
+        <div className="flex items-center gap-4">
+          <div className="flex size-16 shrink-0 items-center justify-center rounded-full text-xl font-display font-bold bg-primary text-primary-foreground">
+            ?
+          </div>
+          <div>
+            <h2 className="text-lg font-display font-bold text-foreground">Settings</h2>
+            <p className="text-sm text-muted-foreground">Manage your account</p>
+          </div>
+        </div>
+
+        {/* Tab list */}
+        <div className="space-y-1.5">
+          {visibleTabs.map(tab => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className="w-full flex items-center gap-4 p-4 rounded-xl border border-border/50 hover:bg-secondary/50 transition-colors text-left group"
+              >
+                <div className="w-10 h-10 rounded-xl bg-secondary/50 flex items-center justify-center shrink-0 group-hover:bg-primary/10 transition-colors">
+                  <Icon className="size-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-foreground">{tab.label}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{tab.description}</p>
+                </div>
+                <ChevronRight className="size-4 text-muted-foreground/50 shrink-0" />
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // Desktop: sidebar + content
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      {/* Page heading */}
       <div>
-        <h1 className="text-2xl font-display font-bold" style={{ color: "var(--foreground)" }}>
-          Settings
-        </h1>
-        <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-          Manage your account settings and preferences.
-        </p>
+        <h1 className="text-2xl font-display font-bold text-foreground">Settings</h1>
+        <p className="text-sm text-muted-foreground">Manage your account settings and preferences.</p>
       </div>
 
-      {/* Layout: sidebar tabs + content */}
-      <div className="flex flex-col gap-6 md:flex-row">
-        {/* Tab navigation */}
-        <nav className="w-full shrink-0 md:w-56">
+      <div className="flex gap-6">
+        {/* Sidebar */}
+        <nav className="w-56 shrink-0">
           <Card className="p-2">
-            <ul className="flex flex-row gap-1 overflow-x-auto md:flex-col scrollbar-none">
-              {visibleTabs.map((tab) => {
+            <ul className="space-y-0.5">
+              {visibleTabs.map(tab => {
                 const isActive = activeTab === tab.id;
                 const Icon = tab.icon;
-
                 return (
                   <li key={tab.id}>
-                    <button
-                      onClick={() => setActiveTab(tab.id)}
-                      className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors whitespace-nowrap"
-                      style={{
-                        backgroundColor: isActive ? "var(--sidebar-accent)" : "transparent",
-                        color: isActive ? "var(--sidebar-accent-foreground)" : "var(--muted-foreground)",
-                      }}
-                    >
+                    <button onClick={() => setActiveTab(tab.id)}
+                      className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'}`}>
                       <Icon className="size-4 shrink-0" />
                       {tab.label}
                     </button>
@@ -961,29 +949,18 @@ export default function SettingsPage() {
           </Card>
         </nav>
 
-        {/* Content area */}
+        {/* Content */}
         <Card className="min-w-0 flex-1 p-6">
           <CardHeader className="p-0 pb-4">
-            <CardTitle className="font-display">
-              {visibleTabs.find((t) => t.id === activeTab)?.label}
-            </CardTitle>
-            <CardDescription>
-              {activeTab === "profile" && "View and manage your personal information."}
-              {activeTab === "security" && "Keep your account secure."}
-              {activeTab === "notifications" && "Choose what notifications you receive."}
-              {activeTab === "preferences" && "Customize your experience."}
-              {activeTab === "env" && "Super Admin environment variables."}
-              {activeTab === "users" && "Manage application users and roles."}
-              {activeTab === "about" && "About this application."}
-            </CardDescription>
+            <CardTitle className="font-display">{activeTabDef?.label}</CardTitle>
+            <CardDescription>{activeTabDef?.description}</CardDescription>
           </CardHeader>
           <Separator className="mb-6" />
           <CardContent className="p-0">
-            <ActivePanel />
+            {ActivePanel && <ActivePanel />}
           </CardContent>
         </Card>
       </div>
     </div>
   );
 }
-
