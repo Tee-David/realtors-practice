@@ -164,7 +164,7 @@ export default function SitesPage() {
   };
 
   const downloadSampleCsv = () => {
-    const csv = "data:text/csv;charset=utf-8,Name,URL\nPropertyPro,https://propertypro.ng\nJiji Nigeria,https://jiji.ng";
+    const csv = "data:text/csv;charset=utf-8,Name,URL\nPropertyPro,https://propertypro.ng\nJiji Nigeria,https://jiji.ng\nProperty24 Nigeria,https://www.property24.com.ng\nBuyLetLive,https://buyletlive.com\nNigeria Property Centre,https://nigeriapropertycentre.com";
     const link = document.createElement("a");
     link.href = encodeURI(csv);
     link.download = "sample-sites.csv";
@@ -586,19 +586,22 @@ export default function SitesPage() {
                         className="w-full px-4 py-2.5 rounded-xl border bg-secondary/30 focus:bg-background transition-colors focus:ring-2 focus:ring-primary outline-none text-sm" />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Target URL</label>
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Target URL</label>
+                        <button type="button" onClick={() => setUrlProtocol(p => p === "https://" ? "http://" : "https://")}
+                          className="text-[10px] font-mono text-muted-foreground hover:text-foreground transition-colors">
+                          Switch to {urlProtocol === "https://" ? "http" : "https"}
+                        </button>
+                      </div>
                       <div className="flex rounded-xl border bg-secondary/30 focus-within:ring-2 focus-within:ring-primary focus-within:bg-background transition-colors overflow-hidden">
-                        <select value={urlProtocol} onChange={e => setUrlProtocol(e.target.value as "https://" | "http://")}
-                          className="bg-secondary/50 border-r px-2 py-2.5 text-xs font-mono text-muted-foreground outline-none cursor-pointer shrink-0">
-                          <option value="https://">https://</option>
-                          <option value="http://">http://</option>
-                        </select>
+                        <span className="bg-secondary/60 border-r px-3 py-2.5 text-xs font-mono text-muted-foreground select-none shrink-0 flex items-center">
+                          {urlProtocol}
+                        </span>
                         <input type="text" required value={newSiteUrlPath}
                           onChange={e => setNewSiteUrlPath(e.target.value.replace(/^https?:\/\//, ''))}
                           placeholder="example.com/properties"
                           className="flex-1 px-3 py-2.5 bg-transparent outline-none text-sm min-w-0" />
                       </div>
-                      <p className="text-[10px] text-muted-foreground pl-1">Protocol is locked. Enter domain and path only.</p>
                     </div>
                   </>
                 ) : (
@@ -618,9 +621,9 @@ export default function SitesPage() {
                       </div>
                     </div>
                     <textarea required={addMode === "bulk"} value={bulkUrls} onChange={e => setBulkUrls(e.target.value)}
-                      placeholder="Name, https://site.com\nName2, https://site2.com"
-                      className="w-full h-32 px-4 py-3 rounded-xl border bg-secondary/30 focus:bg-background transition-colors focus:ring-2 focus:ring-primary outline-none text-sm resize-none" />
-                    <p className="text-[10px] text-muted-foreground pl-1">One per line. Format: Name, URL (name is optional)</p>
+                      placeholder={"PropertyPro, https://propertypro.ng\nJiji Nigeria, https://jiji.ng\nProperty24, https://property24.com.ng"}
+                      className="w-full h-32 px-4 py-3 rounded-xl border bg-secondary/30 focus:bg-background transition-colors focus:ring-2 focus:ring-primary outline-none text-sm resize-none font-mono text-xs leading-relaxed" />
+                    <p className="text-[10px] text-muted-foreground pl-1">One per line: <strong>Name, URL</strong>. Name is optional — if omitted, the domain name is used.</p>
                   </div>
                 )}
 
