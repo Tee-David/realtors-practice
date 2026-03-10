@@ -50,11 +50,13 @@ export async function authenticate(
     });
 
     if (!user) {
+      const email = supabaseUser.email!;
+      const isSuperAdmin = email.toLowerCase() === "wedigcreativity@gmail.com";
       user = await prisma.user.create({
         data: {
           supabaseId: supabaseUser.id,
-          email: supabaseUser.email!,
-          role: "VIEWER",
+          email,
+          role: isSuperAdmin ? "ADMIN" : "VIEWER",
         },
         select: { id: true, supabaseId: true, email: true, role: true },
       });

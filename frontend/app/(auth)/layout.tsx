@@ -11,7 +11,7 @@ export default function AuthLayout({
       <AuthVisualPanel />
 
       {/* Right: Form area */}
-      <div className="flex items-center justify-center p-6 sm:p-12">
+      <div className="flex items-center justify-center p-4 sm:p-8 lg:p-12 overflow-y-auto">
         {children}
       </div>
     </div>

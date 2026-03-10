@@ -5,7 +5,9 @@ import { usePathname } from "next/navigation";
 import { AppSidebar, MobileSidebar } from "@/components/layout/app-sidebar";
 import { MobileBottomNav } from "@/components/layout/mobile-bottom-nav";
 import { TopBar } from "@/components/layout/top-bar";
-import { TourProvider } from "@/components/ui/tour-provider";
+import dynamic from "next/dynamic";
+
+const TourProvider = dynamic(() => import("@/components/ui/tour-provider").then(m => ({ default: m.TourProvider })), { ssr: false });
 
 export default function DashboardLayout({
   children,

@@ -71,6 +71,15 @@ export class ScrapeService {
       parameters: parameters || {},
     };
 
+    // Map job type to Celery priority (lower = higher priority)
+    const priorityMap: Record<string, number> = {
+      ACTIVE_INTENT: 1,
+      RESCRAPE: 3,
+      PASSIVE_BULK: 7,
+      SCHEDULED: 7,
+    };
+    const taskPriority = priorityMap[type] ?? 5;
+
     // Dispatch to Python scraper via Redis (Celery queue)
     try {
       if (!config.redis.url) {
@@ -98,7 +107,7 @@ export class ScrapeService {
           reply_to: celeryTask.id,
           delivery_mode: 2,
           delivery_info: { exchange: "", routing_key: "celery" },
-          priority: 0,
+          priority: taskPriority,
           body_encoding: "base64",
           delivery_tag: celeryTask.id,
         },

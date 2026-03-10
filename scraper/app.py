@@ -5,8 +5,11 @@ and reports results/progress back via HTTP callbacks.
 """
 
 import asyncio
+import os
+import glob
 import uuid
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 from typing import Any
 
 from fastapi import FastAPI, Header, HTTPException
@@ -26,9 +29,6 @@ from pipeline.enricher import enrich_property
 from utils.callback import report_progress, report_results, report_error, report_log
 from utils.logger import get_logger
 
-logger = get_logger("scraper")
-
-from utils.logger import get_logger
 import redis
 
 logger = get_logger("scraper")
@@ -36,9 +36,40 @@ logger = get_logger("scraper")
 redis_client = redis.Redis.from_url(config.redis_url, decode_responses=True)
 
 
+def _purge_old_snapshots():
+    """Delete HTML snapshots older than retention period."""
+    snapshot_dir = config.raw_html_dir
+    if not os.path.exists(snapshot_dir):
+        return
+    cutoff = datetime.now() - timedelta(days=config.raw_html_retention_days)
+    for filepath in glob.glob(os.path.join(snapshot_dir, "*.html")):
+        try:
+            file_mtime = datetime.fromtimestamp(os.path.getmtime(filepath))
+            if file_mtime < cutoff:
+                os.remove(filepath)
+                logger.info(f"Purged old snapshot: {filepath}")
+        except OSError:
+            pass
+
+
+def _save_snapshot(site_name: str, url: str, html: str):
+    """Save raw HTML for debugging failed extractions."""
+    snapshot_dir = config.raw_html_dir
+    os.makedirs(snapshot_dir, exist_ok=True)
+    safe_name = site_name.replace(" ", "_").replace("/", "_")[:30]
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"{safe_name}_{timestamp}.html"
+    filepath = os.path.join(snapshot_dir, filename)
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.write(f"<!-- Source URL: {url} -->\n")
+        f.write(html)
+    logger.info(f"Saved HTML snapshot: {filepath}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info(f"Scraper service starting on {config.host}:{config.port}")
+    _purge_old_snapshots()
     yield
     logger.info("Scraper service shutting down")
 
@@ -193,6 +224,8 @@ async def _run_scrape_job(request: ScrapeJobRequest) -> None:
                             raw_data = extractor.extract_property(listing_html, listing_url)
                             if not raw_data:
                                 total_errors += 1
+                                _save_snapshot(site.name, listing_url, listing_html)
+                                await report_log(job_id, "WARN", f"No data extracted from {listing_url}, snapshot saved")
                                 continue
                                 
                             # LLM Fallback if crucial data is missing (like price, bedrooms, or location)

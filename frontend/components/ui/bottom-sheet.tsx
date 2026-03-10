@@ -147,7 +147,7 @@ const BottomSheetOverlay = forwardRef<HTMLDivElement, BottomSheetOverlayProps>(
         transition={{ duration: 0.2, ease: 'easeOut' }}
         onClick={handleClick}
         className={cn(
-          'absolute inset-0 bg-black/40 backdrop-blur-sm',
+          'absolute inset-0 bg-black/30',
           className,
         )}
         style={{ pointerEvents: isOpen ? 'auto' : 'none' }}

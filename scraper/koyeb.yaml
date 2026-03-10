@@ -1,0 +1,38 @@
+# Koyeb deployment config for the scraper Celery worker
+# Deploy as a Worker service (no HTTP port)
+# Environment variables must be set in the Koyeb dashboard
+
+name: realtors-scraper-worker
+type: worker
+
+# Docker build settings
+docker:
+  dockerfile: Dockerfile
+  # Override CMD to run Celery worker instead of uvicorn
+  command: >
+    celery -A tasks worker
+    --loglevel=info
+    --concurrency=2
+    -Q celery
+    --without-heartbeat
+    --without-mingle
+
+# Instance config
+instance_type: eco  # 512MB RAM, $2.70/mo
+regions:
+  - fra  # Frankfurt (closest to Render EU)
+min_scale: 1
+max_scale: 1
+
+# Health check (Celery worker doesn't have HTTP, use process check)
+# Koyeb monitors the process — if it exits, it restarts
+
+# Environment variables (set these in Koyeb dashboard, not here):
+# REDIS_URL          — Upstash Redis URL (rediss://...)
+# API_CALLBACK_URL   — https://realtors-practice-new-api.onrender.com/api
+# INTERNAL_API_KEY   — Must match backend's INTERNAL_API_KEY
+# GEMINI_API_KEY     — For LLM extraction fallback
+# PROXY_URL          — Rotating proxy URL (optional)
+# LOG_LEVEL          — info
+# SAVE_RAW_HTML      — true
+# RAW_HTML_DIR       — /tmp/scraper-snapshots

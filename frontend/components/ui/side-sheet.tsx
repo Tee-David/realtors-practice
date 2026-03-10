@@ -32,6 +32,7 @@ interface SideSheetContextValue {
     className: string;
     closeThreshold: number;
     side: SheetSide;
+    offset: string;
   };
 }
 
@@ -56,6 +57,7 @@ interface SideSheetRootProps {
   side?: SheetSide;
   width?: string;
   closeThreshold?: number;
+  offset?: string;
 }
 
 const SideSheetRoot = ({
@@ -67,6 +69,7 @@ const SideSheetRoot = ({
   side = 'right',
   width = '400px',
   closeThreshold = 0.3,
+  offset = '0px',
 }: SideSheetRootProps) => {
   const [internalOpen, setInternalOpen] = useState(defaultOpen ?? false);
 
@@ -90,6 +93,7 @@ const SideSheetRoot = ({
     className: className || '',
     closeThreshold,
     side,
+    offset,
   };
 
   return (
@@ -215,7 +219,7 @@ const SideSheetContent = ({
   className = '',
 }: SideSheetContentProps) => {
   const { isOpen, onOpenChange, contentProps } = useSideSheetContext();
-  const { width, closeThreshold, side } = contentProps;
+  const { width, closeThreshold, side, offset } = contentProps;
   const controls = useAnimation();
   const x = useMotionValue(0);
   useTransform(x, [-100, 0], [0, 1]);
@@ -268,18 +272,18 @@ const SideSheetContent = ({
   const getPositionStyles = useCallback(() => {
     if (side === 'left') {
       return {
-        left: 0,
+        left: offset || 0,
         top: 0,
         bottom: 0,
       };
     } else {
       return {
-        right: 0,
+        right: offset || 0,
         top: 0,
         bottom: 0,
       };
     }
-  }, [side]);
+  }, [side, offset]);
 
   useEffect(() => {
     if (isOpen) {
@@ -372,7 +376,7 @@ const SideSheetContent = ({
   return (
     <SideSheetPortal>
       <div
-        className={cn('fixed inset-0 z-999', !isOpen && 'pointer-events-none')}
+        className={cn('fixed inset-0 z-[999]', !isOpen && 'pointer-events-none')}
       >
         <motion.div
           ref={overlayRef}

@@ -156,22 +156,20 @@
 - [x] Write callback.py (HTTP callback helpers + progress reporting)
 - [x] Write rate_limiter.py
 - [x] Write logger.py
-- [ ] Add raw HTML snapshot storage (save failed parses for debugging, auto-purge after 7 days)
+- [x] Add raw HTML snapshot storage (save failed parses for debugging, auto-purge after 7 days)
 
 ### Task Queue (Celery + Redis)
 - [x] Set up Celery with Redis broker for parallel site scraping
-- [ ] Configure task retries with exponential backoff
-- [ ] Add task priority (active-intent jobs > scheduled bulk scrapes)
-- [ ] Add concurrency limits per site (avoid hammering single domain)
+- [x] Configure task retries with exponential backoff (30s→480s, max 3 retries)
+- [x] Add task priority (active-intent=1 > rescrape=3 > bulk=7)
+- [x] Add concurrency limits per site (per-domain Redis locks, 30min TTL)
 
 ### Deployment
-- [ ] Write scraper render.yaml
-- [ ] Configure Render Redis instance (or use in-memory for MVP)
-- [ ] Deploy scraper to Render (background worker)
-- [ ] Evaluate Koyeb vs Render for background workers (see KOYEB_DEPLOYMENT.md)
-- [ ] Deploy scraper worker to Koyeb (if chosen)
-- [ ] Set up Redis (Upstash or Koyeb-managed)
-- [ ] Migrate 5-10 site configs from old project YAML to Site table
+- [x] Write scraper koyeb.yaml (Eco worker, Celery CMD override)
+- [x] Set up Redis (Upstash serverless Redis)
+- [x] Deploy scraper worker to Koyeb (Docker + Celery worker)
+- [x] Add task priority to backend Celery dispatch (scrape.service.ts)
+- [x] Migrate 5 site configs to Site table (PropertyPro, NPC, Jiji, Property24, BuyLetLive)
 
 ### Backend Integration
 - [x] Backend: Scrape service (job dispatch to Python microservice)
@@ -339,11 +337,11 @@
 - **Phase 1:** 42 tasks (40 done, 2 deployment pending)
 - **Phase 2:** 30 tasks (30 done ✅)
 - **Phase 2.5:** 11 tasks (11 done ✅)
-- **Phase 3:** 40 tasks (19 done, 21 pending — infra/queue/deploy/frontend/tests)
+- **Phase 3:** 40 tasks (30 done, 10 pending — testing/verification)
 - **Phase 4:** 21 tasks (19 done, 2 pending — deploy + tests)
 - **Phase 4.5:** 3 tasks (3 done)
 - **Phase 5:** 16 tasks (7 done, 9 pending)
 - **Phase 6:** 22 tasks (0 done)
 - **Phase 7:** 38 tasks (15 done)
 - **Phase 8:** 15 tasks (0 done)
-- **TOTAL:** ~238 tasks (~118 done, ~120 remaining)
+- **TOTAL:** ~238 tasks (~129 done, ~109 remaining)

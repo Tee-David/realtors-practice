@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { PropertyCard } from "./property-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SearchX } from "lucide-react";
@@ -96,27 +96,24 @@ export function PropertyGrid({ properties, isLoading, emptyMessage, selectedId, 
   const gridClass = typeof columns === "string" ? columns : undefined;
 
   return (
-    <AnimatePresence mode="wait">
-      <motion.div
-        className={gridClass}
-        style={gridStyle}
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        key={properties.map((p) => p.id).join(",")}
-      >
-        {properties.map((property) => (
-          <motion.div key={property.id} variants={itemVariants} layout>
-            <PropertyCard
-              property={property}
-              isActive={selectedId === property.id}
-              onFavorite={onFavorite}
-              onHover={onHover}
-              onClick={onClick}
-            />
-          </motion.div>
-        ))}
-      </motion.div>
-    </AnimatePresence>
+    <motion.div
+      className={gridClass}
+      style={gridStyle}
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+    >
+      {properties.map((property) => (
+        <motion.div key={property.id} variants={itemVariants}>
+          <PropertyCard
+            property={property}
+            isActive={selectedId === property.id}
+            onFavorite={onFavorite}
+            onHover={onHover}
+            onClick={onClick}
+          />
+        </motion.div>
+      ))}
+    </motion.div>
   );
 }

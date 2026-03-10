@@ -5,6 +5,7 @@ import api from "@/lib/api";
 
 export interface Site {
   id: string;
+  key?: string;
   name: string;
   baseUrl: string;
   enabled: boolean;
@@ -14,12 +15,27 @@ export interface Site {
   updatedAt: string;
 }
 
-export function useSites(limit = 20, offset = 0) {
+export interface SitesResponse {
+  sites: Site[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export function useSites(page = 1, limit = 20, search?: string, enabled?: boolean) {
   return useQuery({
-    queryKey: ["sites", limit, offset],
+    queryKey: ["sites", page, limit, search, enabled],
     queryFn: async () => {
-      const { data } = await api.get(`/sites`, { params: { limit, offset } });
-      return data.data as Site[];
+      const params: Record<string, unknown> = { page, limit };
+      if (search) params.search = search;
+      if (enabled !== undefined) params.enabled = enabled;
+      const { data } = await api.get(`/sites`, { params });
+      // Backend may return { data: Site[] } or { data: { sites, total, page, limit } }
+      // Handle both formats
+      if (Array.isArray(data.data)) {
+        return { sites: data.data as Site[], total: data.data.length, page, limit } as SitesResponse;
+      }
+      return data.data as SitesResponse;
     },
   });
 }
@@ -37,7 +53,7 @@ export function useSite(id: string) {
 
 export function useToggleSite() {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: async (id: string) => {
       const { data } = await api.patch(`/sites/${id}/toggle`);
@@ -51,7 +67,7 @@ export function useToggleSite() {
 
 export function useDeleteSite() {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: async (id: string) => {
       const { data } = await api.delete(`/sites/${id}`);
@@ -65,7 +81,7 @@ export function useDeleteSite() {
 
 export function useAddSite() {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: async (data: Partial<Site>) => {
       const response = await api.post(`/sites`, data);
@@ -79,11 +95,9 @@ export function useAddSite() {
 
 export function useBulkToggleSites() {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: async ({ ids, enable }: { ids: string[], enable: boolean }) => {
-      // If backend doesn't support bulk yet, we'll Promise.all it.
-      // But ideally we'd hit /sites/bulk/toggle later. For now, Promise.all on existing patch
       const promises = ids.map(id => api.patch(`/sites/${id}/toggle`));
       await Promise.all(promises);
       return { success: true };
@@ -96,7 +110,7 @@ export function useBulkToggleSites() {
 
 export function useBulkDeleteSites() {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: async (ids: string[]) => {
       const promises = ids.map(id => api.delete(`/sites/${id}`));
