@@ -70,6 +70,11 @@ export default function GridMotion({
                       className="grid-motion-img"
                       loading="lazy"
                       draggable={false}
+                      onError={(e) => {
+                        // Hide broken images gracefully
+                        (e.target as HTMLImageElement).style.display = 'none';
+                        (e.target as HTMLImageElement).parentElement!.style.display = 'none';
+                      }}
                     />
                   ) : (
                     <span className="grid-motion-text">{item}</span>

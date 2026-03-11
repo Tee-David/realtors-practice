@@ -132,7 +132,11 @@ export function GlobeHero() {
     // Fetch geojson footprint for the glowing hex globe
     fetch("https://raw.githubusercontent.com/vasturiano/globe.gl/master/example/datasets/ne_110m_admin_0_countries.geojson")
       .then(res => res.json())
-      .then(data => setHexData(data));
+      .then(data => setHexData(data))
+      .catch(err => {
+        console.warn("Could not load globe geojson:", err);
+        setHexData({ features: [] }); // Fallback to empty globe instead of crashing
+      });
       
     const initGlobe = setInterval(() => {
       if (globeRef.current) {
