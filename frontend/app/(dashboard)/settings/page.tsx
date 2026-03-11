@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { auth, users as usersApi } from "@/lib/api";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
+import { usePersistedState } from "@/hooks/use-persisted-state";
 import {
   User, Lock, Bell, Palette, LayoutDashboard, Mail, Database,
   Info, Users, ChevronRight, ChevronLeft, Upload, Eye, EyeOff,
@@ -319,14 +320,14 @@ function SecuritySection() {
 // ─── Notifications ──────────────────────────────────────────────────────────
 
 function NotificationsSection() {
-  const [emailMatch, setEmailMatch] = useState(true);
-  const [emailScrape, setEmailScrape] = useState(false);
-  const [emailPriceDrop, setEmailPriceDrop] = useState(true);
-  const [inAppMatch, setInAppMatch] = useState(true);
-  const [inAppPriceDrop, setInAppPriceDrop] = useState(true);
-  const [inAppScrape, setInAppScrape] = useState(true);
-  const [quietHours, setQuietHours] = useState(false);
-  const [digest, setDigest] = useState("daily");
+  const [emailMatch, setEmailMatch] = usePersistedState("notif-email-match", true);
+  const [emailScrape, setEmailScrape] = usePersistedState("notif-email-scrape", false);
+  const [emailPriceDrop, setEmailPriceDrop] = usePersistedState("notif-email-price-drop", true);
+  const [inAppMatch, setInAppMatch] = usePersistedState("notif-inapp-match", true);
+  const [inAppPriceDrop, setInAppPriceDrop] = usePersistedState("notif-inapp-price-drop", true);
+  const [inAppScrape, setInAppScrape] = usePersistedState("notif-inapp-scrape", true);
+  const [quietHours, setQuietHours] = usePersistedState("notif-quiet-hours", false);
+  const [digest, setDigest] = usePersistedState("notif-digest", "daily");
 
   return (
     <div className="space-y-4 max-w-2xl">
@@ -374,10 +375,10 @@ const GOOGLE_FONTS = [
 ];
 
 function AppearanceSection() {
-  const [theme, setTheme] = useState<"light" | "dark" | "system">("system");
-  const [fontSize, setFontSize] = useState<"small" | "default" | "large">("default");
-  const [compact, setCompact] = useState(false);
-  const [sidebarExpanded, setSidebarExpanded] = useState(true);
+  const [theme, setTheme] = usePersistedState<"light" | "dark" | "system">("appearance-theme", "system");
+  const [fontSize, setFontSize] = usePersistedState<"small" | "default" | "large">("appearance-font-size", "default");
+  const [compact, setCompact] = usePersistedState("appearance-compact", false);
+  const [sidebarExpanded, setSidebarExpanded] = usePersistedState("appearance-sidebar-expanded", true);
 
   const { primaryLight, primaryDark, fontDisplay, fontBody, setPrimaryLight, setPrimaryDark, setFontDisplay, setFontBody, resetTheme } = useThemeConfig();
 
@@ -467,13 +468,13 @@ function AppearanceSection() {
 // ─── Data & Display ─────────────────────────────────────────────────────────
 
 function DisplaySection() {
-  const [mapProvider, setMapProvider] = useState("osm");
-  const [mapKey, setMapKey] = useState("");
-  const [perPage, setPerPage] = useState("20");
-  const [defaultSort, setDefaultSort] = useState("createdAt");
-  const [defaultType, setDefaultType] = useState("");
-  const [voiceAuto, setVoiceAuto] = useState(false);
-  const [dateFormat, setDateFormat] = useState("DD/MM/YYYY");
+  const [mapProvider, setMapProvider] = usePersistedState("display-map-provider", "osm");
+  const [mapKey, setMapKey] = usePersistedState("display-map-key", "");
+  const [perPage, setPerPage] = usePersistedState("display-per-page", "20");
+  const [defaultSort, setDefaultSort] = usePersistedState("display-default-sort", "createdAt");
+  const [defaultType, setDefaultType] = usePersistedState("display-default-type", "");
+  const [voiceAuto, setVoiceAuto] = usePersistedState("display-voice-auto", false);
+  const [dateFormat, setDateFormat] = usePersistedState("display-date-format", "DD/MM/YYYY");
 
   const providers = [
     { key: "osm",    name: "OpenStreetMap", desc: "Free, open-source",              free: true },
@@ -563,10 +564,10 @@ function DisplaySection() {
 // ─── Email Settings ─────────────────────────────────────────────────────────
 
 function EmailSection() {
-  const [provider, setProvider] = useState<"smtp" | "sendgrid" | "resend">("resend");
-  const [apiKey, setApiKey] = useState("");
-  const [fromEmail, setFromEmail] = useState("");
-  const [replyTo, setReplyTo] = useState("");
+  const [provider, setProvider] = usePersistedState<"smtp" | "sendgrid" | "resend">("email-provider", "resend");
+  const [apiKey, setApiKey] = usePersistedState("email-api-key", "");
+  const [fromEmail, setFromEmail] = usePersistedState("email-from", "");
+  const [replyTo, setReplyTo] = usePersistedState("email-reply-to", "");
   const [editingTemplate, setEditingTemplate] = useState<{ name: string } | null>(null);
 
   return (

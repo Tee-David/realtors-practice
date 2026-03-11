@@ -53,7 +53,7 @@ export default function SitesPage() {
   const [bulkUrls, setBulkUrls] = useState("");
   const [addMode, setAddMode] = useState<"single" | "bulk">("single");
 
-  const { data: sitesData, isLoading } = useSites(1, 200);
+  const { data: sitesData, isLoading } = useSites(1, 100);
   const sites: Site[] = sitesData?.sites ?? [];
   const toggleSite = useToggleSite();
   const deleteSite = useDeleteSite();

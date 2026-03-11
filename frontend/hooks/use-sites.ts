@@ -23,10 +23,11 @@ export interface SitesResponse {
 }
 
 export function useSites(page = 1, limit = 20, search?: string, enabled?: boolean) {
+  const clampedLimit = Math.min(limit, 100); // Backend validator max is 100
   return useQuery({
-    queryKey: ["sites", page, limit, search, enabled],
+    queryKey: ["sites", page, clampedLimit, search, enabled],
     queryFn: async () => {
-      const params: Record<string, unknown> = { page, limit };
+      const params: Record<string, unknown> = { page, limit: clampedLimit };
       if (search) params.search = search;
       if (enabled !== undefined) params.enabled = enabled;
       const { data: response } = await api.get(`/sites`, { params });
