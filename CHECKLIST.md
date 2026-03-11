@@ -295,7 +295,7 @@
 - [x] Performance: Image optimization
 - [x] Performance: Lazy loading for heavy components (maps, charts)
 - [ ] Documentation: API documentation (Swagger/OpenAPI spec)
-- [ ] Documentation: Deployment guide
+- [x] Documentation: Deployment guide (SETUP.md — Google OAuth, Resend, invite system)
 - [ ] Documentation: README.md update
 - [x] User management page (admin - list users, change roles, deactivate)
 - [ ] Settings page - general settings
@@ -343,7 +343,7 @@
 ### Settings Page Overhaul
 - [x] Settings: Redesign to left sidebar nav (desktop) + full-screen sections (mobile)
 - [x] Settings/Profile: Avatar upload, name, phone, bio, company, email locked, Save button
-- [x] Settings/Security: Password change, Google OAuth link/unlink, active sessions list, login history
+- [x] Settings/Security: Password change, Google OAuth link/unlink (Supabase identity API), active sessions list, login history
 - [x] Settings/Notifications: Email + in-app toggles, digest frequency, quiet hours, Save button
 - [x] Settings/Appearance: Theme toggle (Light/Dark/System), sidebar state, font size, accent color, compact mode
 - [x] Settings/Data & Display: Map provider + API keys, per-page count, default sort, voice search auto-submit, date/currency format
@@ -351,6 +351,9 @@
 - [x] Settings/Backups: Manual + scheduled backups, retention policy, backup table with download/restore
 - [x] Settings/About: Version, credits, system info, legal links, danger zone (delete account)
 - [x] Settings/Users: Existing user table preserved and integrated into sidebar nav
+- [x] Settings/Users: Invite code system (6-char code, 24h expiry, Resend email, admin-register validates code)
+- [x] Settings/Users: ADMIN role option in invite modal
+- [x] Admin Register: 2-step flow (enter code → create account), email locked to invitation
 
 ### Dashboard Bento Grid
 - [x] Upgrade BentoGrid + BentoGridItem with Aceternity-style title/description/header/icon props
