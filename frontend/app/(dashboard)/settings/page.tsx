@@ -259,11 +259,53 @@ function ProfileSection() {
 function SecuritySection() {
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
-  const [googleLinked] = useState(false);
+  const [googleLinked, setGoogleLinked] = useState(false);
+  const [googleLinking, setGoogleLinking] = useState(false);
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
   const [changingPw, setChangingPw] = useState(false);
+
+  // Check if Google identity is already linked
+  useEffect(() => {
+    (async () => {
+      const { supabase } = await import("@/lib/supabase");
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.identities) {
+        setGoogleLinked(user.identities.some((id: any) => id.provider === "google"));
+      }
+    })();
+  }, []);
+
+  const handleGoogleLink = async () => {
+    try {
+      setGoogleLinking(true);
+      const { supabase } = await import("@/lib/supabase");
+
+      if (googleLinked) {
+        // Unlink Google identity
+        const { data: { user } } = await supabase.auth.getUser();
+        const googleIdentity = user?.identities?.find((id: any) => id.provider === "google");
+        if (googleIdentity) {
+          const { error } = await supabase.auth.unlinkIdentity(googleIdentity);
+          if (error) throw error;
+          setGoogleLinked(false);
+          toast.success("Google account unlinked");
+        }
+      } else {
+        // Link Google identity — redirects to Google OAuth
+        const { error } = await supabase.auth.linkIdentity({
+          provider: "google",
+          options: { redirectTo: `${window.location.origin}/settings` },
+        });
+        if (error) throw error;
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update Google connection");
+    } finally {
+      setGoogleLinking(false);
+    }
+  };
 
   const handlePasswordChange = async () => {
     if (!newPw || newPw.length < 8) {
@@ -335,10 +377,11 @@ function SecuritySection() {
               <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>{googleLinked ? "Linked" : "Not connected"}</p>
             </div>
           </div>
-          <button className="px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors" style={{ borderColor: googleLinked ? "var(--destructive)" : "var(--primary)", color: googleLinked ? "var(--destructive)" : "var(--primary)" }}
-            onClick={() => toast.info(googleLinked ? "Google account unlinked" : "Redirecting to Google…")}
+          <button className="px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors disabled:opacity-50" style={{ borderColor: googleLinked ? "var(--destructive)" : "var(--primary)", color: googleLinked ? "var(--destructive)" : "var(--primary)" }}
+            onClick={handleGoogleLink}
+            disabled={googleLinking}
           >
-            {googleLinked ? "Unlink" : "Connect"}
+            {googleLinking ? "Processing…" : googleLinked ? "Unlink" : "Connect"}
           </button>
         </div>
       </Card>
@@ -899,34 +942,28 @@ function UsersSection() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteFirstName, setInviteFirstName] = useState("");
   const [inviteLastName, setInviteLastName] = useState("");
-  const [invitePassword, setInvitePassword] = useState("");
   const [inviteRole, setInviteRole] = useState("VIEWER");
   const [inviting, setInviting] = useState(false);
 
   const handleInvite = async () => {
-    if (!inviteEmail || !invitePassword) {
-      toast.error("Email and password are required");
-      return;
-    }
-    if (invitePassword.length < 8) {
-      toast.error("Password must be at least 8 characters");
+    if (!inviteEmail) {
+      toast.error("Email is required");
       return;
     }
     try {
       setInviting(true);
-      await auth.register({
+      await auth.invite({
         email: inviteEmail,
-        password: invitePassword,
         firstName: inviteFirstName || undefined,
         lastName: inviteLastName || undefined,
         role: inviteRole,
       });
-      toast.success(`User ${inviteEmail} invited successfully`);
+      toast.success(`Invitation sent to ${inviteEmail}`);
       queryClient.invalidateQueries({ queryKey: ["users"] });
       setInviteOpen(false);
-      setInviteEmail(""); setInvitePassword(""); setInviteFirstName(""); setInviteLastName(""); setInviteRole("VIEWER");
+      setInviteEmail(""); setInviteFirstName(""); setInviteLastName(""); setInviteRole("VIEWER");
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to invite user");
+      toast.error(err?.response?.data?.message || "Failed to send invitation");
     } finally {
       setInviting(false);
     }
@@ -974,17 +1011,17 @@ function UsersSection() {
                 <input type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} className={inputBase} style={inputStyle} placeholder="user@example.com" />
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1" style={{ color: "var(--muted-foreground)" }}>Password *</label>
-                <input type="password" value={invitePassword} onChange={e => setInvitePassword(e.target.value)} className={inputBase} style={inputStyle} placeholder="Min 8 characters" />
-              </div>
-              <div>
                 <label className="block text-xs font-medium mb-1" style={{ color: "var(--muted-foreground)" }}>Role</label>
                 <select value={inviteRole} onChange={e => setInviteRole(e.target.value)} className={inputBase} style={inputStyle}>
-                  <option value="VIEWER">Viewer</option>
+                  <option value="ADMIN">Admin</option>
                   <option value="EDITOR">Editor</option>
+                  <option value="VIEWER">Viewer</option>
                   <option value="API_USER">API User</option>
                 </select>
               </div>
+              <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                An invitation email will be sent. The invitee will set their own password.
+              </p>
             </div>
             <div className="flex justify-end gap-2 mt-5">
               <button onClick={() => setInviteOpen(false)} className="px-4 py-2 rounded-xl text-sm font-medium border hover:bg-[var(--secondary)] transition-colors" style={{ borderColor: "var(--border)", color: "var(--foreground)" }}>Cancel</button>

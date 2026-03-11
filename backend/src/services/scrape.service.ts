@@ -80,57 +80,83 @@ export class ScrapeService {
     };
     const taskPriority = priorityMap[type] ?? 5;
 
-    // Dispatch to Python scraper via Redis (Celery queue)
-    try {
-      if (!config.redis.url) {
-        throw new Error("REDIS_URL is not configured in environment");
+    // Dispatch to Python scraper — try Redis/Celery first, fall back to direct HTTP
+    let dispatched = false;
+
+    // Method 1: Redis/Celery queue (production)
+    if (config.redis.url) {
+      try {
+        const Redis = require("ioredis");
+        const redis = new Redis(config.redis.url, { connectTimeout: 5000, maxRetriesPerRequest: 1 });
+
+        const celeryTask = {
+          id: `job-${job.id}`,
+          task: "tasks.process_job",
+          args: [scraperPayload],
+          kwargs: {},
+        };
+
+        const payload = {
+          body: Buffer.from(JSON.stringify(celeryTask)).toString("base64"),
+          "content-encoding": "utf-8",
+          "content-type": "application/json",
+          headers: {},
+          properties: {
+            correlation_id: celeryTask.id,
+            reply_to: celeryTask.id,
+            delivery_mode: 2,
+            delivery_info: { exchange: "", routing_key: "celery" },
+            priority: taskPriority,
+            body_encoding: "base64",
+            delivery_tag: celeryTask.id,
+          },
+        };
+
+        await redis.lpush("celery", JSON.stringify(payload));
+        await redis.quit();
+        dispatched = true;
+        Logger.info(`Scrape job ${job.id} dispatched to Celery Redis queue (${sites.length} sites)`);
+      } catch (err: any) {
+        Logger.warn(`Redis dispatch failed, falling back to direct HTTP: ${err.message}`);
       }
+    }
 
-      // We instantiate Redis here to avoid breaking tests/startup if Redis isn't used
-      const Redis = require("ioredis");
-      const redis = new Redis(config.redis.url);
+    // Method 2: Direct HTTP to Python scraper (development fallback)
+    if (!dispatched) {
+      try {
+        const response = await fetch(`${config.scraper.url}/api/jobs`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Internal-Key": config.scraper.internalKey,
+          },
+          body: JSON.stringify(scraperPayload),
+          signal: AbortSignal.timeout(10000),
+        });
 
-      const celeryTask = {
-        id: `job-${job.id}`,
-        task: "tasks.process_job",
-        args: [scraperPayload],
-        kwargs: {},
-      };
+        if (!response.ok) {
+          const body = await response.text();
+          throw new Error(`Scraper responded ${response.status}: ${body}`);
+        }
 
-      const payload = {
-        body: Buffer.from(JSON.stringify(celeryTask)).toString("base64"),
-        "content-encoding": "utf-8",
-        "content-type": "application/json",
-        headers: {},
-        properties: {
-          correlation_id: celeryTask.id,
-          reply_to: celeryTask.id,
-          delivery_mode: 2,
-          delivery_info: { exchange: "", routing_key: "celery" },
-          priority: taskPriority,
-          body_encoding: "base64",
-          delivery_tag: celeryTask.id,
-        },
-      };
+        dispatched = true;
+        Logger.info(`Scrape job ${job.id} dispatched directly to scraper via HTTP (${sites.length} sites)`);
+      } catch (err: any) {
+        Logger.error(`Direct HTTP dispatch also failed: ${err.message}`);
+      }
+    }
 
-      await redis.lpush("celery", JSON.stringify(payload));
-      
-      // Close connection after dispatching
-      await redis.quit();
-
+    if (dispatched) {
       await prisma.scrapeJob.update({
         where: { id: job.id },
         data: { status: "RUNNING" },
       });
-
-      Logger.info(`Scrape job ${job.id} dispatched to Celery Redis queue (${sites.length} sites)`);
-    } catch (err: any) {
-      Logger.error(`Failed to dispatch to Redis: ${err.message}`);
+    } else {
       await prisma.scrapeJob.update({
         where: { id: job.id },
         data: { status: "FAILED" },
       });
-      throw new Error(`Failed to dispatch to queue: ${err.message}`);
+      throw new Error("Failed to dispatch scrape job: both Redis and direct HTTP failed");
     }
 
     return job;

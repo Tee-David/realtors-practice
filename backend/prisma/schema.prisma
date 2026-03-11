@@ -116,6 +116,7 @@ model User {
   scrapeJobs      ScrapeJob[]         @relation("CreatedBy")
   notifications   Notification[]
   auditLogs       AuditLog[]
+  invitations     Invitation[]        @relation("InvitedBy")
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -125,6 +126,24 @@ model User {
   @@index([supabaseId])
   @@index([role])
   @@index([deletedAt])
+}
+
+model Invitation {
+  id          String    @id @default(cuid())
+  email       String
+  code        String    @unique
+  role        UserRole  @default(VIEWER)
+  firstName   String?
+  lastName    String?
+  invitedById String?
+  invitedBy   User?     @relation("InvitedBy", fields: [invitedById], references: [id])
+  usedAt      DateTime?
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+
+  @@index([email])
+  @@index([code])
+  @@index([expiresAt])
 }
 
 model Site {

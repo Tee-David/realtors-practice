@@ -10,7 +10,13 @@
       "Bash(curl -s --max-time 5 http://localhost:5000/api/sites)",
       "Bash(grep -E \"\\\\.\\(ts|js\\)$\")",
       "Bash(npx tsc --noEmit)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Read(//usr/**)",
+      "Bash(ls /home/teedavid/.nvm/versions/node/*/bin/npm)",
+      "Bash(ls /home/teedavid/.local/share/fnm/*/bin/npm)",
+      "Read(//snap/**)",
+      "Bash(echo $?)",
+      "Bash(ls -la /home/teedavid/Desktop/Projects/Realtors-Practice/frontend/app/\\\\\\(dashboard\\\\\\)/settings/)"
     ]
   }
 }

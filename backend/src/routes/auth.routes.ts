@@ -1,9 +1,11 @@
 import { Router, Request, Response } from "express";
+import crypto from "crypto";
 import { authenticate } from "../middlewares/auth.middleware";
 import { authorize } from "../middlewares/role.middleware";
 import { supabaseAdmin } from "../utils/supabase";
 import prisma from "../prismaClient";
 import { sendSuccess, sendError } from "../utils/apiResponse.util";
+import { EmailService } from "../services/email.service";
 import { z } from "zod";
 
 const router = Router();
@@ -101,6 +103,172 @@ router.post(
     }
   }
 );
+
+// ── Invite User (email-based) ────────────────────────────────────────────────
+
+const inviteSchema = z.object({
+  email: z.string().email(),
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+  role: z.enum(["ADMIN", "EDITOR", "VIEWER", "API_USER"]).optional(),
+});
+
+router.post(
+  "/invite",
+  authenticate,
+  authorize("ADMIN"),
+  async (req: Request, res: Response) => {
+    try {
+      const body = inviteSchema.parse(req.body);
+
+      // Check if user already exists
+      const existing = await prisma.user.findUnique({ where: { email: body.email } });
+      if (existing) {
+        return sendError(res, "A user with this email already exists", 400);
+      }
+
+      // Invalidate any previous unused invitations for this email
+      await prisma.invitation.updateMany({
+        where: { email: body.email, usedAt: null },
+        data: { expiresAt: new Date() },
+      });
+
+      // Generate a 6-character alphanumeric invite code
+      const code = crypto.randomBytes(3).toString("hex").toUpperCase(); // e.g. "A3F1B2"
+      const finalRole = body.role || "VIEWER";
+
+      const invitation = await prisma.invitation.create({
+        data: {
+          email: body.email,
+          code,
+          role: finalRole as 'ADMIN' | 'EDITOR' | 'VIEWER' | 'API_USER',
+          firstName: body.firstName,
+          lastName: body.lastName,
+          invitedById: req.user!.id,
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+        },
+      });
+
+      // Get inviter name for the email
+      const inviter = await prisma.user.findUnique({ where: { id: req.user!.id } });
+      const inviterName = inviter
+        ? [inviter.firstName, inviter.lastName].filter(Boolean).join(" ") || inviter.email
+        : "An admin";
+
+      // Send invitation email with code via Resend
+      await EmailService.sendInviteEmail(body.email, inviterName, finalRole, code);
+
+      return sendSuccess(res, {
+        id: invitation.id,
+        email: invitation.email,
+        role: invitation.role,
+        expiresAt: invitation.expiresAt,
+      }, "Invitation sent successfully", 201);
+    } catch (err: any) {
+      return sendError(res, err.message, 400);
+    }
+  }
+);
+
+// ── Validate Invite Code ─────────────────────────────────────────────────────
+
+router.post("/validate-invite", async (req: Request, res: Response) => {
+  try {
+    const { code } = z.object({ code: z.string().min(1) }).parse(req.body);
+
+    const invitation = await prisma.invitation.findUnique({ where: { code } });
+
+    if (!invitation) {
+      return sendError(res, "Invalid invitation code", 400);
+    }
+    if (invitation.usedAt) {
+      return sendError(res, "This invitation code has already been used", 400);
+    }
+    if (invitation.expiresAt < new Date()) {
+      return sendError(res, "This invitation code has expired", 400);
+    }
+
+    return sendSuccess(res, {
+      email: invitation.email,
+      role: invitation.role,
+      firstName: invitation.firstName,
+      lastName: invitation.lastName,
+    });
+  } catch (err: any) {
+    return sendError(res, err.message, 400);
+  }
+});
+
+// ── Register with Invite Code ────────────────────────────────────────────────
+
+const registerWithCodeSchema = z.object({
+  code: z.string().min(1),
+  email: z.string().email(),
+  password: z.string().min(8),
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+});
+
+router.post("/register-with-code", async (req: Request, res: Response) => {
+  try {
+    const body = registerWithCodeSchema.parse(req.body);
+
+    // Validate the invitation code
+    const invitation = await prisma.invitation.findUnique({ where: { code: body.code } });
+
+    if (!invitation) {
+      return sendError(res, "Invalid invitation code", 400);
+    }
+    if (invitation.usedAt) {
+      return sendError(res, "This invitation code has already been used", 400);
+    }
+    if (invitation.expiresAt < new Date()) {
+      return sendError(res, "This invitation code has expired", 400);
+    }
+    if (invitation.email.toLowerCase() !== body.email.toLowerCase()) {
+      return sendError(res, "This invitation code was sent to a different email address", 400);
+    }
+
+    // Create Supabase user
+    const { data: authData, error: authError } =
+      await supabaseAdmin.auth.admin.createUser({
+        email: body.email,
+        password: body.password,
+        email_confirm: true,
+      });
+
+    if (authError || !authData.user) {
+      return sendError(res, authError?.message || "Failed to create user", 400);
+    }
+
+    // Create Prisma user with the role from the invitation
+    const user = await prisma.user.create({
+      data: {
+        supabaseId: authData.user.id,
+        email: body.email,
+        firstName: body.firstName || invitation.firstName,
+        lastName: body.lastName || invitation.lastName,
+        role: invitation.role,
+      },
+    });
+
+    // Mark invitation as used
+    await prisma.invitation.update({
+      where: { id: invitation.id },
+      data: { usedAt: new Date() },
+    });
+
+    return sendSuccess(res, {
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+    }, "Account created successfully", 201);
+  } catch (err: any) {
+    return sendError(res, err.message, 400);
+  }
+});
 
 /**
  * @swagger

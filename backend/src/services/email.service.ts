@@ -76,6 +76,73 @@ export class EmailService {
   }
 
   /**
+   * Send an invitation email to a new team member
+   */
+  static async sendInviteEmail(
+    to: string,
+    inviterName: string,
+    role: string,
+    inviteCode: string
+  ) {
+    if (!resend) {
+      Logger.warn("[Email] Resend not configured — invite email skipped");
+      return;
+    }
+
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    const roleLabel = role.charAt(0) + role.slice(1).toLowerCase().replace("_", " ");
+    const registerLink = `${frontendUrl}/admin-register?code=${inviteCode}&email=${encodeURIComponent(to)}`;
+
+    const html = `
+      <div style="font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #f7f7f7; padding: 32px;">
+        <div style="background: linear-gradient(135deg, #0001FC 0%, #3b5bfd 100%); padding: 40px 32px; border-radius: 16px 16px 0 0; text-align: center;">
+          <h1 style="color: white; margin: 0 0 8px; font-size: 28px; font-family: 'Space Grotesk', sans-serif;">You're Invited!</h1>
+          <p style="color: rgba(255,255,255,0.85); margin: 0; font-size: 16px;">Join the Realtors' Practice platform</p>
+        </div>
+        <div style="padding: 32px; background: #ffffff; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 16px 16px;">
+          <p style="color: #1A1A1A; font-size: 16px; line-height: 1.6;">
+            <strong>${inviterName}</strong> has invited you to join <strong>Realtors' Practice</strong> as a <strong>${roleLabel}</strong>.
+          </p>
+          <p style="color: #4b5563; font-size: 14px; line-height: 1.6;">
+            Use the invitation code below when creating your account. This code expires in <strong>24 hours</strong>.
+          </p>
+          <div style="margin: 28px 0; text-align: center;">
+            <div style="display: inline-block; background: #f0f0ff; border: 2px dashed #0001FC; border-radius: 12px; padding: 16px 40px;">
+              <p style="margin: 0 0 4px; font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 1px;">Your Invitation Code</p>
+              <p style="margin: 0; font-size: 32px; font-weight: 700; letter-spacing: 6px; color: #0001FC; font-family: 'Space Grotesk', monospace;">${inviteCode}</p>
+            </div>
+          </div>
+          <div style="margin: 24px 0; text-align: center;">
+            <a href="${registerLink}"
+               style="background: #0001FC; color: white; padding: 14px 32px; border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 16px; display: inline-block;">
+              Create Your Account
+            </a>
+          </div>
+          <p style="color: #9ca3af; font-size: 12px; line-height: 1.5;">
+            If you didn't expect this invitation, you can safely ignore this email.
+          </p>
+          <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
+          <p style="color: #9ca3af; font-size: 12px; text-align: center; margin: 0;">
+            Realtors' Practice — Nigerian Property Intelligence Platform
+          </p>
+        </div>
+      </div>
+    `;
+
+    try {
+      await resend.emails.send({
+        from: FROM_EMAIL,
+        to,
+        subject: `${inviterName} invited you to Realtors' Practice`,
+        html,
+      });
+      Logger.info(`[Email] Invitation sent to ${to} (role: ${role})`);
+    } catch (err: any) {
+      Logger.error(`[Email] Failed to send invite to ${to}: ${err.message}`);
+    }
+  }
+
+  /**
    * Send a generic email
    */
   static async sendGenericEmail(to: string, subject: string, html: string) {

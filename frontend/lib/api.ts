@@ -46,6 +46,12 @@ export const auth = {
     api.patch("/auth/me", data),
   register: (data: { email: string; password: string; firstName?: string; lastName?: string; role?: string }) =>
     api.post("/auth/register", data),
+  invite: (data: { email: string; firstName?: string; lastName?: string; role?: string }) =>
+    api.post("/auth/invite", data),
+  validateInvite: (code: string) =>
+    api.post("/auth/validate-invite", { code }),
+  registerWithCode: (data: { code: string; email: string; password: string; firstName?: string; lastName?: string }) =>
+    api.post("/auth/register-with-code", data),
 };
 
 export const health = {

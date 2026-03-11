@@ -188,6 +188,11 @@
 - [x] Frontend: Site card component
 - [x] Frontend: useSocket hook
 - [x] Frontend: useScrapeJobs hook
+- [x] Backend: Scrape logs API with filtering, pagination, search (/scrape/logs, /scrape/logs/:id)
+- [x] Backend: Socket.io namespace-wide broadcast for live log feed (fix event name mismatch)
+- [x] Frontend: Full scrape logs section (date range picker, level/site filters, pagination, detail modal)
+- [x] Frontend: useScrapeLogsHook (TanStack Query)
+- [x] Frontend: AdvancedDateRangePicker component (controlled + uncontrolled modes)
 
 ### Testing
 - [ ] Test: Trigger scrape from UI -> Python scraper receives job
@@ -395,6 +400,8 @@
 - [x] New TourSelectorModal component (Framer Motion, backdrop blur, spring animations)
 - [x] data-tour attributes added to every major UI element across all pages
 - [x] Tour config: modular steps file, easy to add/update per page
+- [x] Tour button CSS: three distinct brand colors (blue primary, orange skip, green back/exit)
+- [x] Tour button layout: 2-row flex layout (first two buttons share row, third full-width)
 
 ---
 
@@ -450,6 +457,13 @@
 - [x] Create `GlobeHero` component with `react-globe.gl` and dark hex/polygon map
 - [x] Add 4 Framer Motion animated KPI stat cards (Index Volume, Asset Velocity, etc.) matching dark neon reference
 - [x] Globe drops in, eases in, and rotates for a futuristic feel
+- [x] Mobile responsive: hide globe on small screens, stack cards, relative positioning for meta/greeting
+
+### Settings: Lanyard + Profile Card
+- [x] Lanyard component with react-three-fiber, rapier physics, meshline
+- [x] ProfileCard component for settings profile tab
+- [x] Error boundary + GLB validation for corrupt model files
+- [x] Dynamic import (SSR disabled) to reduce initial chunk size
 
 ---
 
