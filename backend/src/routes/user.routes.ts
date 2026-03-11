@@ -70,5 +70,7 @@ router.get("/", authenticate, authorize("ADMIN"), UserController.getAllUsers);
  *         description: User not found
  */
 router.patch("/:id/role", authenticate, authorize("ADMIN"), UserController.updateUserRole);
+router.patch("/:id/toggle-active", authenticate, authorize("ADMIN"), UserController.toggleActive);
+router.patch("/me", authenticate, UserController.updateProfile);
 
 export default router;

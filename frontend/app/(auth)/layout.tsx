@@ -6,12 +6,12 @@ export default function AuthLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen grid lg:grid-cols-2" style={{ backgroundColor: "var(--background)" }}>
+    <div className="h-screen overflow-hidden grid lg:grid-cols-2" style={{ backgroundColor: "var(--background)" }}>
       {/* Left: Visual panel — hidden on mobile */}
       <AuthVisualPanel />
 
       {/* Right: Form area */}
-      <div className="flex items-center justify-center p-4 sm:p-8 lg:p-12 overflow-y-auto">
+      <div className="flex items-center justify-center p-4 sm:p-6 lg:p-8 overflow-y-auto">
         {children}
       </div>
     </div>

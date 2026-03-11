@@ -1,11 +1,17 @@
 import { Request, Response } from "express";
 import { SiteService } from "../services/site.service";
 import { sendSuccess, sendError, sendPaginated } from "../utils/apiResponse.util";
+import prisma from "../prismaClient";
 
 export class SiteController {
   static async list(req: Request, res: Response) {
     try {
-      const { data, total, page, limit } = await SiteService.list(req.query as any);
+      const page = Math.max(1, parseInt(req.query.page as string) || 1);
+      const limit = Math.min(200, Math.max(1, parseInt(req.query.limit as string) || 20));
+      const search = req.query.search as string | undefined;
+      const enabledParam = req.query.enabled as string | undefined;
+      const enabled = enabledParam !== undefined ? enabledParam === "true" : undefined;
+      const { data, total } = await SiteService.list({ page, limit, search, enabled });
       return sendPaginated(res, data, total, page, limit);
     } catch (err) {
       return sendError(res, "Failed to fetch sites");
@@ -24,11 +30,28 @@ export class SiteController {
 
   static async create(req: Request, res: Response) {
     try {
+      // Check if a soft-deleted site with same key exists — restore it
+      if (req.body.key) {
+        const existing = await prisma.site.findFirst({
+          where: { key: req.body.key, deletedAt: { not: null } },
+        });
+        if (existing) {
+          const restored = await prisma.site.update({
+            where: { id: existing.id },
+            data: {
+              ...req.body,
+              deletedAt: null,
+              enabled: req.body.enabled ?? true,
+            },
+          });
+          return sendSuccess(res, restored, "Site restored", 201);
+        }
+      }
       const site = await SiteService.create(req.body);
       return sendSuccess(res, site, "Site created", 201);
     } catch (err: any) {
       if (err?.code === "P2002") {
-        return sendError(res, "Site key already exists", 409);
+        return sendError(res, "A site with this domain already exists. Check if it was previously deleted.", 409);
       }
       return sendError(res, "Failed to create site");
     }

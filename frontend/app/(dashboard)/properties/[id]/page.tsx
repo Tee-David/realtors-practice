@@ -842,10 +842,10 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
           </CollapsibleSection>
         </div>
 
-        {/* ============= Right: Sidebar ============= */}
-        <div className="space-y-5">
+        {/* ============= Right: Intelligence Sidebar ============= */}
+        <div className="space-y-4">
 
-          {/* Price Card */}
+          {/* ── Price Card ── */}
           <div className="hidden lg:block rounded-xl p-5 sticky top-[72px]" style={{ backgroundColor: "var(--card)" }}>
             <p className="text-xs font-medium mb-1" style={{ color: "var(--muted-foreground)" }}>
               {property.listingType === "RENT" ? "Monthly Rent" : "Total Price"}
@@ -858,8 +858,6 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
                 per {property.rentFrequency}
               </span>
             )}
-
-            {/* Price breakdown */}
             <div className="mt-4 space-y-0">
               {property.pricePerSqm != null && property.pricePerSqm > 0 && (
                 <DetailRow label="Price per sqm" value={formatPrice(property.pricePerSqm)} />
@@ -886,92 +884,234 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
                 </div>
               )}
             </div>
+          </div>
 
-            {/* Quality score */}
-            {property.qualityScore != null && (
-              <div className="mt-4 flex items-center gap-2 p-3 rounded-lg" style={{ backgroundColor: "var(--secondary)" }}>
-                <Star size={14} fill="#facc15" stroke="#facc15" />
-                <div className="flex-1">
-                  <p className="text-xs font-semibold" style={{ color: "var(--foreground)" }}>
-                    Quality Score: {property.qualityScore}/100
-                  </p>
-                  <div className="h-1.5 rounded-full mt-1 overflow-hidden" style={{ backgroundColor: "var(--border)" }}>
-                    <div
-                      className="h-full rounded-full"
-                      style={{
-                        width: `${property.qualityScore}%`,
-                        backgroundColor: property.qualityScore >= 70 ? "var(--success)" : property.qualityScore >= 40 ? "#f59e0b" : "var(--destructive)",
-                      }}
-                    />
-                  </div>
-                </div>
+          {/* ── Agent / Company Card (Expanded) ── */}
+          <div className="rounded-xl p-5" style={{ backgroundColor: "var(--card)" }}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-display font-semibold text-sm" style={{ color: "var(--foreground)" }}>
+                Agent Details
+              </h3>
+              {property.agentVerified && (
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ backgroundColor: "rgba(34,197,94,0.12)", color: "#16a34a" }}>
+                  <ShieldCheck size={10} /> Verified
+                </span>
+              )}
+            </div>
+
+            {/* Avatar + Name + Since */}
+            <div className="flex flex-col items-center text-center mb-5">
+              <div
+                className="w-16 h-16 rounded-full flex items-center justify-center mb-3 overflow-hidden"
+                style={{ backgroundColor: "var(--secondary)" }}
+              >
+                {property.agencyLogo ? (
+                  <img src={property.agencyLogo} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <User size={28} style={{ color: "var(--muted-foreground)" }} />
+                )}
               </div>
+              <p className="text-sm font-bold" style={{ color: "var(--foreground)" }}>
+                {property.agentName || "Unknown Agent"}
+              </p>
+              {property.agencyName && (
+                <p className="text-xs mt-0.5" style={{ color: "var(--muted-foreground)" }}>
+                  {property.agencyName}
+                </p>
+              )}
+              {property.scrapeTimestamp && (
+                <p className="text-[10px] mt-1" style={{ color: "var(--muted-foreground)" }}>
+                  Since {new Date(property.scrapeTimestamp).toLocaleDateString("en-NG", { month: "long", year: "numeric" })}
+                </p>
+              )}
+            </div>
+
+            {/* Contact Buttons Stack */}
+            <div className="space-y-2">
+              {property.agentPhone && (
+                <a
+                  href={`tel:${property.agentPhone}`}
+                  className="flex items-center gap-2.5 w-full py-3 px-4 rounded-xl text-sm font-semibold text-white justify-center transition-opacity hover:opacity-90"
+                  style={{ backgroundColor: "var(--primary)" }}
+                >
+                  <Phone size={15} />
+                  {property.agentPhone}
+                </a>
+              )}
+              {property.agentPhone && (
+                <a
+                  href={`https://wa.me/${property.agentPhone.replace(/[^0-9+]/g, "").replace(/^0/, "234")}`}
+                  target="_blank"
+                  rel="noopener"
+                  className="flex items-center gap-2.5 w-full py-3 px-4 rounded-xl text-sm font-semibold justify-center transition-opacity hover:opacity-90"
+                  style={{ backgroundColor: "#25d366", color: "white" }}
+                >
+                  <MessageCircle size={15} />
+                  WhatsApp
+                </a>
+              )}
+              {property.agentEmail && (
+                <a
+                  href={`mailto:${property.agentEmail}`}
+                  className="flex items-center gap-2.5 w-full py-3 px-4 rounded-xl text-sm font-semibold justify-center transition-colors"
+                  style={{ backgroundColor: "var(--secondary)", color: "var(--foreground)" }}
+                >
+                  <Mail size={15} />
+                  {property.agentEmail}
+                </a>
+              )}
+            </div>
+
+            {/* Contact info (extra) */}
+            {property.contactInfo && (
+              <p className="text-xs mt-3 p-3 rounded-lg" style={{ backgroundColor: "var(--secondary)", color: "var(--muted-foreground)" }}>
+                {property.contactInfo}
+              </p>
             )}
           </div>
 
-          {/* Agent / Contact Card */}
-          {(property.agentName || property.agencyName) && (
+          {/* ── Source Intelligence Card ── */}
+          <div className="rounded-xl p-5" style={{ backgroundColor: "var(--card)" }}>
+            <h3 className="font-display font-semibold text-sm mb-4" style={{ color: "var(--foreground)" }}>
+              Source Intelligence
+            </h3>
+
+            <div className="flex items-center gap-3 mb-4 p-3 rounded-lg" style={{ backgroundColor: "var(--secondary)" }}>
+              <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: "var(--card)" }}>
+                <ExternalLink size={16} style={{ color: "var(--primary)" }} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold truncate" style={{ color: "var(--foreground)" }}>
+                  {property.site?.name || property.source}
+                </p>
+                {property.site?.baseUrl && (
+                  <p className="text-[10px] truncate" style={{ color: "var(--muted-foreground)" }}>
+                    {property.site.baseUrl}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-0">
+              {property.listingUrl && (
+                <div className="flex items-center justify-between py-2.5" style={{ borderBottom: "1px solid var(--border)" }}>
+                  <span className="text-xs font-medium" style={{ color: "var(--muted-foreground)" }}>Original Listing</span>
+                  <a
+                    href={property.listingUrl}
+                    target="_blank"
+                    rel="noopener"
+                    className="flex items-center gap-1 text-xs font-semibold transition-colors hover:underline"
+                    style={{ color: "var(--primary)" }}
+                  >
+                    View on {property.site?.name || "Source"} <ExternalLink size={10} />
+                  </a>
+                </div>
+              )}
+              {property.scrapeTimestamp && (() => {
+                const scraped = new Date(property.scrapeTimestamp);
+                const daysSince = Math.floor((Date.now() - scraped.getTime()) / 86400000);
+                const freshness = daysSince <= 7 ? { label: "Fresh", color: "#16a34a", bg: "rgba(34,197,94,0.12)" }
+                  : daysSince <= 30 ? { label: "Recent", color: "#f59e0b", bg: "rgba(245,158,11,0.12)" }
+                  : { label: "Stale", color: "#dc2626", bg: "rgba(239,68,68,0.12)" };
+                return (
+                  <div className="flex items-center justify-between py-2.5" style={{ borderBottom: "1px solid var(--border)" }}>
+                    <span className="text-xs font-medium" style={{ color: "var(--muted-foreground)" }}>Scraped</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium" style={{ color: "var(--foreground)" }}>
+                        {scraped.toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" })}
+                      </span>
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ backgroundColor: freshness.bg, color: freshness.color }}>
+                        {freshness.label}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+              <DetailRow label="Property ID" value={
+                <span className="font-mono text-[11px]">{property.id.slice(0, 12)}…</span>
+              } />
+              <DetailRow label="Hash" value={
+                <span className="font-mono text-[11px]">{property.hash?.slice(0, 10)}…</span>
+              } />
+              <DetailRow label="Version" value={`v${property.currentVersion}`} />
+              <DetailRow label="Verification" value={
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold" style={{
+                  backgroundColor: property.verificationStatus === "VERIFIED" ? "rgba(34,197,94,0.12)" : property.verificationStatus === "FLAGGED" ? "rgba(245,158,11,0.12)" : "var(--secondary)",
+                  color: property.verificationStatus === "VERIFIED" ? "#16a34a" : property.verificationStatus === "FLAGGED" ? "#f59e0b" : "var(--muted-foreground)",
+                }}>
+                  {property.verificationStatus}
+                </span>
+              } />
+              <DetailRow label="Days on Market" value={property.daysOnMarket} />
+              <DetailRow label="Views" value={property.viewCount > 0 ? formatNumber(property.viewCount) : undefined} />
+              <DetailRow label="Inquiries" value={property.inquiryCount > 0 ? formatNumber(property.inquiryCount) : undefined} />
+              <DetailRow label="Created" value={new Date(property.createdAt).toLocaleDateString("en-NG", { day: "numeric", month: "long", year: "numeric" })} />
+              <DetailRow label="Last Updated" value={new Date(property.updatedAt).toLocaleDateString("en-NG", { day: "numeric", month: "long", year: "numeric" })} />
+            </div>
+          </div>
+
+          {/* ── Coordinates & Location Card ── */}
+          {(property.latitude || property.area || property.state) && (
             <div className="rounded-xl p-5" style={{ backgroundColor: "var(--card)" }}>
               <h3 className="font-display font-semibold text-sm mb-4" style={{ color: "var(--foreground)" }}>
-                Contact Agent
+                Coordinates & Location
               </h3>
-              <div className="flex items-center gap-3 mb-4">
-                <div
-                  className="w-12 h-12 rounded-full flex items-center justify-center"
-                  style={{ backgroundColor: "var(--secondary)" }}
-                >
-                  {property.agencyLogo ? (
-                    <img src={property.agencyLogo} alt="" className="w-full h-full rounded-full object-cover" />
-                  ) : (
-                    <User size={20} style={{ color: "var(--muted-foreground)" }} />
-                  )}
-                </div>
-                <div>
-                  {property.agentName && (
-                    <p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
-                      {property.agentName}
-                    </p>
-                  )}
-                  {property.agencyName && (
-                    <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
-                      {property.agencyName}
-                    </p>
-                  )}
-                  {property.agentVerified && (
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <ShieldCheck size={10} style={{ color: "var(--success)" }} />
-                      <span className="text-[10px] font-medium" style={{ color: "var(--success)" }}>Verified</span>
-                    </div>
-                  )}
-                </div>
-              </div>
 
-              <div className="space-y-2">
-                {property.agentPhone && (
-                  <a
-                    href={`tel:${property.agentPhone}`}
-                    className="flex items-center gap-2.5 w-full py-3 px-4 rounded-xl text-sm font-semibold text-white text-center justify-center transition-opacity hover:opacity-90"
-                    style={{ backgroundColor: "var(--primary)" }}
-                  >
-                    <Phone size={15} />
-                    {property.agentPhone}
-                  </a>
-                )}
-                {property.agentEmail && (
-                  <a
-                    href={`mailto:${property.agentEmail}`}
-                    className="flex items-center gap-2.5 w-full py-3 px-4 rounded-xl text-sm font-semibold text-center justify-center transition-colors"
-                    style={{ backgroundColor: "var(--secondary)", color: "var(--foreground)" }}
-                  >
-                    <Mail size={15} />
-                    Send Email
-                  </a>
-                )}
+              {property.latitude && property.longitude && (
+                <>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="flex-1 flex items-center gap-2 p-3 rounded-lg font-mono text-xs" style={{ backgroundColor: "var(--secondary)", color: "var(--foreground)" }}>
+                      <MapPin size={13} style={{ color: "var(--primary)" }} />
+                      {property.latitude.toFixed(6)}, {property.longitude.toFixed(6)}
+                    </div>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(`${property.latitude}, ${property.longitude}`);
+                      }}
+                      className="p-2.5 rounded-lg transition-colors hover:bg-[var(--secondary)]"
+                      style={{ color: "var(--muted-foreground)" }}
+                      title="Copy coordinates"
+                    >
+                      <Copy size={14} />
+                    </button>
+                  </div>
+
+                  {/* Direction Links */}
+                  <div className="grid grid-cols-2 gap-2 mb-4">
+                    <a
+                      href={`https://www.google.com/maps?q=${property.latitude},${property.longitude}`}
+                      target="_blank"
+                      rel="noopener"
+                      className="flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-[11px] font-semibold transition-colors"
+                      style={{ backgroundColor: "var(--secondary)", color: "var(--foreground)" }}
+                    >
+                      <MapPin size={12} /> Google Maps
+                    </a>
+                    <a
+                      href={`https://maps.apple.com/?q=${property.latitude},${property.longitude}`}
+                      target="_blank"
+                      rel="noopener"
+                      className="flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-[11px] font-semibold transition-colors"
+                      style={{ backgroundColor: "var(--secondary)", color: "var(--foreground)" }}
+                    >
+                      <MapPin size={12} /> Apple Maps
+                    </a>
+                  </div>
+                </>
+              )}
+
+              <div className="space-y-0">
+                <DetailRow label="Area" value={property.area} />
+                <DetailRow label="LGA" value={property.lga} />
+                <DetailRow label="State" value={property.state} />
+                <DetailRow label="Estate" value={property.estateName} />
+                <DetailRow label="Full Address" value={property.fullAddress} />
+                <DetailRow label="Country" value={property.country !== "NG" ? property.country : "Nigeria"} />
               </div>
             </div>
           )}
 
-          {/* Price History */}
+          {/* ── Price History ── */}
           <div className="rounded-xl p-5" style={{ backgroundColor: "var(--card)" }}>
             <div className="flex items-center gap-2 mb-4">
               <TrendingUp size={14} style={{ color: "var(--accent)" }} />
@@ -982,23 +1122,123 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
             <PriceChart history={priceHistory || []} />
           </div>
 
-          {/* Metadata */}
+          {/* ── Related Listings (Same Agent) ── */}
+          {property.agentName && (() => {
+            const agentListings = (similarData?.data || [])
+              .filter((p: Property) => p.id !== property.id && p.agentName === property.agentName)
+              .slice(0, 5);
+            if (!agentListings.length) return null;
+            return (
+              <div className="rounded-xl p-5" style={{ backgroundColor: "var(--card)" }}>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-display font-semibold text-sm" style={{ color: "var(--foreground)" }}>
+                    More from {property.agentName?.split(" ")[0] || "Agent"}
+                  </h3>
+                  <span className="text-[10px] font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: "var(--secondary)", color: "var(--muted-foreground)" }}>
+                    {agentListings.length} listing{agentListings.length > 1 ? "s" : ""}
+                  </span>
+                </div>
+                <div className="space-y-3">
+                  {agentListings.map((p: Property) => {
+                    const img = Array.isArray(p.images) && p.images.length > 0 ? p.images[0] : null;
+                    return (
+                      <Link key={p.id} href={`/properties/${p.id}`} className="flex items-center gap-3 group">
+                        <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0" style={{ backgroundColor: "var(--secondary)" }}>
+                          {img ? (
+                            <img src={img} alt="" className="w-full h-full object-cover" loading="lazy" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <Home size={14} style={{ color: "var(--muted-foreground)" }} />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium truncate group-hover:underline" style={{ color: "var(--foreground)" }}>{p.title}</p>
+                          <p className="text-xs font-bold" style={{ color: "var(--accent)" }}>{formatPrice(p.price)}</p>
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* ── Data Quality & Enrichment ── */}
           <div className="rounded-xl p-5" style={{ backgroundColor: "var(--card)" }}>
-            <h3 className="font-display font-semibold text-sm mb-3" style={{ color: "var(--foreground)" }}>
-              Listing Info
+            <h3 className="font-display font-semibold text-sm mb-4" style={{ color: "var(--foreground)" }}>
+              Data Quality
             </h3>
-            <div className="space-y-0">
-              <DetailRow label="Property ID" value={
-                <span className="font-mono text-[11px]">{property.id.slice(0, 12)}...</span>
-              } />
-              <DetailRow label="Version" value={`v${property.currentVersion}`} />
-              <DetailRow label="Verification" value={property.verificationStatus} />
-              <DetailRow label="Source" value={property.site?.name || property.source} />
-              <DetailRow label="Days on Market" value={property.daysOnMarket} />
-              <DetailRow label="Views" value={property.viewCount > 0 ? formatNumber(property.viewCount) : undefined} />
-              <DetailRow label="Inquiries" value={property.inquiryCount > 0 ? formatNumber(property.inquiryCount) : undefined} />
-              <DetailRow label="Created" value={new Date(property.createdAt).toLocaleDateString("en-NG", { day: "numeric", month: "long", year: "numeric" })} />
-              <DetailRow label="Last Updated" value={new Date(property.updatedAt).toLocaleDateString("en-NG", { day: "numeric", month: "long", year: "numeric" })} />
+
+            {/* Quality Score */}
+            {property.qualityScore != null && (
+              <div className="flex items-center gap-2 p-3 rounded-lg mb-4" style={{ backgroundColor: "var(--secondary)" }}>
+                <Star size={14} fill="#facc15" stroke="#facc15" />
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold" style={{ color: "var(--foreground)" }}>
+                      Quality Score
+                    </p>
+                    <span className="text-xs font-bold" style={{
+                      color: property.qualityScore >= 70 ? "var(--success)" : property.qualityScore >= 40 ? "#f59e0b" : "var(--destructive)",
+                    }}>
+                      {property.qualityScore}/100
+                    </span>
+                  </div>
+                  <div className="h-1.5 rounded-full mt-1.5 overflow-hidden" style={{ backgroundColor: "var(--border)" }}>
+                    <motion.div
+                      className="h-full rounded-full"
+                      initial={{ width: "0%" }}
+                      animate={{ width: `${property.qualityScore}%` }}
+                      transition={{ duration: 1, ease: "easeOut" }}
+                      style={{
+                        backgroundColor: property.qualityScore >= 70 ? "var(--success)" : property.qualityScore >= 40 ? "#f59e0b" : "var(--destructive)",
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Missing Fields */}
+            {(() => {
+              const missing: string[] = [];
+              if (!property.latitude && !property.longitude) missing.push("Coordinates");
+              if (property.bedrooms == null) missing.push("Bedrooms");
+              if (property.bathrooms == null) missing.push("Bathrooms");
+              if (!property.agentPhone) missing.push("Agent Phone");
+              if (!property.agentEmail) missing.push("Agent Email");
+              if (!property.description) missing.push("Description");
+              if (!property.images?.length) missing.push("Images");
+              if (!property.area) missing.push("Area");
+              if (!property.propertyType) missing.push("Property Type");
+              if (missing.length === 0) return (
+                <div className="flex items-center gap-2 text-xs font-medium" style={{ color: "var(--success)" }}>
+                  <Check size={14} /> All key fields populated
+                </div>
+              );
+              return (
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--muted-foreground)" }}>
+                    Missing Fields ({missing.length})
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {missing.map((f) => (
+                      <span key={f} className="text-[10px] font-medium px-2 py-1 rounded-md" style={{ backgroundColor: "rgba(239,68,68,0.08)", color: "#dc2626" }}>
+                        {f}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Version Info */}
+            <div className="flex items-center gap-2 mt-4 pt-3" style={{ borderTop: "1px solid var(--border)" }}>
+              <SquareStack size={12} style={{ color: "var(--muted-foreground)" }} />
+              <span className="text-[11px]" style={{ color: "var(--muted-foreground)" }}>
+                v{property.currentVersion} · {property._count?.versions || 0} version{(property._count?.versions || 0) !== 1 ? "s" : ""} · {property._count?.priceHistory || 0} price change{(property._count?.priceHistory || 0) !== 1 ? "s" : ""}
+              </span>
             </div>
           </div>
         </div>

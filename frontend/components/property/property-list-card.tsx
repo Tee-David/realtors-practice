@@ -18,7 +18,16 @@ interface PropertyListCardProps {
   onClick?: (id: string) => void;
 }
 
+import { useEffect, useRef } from "react";
+
 export function PropertyListCard({ property, isActive, onHover, onClick }: PropertyListCardProps) {
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isActive && cardRef.current) {
+      cardRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [isActive]);
   const {
     id, title, listingType, price, rentFrequency,
     bedrooms, bathrooms, area, state, locationText, images,
@@ -32,7 +41,8 @@ export function PropertyListCard({ property, isActive, onHover, onClick }: Prope
 
   return (
     <div
-      className="flex rounded-xl overflow-hidden cursor-pointer transition-all hover:shadow-md group"
+      ref={cardRef}
+      className={`flex rounded-xl overflow-hidden cursor-pointer transition-all group ${isActive ? 'shadow-md ring-2 ring-primary ring-offset-1 z-10' : 'hover:shadow-md'}`}
       style={{
         backgroundColor: "var(--card)",
         border: isActive ? "2px solid var(--primary)" : "1px solid var(--border)",

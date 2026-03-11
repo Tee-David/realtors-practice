@@ -1,11 +1,11 @@
 "use client";
 
 import { ThemeSwitch } from "@/components/ui/theme-switch";
-import { Bell, Menu, WandSparkles } from "lucide-react";
+import { Menu, WandSparkles } from "lucide-react";
+import { NotificationBell } from "@/components/layout/notification-bell";
 
 interface TopBarProps {
   title: string;
-  notificationCount?: number;
   onOpenSidebar?: () => void;
 }
 
@@ -38,7 +38,7 @@ function UserProfileDropdown() {
   );
 }
 
-export function TopBar({ title, notificationCount, onOpenSidebar }: TopBarProps) {
+export function TopBar({ title, onOpenSidebar }: TopBarProps) {
   return (
     <header
       className="flex fixed top-0 right-0 left-0 md:left-[60px] items-center justify-between px-4 sm:px-6 z-[900] border-b print:hidden"
@@ -90,15 +90,13 @@ export function TopBar({ title, notificationCount, onOpenSidebar }: TopBarProps)
         <button
           title="Take Interactive Tour"
           onClick={() => {
-            // Check if OnboardJS is available and start the tour if possible
             if (typeof window !== 'undefined' && (window as any).startTour) {
               (window as any).startTour();
             } else {
-              // Dispatch a custom event that a Tour implementation can listen to
-              document.dispatchEvent(new CustomEvent('start-product-tour'));
+              document.dispatchEvent(new Event('start-tour'));
             }
           }}
-          className="flex items-center justify-center w-9 h-9 sm:w-auto sm:px-3 sm:py-1.5 rounded-xl text-sm font-semibold bg-primary/10 hover:bg-primary/20 text-primary transition-colors border border-primary/20"
+          className="flex items-center justify-center w-9 h-9 sm:w-auto sm:px-3 sm:py-1.5 rounded-xl text-sm font-semibold bg-primary/10 hover:bg-primary/20 text-primary dark:text-white transition-colors border border-primary/20 dark:border-white/20"
         >
           <WandSparkles className="w-4 h-4" strokeWidth={2} />
           <span className="hidden sm:inline ml-2">Product Tour</span>
@@ -107,27 +105,8 @@ export function TopBar({ title, notificationCount, onOpenSidebar }: TopBarProps)
         {/* Theme toggle */}
         <ThemeSwitch />
 
-        {/* Notification bell */}
-        <button
-          className="relative flex items-center justify-center h-9 w-9 rounded-full transition-colors hover:bg-[var(--secondary)]"
-          aria-label="Notifications"
-        >
-          <Bell
-            className="h-5 w-5"
-            style={{ color: "var(--muted-foreground)" }}
-          />
-          {notificationCount != null && notificationCount > 0 && (
-            <span
-              className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[18px] h-[18px] rounded-full text-[10px] font-bold px-1"
-              style={{
-                backgroundColor: "var(--destructive)",
-                color: "var(--destructive-foreground)",
-              }}
-            >
-              {notificationCount > 99 ? "99+" : notificationCount}
-            </span>
-          )}
-        </button>
+        {/* Live Notification bell */}
+        <NotificationBell />
 
         {/* User profile */}
         <UserProfileDropdown />

@@ -7,6 +7,15 @@ const roleSchema = z.object({
   role: z.enum(["ADMIN", "EDITOR", "VIEWER", "API_USER"]),
 });
 
+const profileUpdateSchema = z.object({
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+  phone: z.string().optional(),
+  bio: z.string().optional(),
+  company: z.string().optional(),
+  avatarUrl: z.string().optional(),
+});
+
 export class UserController {
   /**
    * Get all users (Admin only)
@@ -69,6 +78,76 @@ export class UserController {
       return sendSuccess(res, updatedUser, "User role updated successfully");
     } catch (error: any) {
       return sendError(res, error.message || "Failed to update user role");
+    }
+  }
+
+  /**
+   * Toggle user active status (Admin only)
+   */
+  public static async toggleActive(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+
+      const targetUser = await prisma.user.findUnique({ where: { id } });
+      if (!targetUser) {
+        return sendError(res, "User not found", 404);
+      }
+
+      if (targetUser.email.toLowerCase() === "wedigcreativity@gmail.com") {
+        return sendError(res, "Cannot deactivate the super admin account", 403);
+      }
+
+      const updatedUser = await prisma.user.update({
+        where: { id },
+        data: { isActive: !targetUser.isActive },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          role: true,
+          isActive: true,
+        },
+      });
+
+      return sendSuccess(
+        res,
+        updatedUser,
+        `User ${updatedUser.isActive ? "activated" : "deactivated"} successfully`
+      );
+    } catch (error: any) {
+      return sendError(res, error.message || "Failed to toggle user status");
+    }
+  }
+
+  /**
+   * Update own profile
+   */
+  public static async updateProfile(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return sendError(res, "Unauthorized", 401);
+      }
+
+      const data = profileUpdateSchema.parse(req.body);
+
+      const updatedUser = await prisma.user.update({
+        where: { id: userId },
+        data,
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          role: true,
+          avatarUrl: true,
+        },
+      });
+
+      return sendSuccess(res, updatedUser, "Profile updated successfully");
+    } catch (error: any) {
+      return sendError(res, error.message || "Failed to update profile");
     }
   }
 }

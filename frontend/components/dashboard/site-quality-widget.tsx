@@ -1,11 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import { useSiteQualityRankings } from "@/hooks/use-analytics";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Sparkles, ArrowUpRight, Activity, Database, CheckCircle2 } from "lucide-react";
+import { Sparkles, ArrowUpRight, Activity, Database, CheckCircle2, Search } from "lucide-react";
 import { motion } from "motion/react";
 
 export function SiteQualityWidget() {
+  const [searchQuery, setSearchQuery] = useState("");
   const { data: rankings, isLoading } = useSiteQualityRankings();
 
   if (isLoading) {
@@ -36,11 +38,11 @@ export function SiteQualityWidget() {
   const hasData = rankings && rankings.length > 0;
 
   return (
-    <div className="rounded-2xl p-6 shadow-md border border-white/5 bg-card h-full flex flex-col transition-all hover:shadow-lg relative overflow-hidden group">
+    <div className="rounded-2xl p-6 shadow-md border border-white/5 bg-card h-[420px] flex flex-col transition-all hover:shadow-lg relative overflow-hidden group">
       {/* Background glow effect */}
       <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-[50px] pointer-events-none transition-transform group-hover:scale-150 duration-700" />
       
-      <div className="flex items-center justify-between mb-6 relative z-10">
+      <div className="flex items-center justify-between mb-6 relative z-10 shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20">
             <Sparkles size={18} className="text-primary" />
@@ -53,14 +55,29 @@ export function SiteQualityWidget() {
           </div>
         </div>
         {hasData && (
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-500/10 text-green-600 dark:text-green-400 text-[10px] uppercase font-bold tracking-wider">
-            <Activity className="w-3 h-3" />
-            Active
+          <div className="flex flex-col items-end gap-2">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-500/10 text-green-600 dark:text-green-400 text-[10px] uppercase font-bold tracking-wider">
+              <Activity className="w-3 h-3" />
+              Active
+            </div>
           </div>
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto pr-2 scroller relative z-10 space-y-5">
+      {hasData && (
+        <div className="relative mb-4 z-10 shrink-0">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Search sources..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-4 py-2 bg-secondary/30 border border-border/50 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-primary/50 transition-all placeholder:text-muted-foreground/60"
+          />
+        </div>
+      )}
+
+      <div className="flex-1 overflow-y-auto pr-2 no-scrollbar relative z-10 space-y-5">
         {!hasData ? (
           <div className="h-full min-h-[200px] flex flex-col items-center justify-center text-center opacity-70">
             <Database className="w-10 h-10 text-muted-foreground mb-3" />
@@ -68,8 +85,8 @@ export function SiteQualityWidget() {
             <p className="text-xs text-muted-foreground mt-1 max-w-[200px]">Data extraction engine has not indexed any sources yet.</p>
           </div>
         ) : (
-          rankings.map((ranking, idx) => {
-            const isTop = idx === 0;
+          rankings.filter(r => r.site.name.toLowerCase().includes(searchQuery.toLowerCase())).map((ranking, idx) => {
+            const isTop = idx === 0 && searchQuery === "";
             const scoreColor = ranking.score >= 80 ? 'bg-green-500' : ranking.score >= 50 ? 'bg-yellow-500' : 'bg-red-500';
             const scoreTextColor = ranking.score >= 80 ? 'text-green-600 dark:text-green-400' : ranking.score >= 50 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-500';
 

@@ -10,7 +10,39 @@ import TextType from "@/components/ui/TextType";
 
 import "@fontsource/space-grotesk";
 
-const Squares = dynamic(() => import("@/components/ui/squares"), { ssr: false });
+const GridMotion = dynamic(() => import("@/components/ui/grid-motion"), { ssr: false });
+
+// Beautiful stock property & architecture images from Unsplash
+const PROPERTY_IMAGES = [
+  "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=400&h=260&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&h=260&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=400&h=260&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1613490493576-7fde63acd811?w=400&h=260&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1580587771525-78b9dba3b914?w=400&h=260&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=400&h=260&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1605276374104-dee2a0ed3cd6?w=400&h=260&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=400&h=260&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1493809842364-78817add7ffb?w=400&h=260&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1416331108676-a22ccb276e35?w=400&h=260&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=400&h=260&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=400&h=260&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1558036117-15d82a90b9b5?w=400&h=260&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1529408686214-862920291410?w=400&h=260&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1628744448840-55bdb2497bd4?w=400&h=260&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1582268611958-ebfd161ef9cf?w=400&h=260&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1460317442991-0ec209397118?w=400&h=260&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1524758631624-e2822e304c36?w=400&h=260&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1554995207-c18c203602cb?w=400&h=260&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1484154218962-a197022b5858?w=400&h=260&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1617806118233-18e1de247200?w=400&h=260&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1583608205776-bfd35f0d9f83?w=400&h=260&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1600210492043-b4eaf3f77e31?w=400&h=260&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1434082033009-b81d41d32e1a?w=400&h=260&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1523217582562-09d0def993a6?w=400&h=260&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1449844908441-8829872d2607?w=400&h=260&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1505873242700-f289a29e1724?w=400&h=260&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=400&h=260&fit=crop&q=80",
+];
 
 const REAL_ESTATE_QUOTES = [
   { text: "Landlords grow rich in their sleep.", author: "John Stuart Mill" },
@@ -65,12 +97,9 @@ export function AuthVisualPanel({
         {backgroundContent ? (
           backgroundContent
         ) : (
-          <Squares
-            speed={0.5}
-            squareSize={80}
-            direction="diagonal"
-            borderColor="#222"
-            hoverFillColor="#000"
+          <GridMotion
+            items={PROPERTY_IMAGES}
+            gradientColor="#5227FF"
           />
         )}
       </div>
@@ -79,7 +108,7 @@ export function AuthVisualPanel({
       <div className="absolute inset-0 z-0 bg-black/40 pointer-events-none" />
 
       {/* Main Content Flow Container (to handle zoom and prevent overlap) */}
-      <div className="relative z-10 flex flex-col justify-between h-full p-8 lg:p-10 pointer-events-none min-h-full">
+      <div className="relative z-10 flex flex-col justify-between h-full p-6 lg:p-8 pointer-events-none min-h-full">
         
         {/* Top Bar: Logo, Theme Switch, and Title */}
         <div className="flex flex-col pointer-events-auto">
@@ -99,20 +128,20 @@ export function AuthVisualPanel({
             </div>
           </div>
           
-          <h2 className="font-display text-4xl lg:text-5xl xl:text-6xl tracking-tight font-extrabold text-white mt-8 drop-shadow-lg leading-tight max-w-[95%] text-left">
+          <h2 className="font-display text-3xl lg:text-4xl xl:text-5xl tracking-tight font-extrabold text-white mt-5 drop-shadow-[0_2px_12px_rgba(0,0,0,0.8)] leading-tight max-w-[95%] text-left">
             Nigerian Property Intelligence Platform.
           </h2>
         </div>
 
         {/* Flexible spacer in middle */}
-        <div className="flex-1 min-h-[40px]"></div>
+        <div className="flex-1 min-h-[20px]"></div>
 
         {/* Bottom Area: Slider, Attribution */}
-        <div className="flex flex-col pointer-events-none gap-6 mt-8">
+        <div className="flex flex-col pointer-events-none gap-4 mt-4">
           
           {/* Draggable Quotes Slider */}
           <GlassCard className="w-full relative pointer-events-auto overflow-hidden group items-start text-left shrink-0">
-            <div className="min-h-[160px] flex flex-col justify-center w-full items-start">
+            <div className="min-h-[110px] flex flex-col justify-center w-full items-start">
               <AnimatePresence mode="wait">
                 {quotes.length > 0 && (
                   <motion.div
@@ -140,9 +169,9 @@ export function AuthVisualPanel({
                       typingSpeed={35}
                       showCursor={false}
                       loop={false}
-                      className="text-3xl xl:text-4xl text-white leading-tight font-medium"
+                      className="text-2xl xl:text-3xl text-white leading-tight font-medium drop-shadow-[0_1px_6px_rgba(0,0,0,0.6)]"
                     />
-                    <p className="text-zinc-400 font-medium mt-4 text-sm tracking-wide uppercase">— {quotes[currentIndex].author}</p>
+                    <p className="text-zinc-300 font-medium mt-4 text-sm tracking-wide uppercase drop-shadow-[0_1px_4px_rgba(0,0,0,0.8)]">— {quotes[currentIndex].author}</p>
                   </motion.div>
                 )}
               </AnimatePresence>

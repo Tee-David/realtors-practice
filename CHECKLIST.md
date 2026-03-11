@@ -247,31 +247,31 @@
 - [ ] Test: Can switch between OSM/Mapbox/Google Maps
 
 ## Phase 6: Saved Searches + Notifications + Data Explorer
-- [ ] Backend: Saved search service (CRUD, matching, new match detection)
-- [ ] Backend: Saved search controller + routes
-- [ ] Backend: Notification service (create, list, mark read, in-app + email)
-- [ ] Backend: Notification controller + routes
-- [ ] Backend: Email service (Resend API integration)
-- [ ] Backend: Cron job for checking saved search matches
-- [ ] Backend: Export service (CSV/XLSX generation)
-- [ ] Backend: Export controller + routes
-- [ ] Backend: Audit log controller + routes
-- [ ] Frontend: Saved searches page (create, edit, view matches)
-- [ ] Frontend: Notification bell component (real-time via Socket.io)
-- [ ] Frontend: Notification dropdown/panel
-- [ ] Frontend: Data explorer page (tabs: All/Raw/Enriched/Flagged)
-- [ ] Frontend: Bulk action controls (approve, reject, merge duplicates, export)
-- [ ] Frontend: Data inspection detail view
-- [ ] Frontend: Audit log viewer page
-- [ ] Frontend: Export functionality (CSV/XLSX download)
-- [ ] Frontend: useSavedSearches hook
-- [ ] Frontend: useNotifications hook
+- [x] Backend: Saved search service (CRUD, matching, new match detection)
+- [x] Backend: Saved search controller + routes
+- [x] Backend: Notification service (create, list, mark read, in-app + email)
+- [x] Backend: Notification controller + routes
+- [x] Backend: Email service (Resend API integration)
+- [x] Backend: Cron job for checking saved search matches
+- [x] Backend: Export service (CSV generation)
+- [x] Backend: Export controller + routes
+- [x] Backend: Audit log controller + routes
+- [x] Frontend: Saved searches page (create, edit, view matches)
+- [x] Frontend: Notification bell component (real-time via Socket.io)
+- [x] Frontend: Notification dropdown/panel
+- [x] Frontend: Data explorer page (tabs: All/Raw/Enriched/Flagged)
+- [x] Frontend: Bulk action controls (approve, reject, merge duplicates, export)
+- [x] Frontend: Data inspection detail view
+- [x] Frontend: Audit log viewer page
+- [x] Frontend: Export functionality (CSV download)
+- [x] Frontend: useSavedSearches hook
+- [x] Frontend: useNotifications hook
 - [ ] Test: Create saved search -> matches appear when new properties arrive
 - [ ] Test: Email notification sent on new match
 - [ ] Test: In-app notification appears in real-time
 - [ ] Test: Data explorer shows correct segmented views
 - [ ] Test: Bulk actions work correctly
-- [ ] Test: CSV/XLSX export generates valid files
+- [ ] Test: CSV export generates valid files
 
 ## Phase 7: Production Hardening
 - [x] Backend: Query optimization (analyze slow queries, add missing indexes)
@@ -292,7 +292,7 @@
 - [ ] Documentation: API documentation (Swagger/OpenAPI spec)
 - [ ] Documentation: Deployment guide
 - [ ] Documentation: README.md update
-- [ ] User management page (admin - list users, change roles, deactivate)
+- [x] User management page (admin - list users, change roles, deactivate)
 - [ ] Settings page - general settings
 - [ ] Settings page - email notification config
 - [ ] Settings page - environment variable management
@@ -333,6 +333,126 @@
 
 ---
 
+## Phase 9: UX Polish & Feature Completion
+
+### Settings Page Overhaul
+- [x] Settings: Redesign to left sidebar nav (desktop) + full-screen sections (mobile)
+- [x] Settings/Profile: Avatar upload, name, phone, bio, company, email locked, Save button
+- [x] Settings/Security: Password change, Google OAuth link/unlink, active sessions list, login history
+- [x] Settings/Notifications: Email + in-app toggles, digest frequency, quiet hours, Save button
+- [x] Settings/Appearance: Theme toggle (Light/Dark/System), sidebar state, font size, accent color, compact mode
+- [x] Settings/Data & Display: Map provider + API keys, per-page count, default sort, voice search auto-submit, date/currency format
+- [x] Settings/Email Settings: SMTP/SendGrid/Resend config, from/reply-to, test email, template editor
+- [x] Settings/Backups: Manual + scheduled backups, retention policy, backup table with download/restore
+- [x] Settings/About: Version, credits, system info, legal links, danger zone (delete account)
+- [x] Settings/Users: Existing user table preserved and integrated into sidebar nav
+
+### Dashboard Bento Grid
+- [x] Upgrade BentoGrid + BentoGridItem with Aceternity-style title/description/header/icon props
+- [x] Add hover glow + scale effects to bento items
+- [x] Fix responsive breakpoints: 1→2→4 columns
+- [x] Add border + hover styling to KPI cards
+
+### Saved Searches
+- [x] Add listing types: Buy, Sell, Rent, Land, Lease, Shortlet
+- [x] Add property types chip selector (Flat, Duplex, Bungalow, Penthouse, Studio, etc.)
+- [x] Add bathrooms, furnishing status, parking, serviced toggle filters
+- [x] Improve modal UI with chip-style selectors and logical grouping
+
+### Audit Logs
+- [x] Set filters panel visible by default
+- [x] Add user dropdown filter
+- [x] Add IP address text filter
+- [x] Add severity filter (info/warning/critical)
+- [x] Add keyword search across log details
+- [x] Add scraper session ID filter
+- [x] Add more action types: SEARCH, IMPORT, SETTINGS_CHANGE, PASSWORD_CHANGE, ROLE_CHANGE, BACKUP
+- [x] Add more entity types: SETTINGS, BACKUP, EMAIL_TEMPLATE
+- [x] Add expandable row detail view (full JSON diff)
+- [x] Add Export CSV button
+
+### Analytics Page
+- [x] Replace "Coming Soon" with full analytics dashboard
+- [x] KPI cards: hero dark card + 4 mini cards with trend indicators
+- [x] Properties-over-time combined bar+area chart with time range selector
+- [x] Top Areas leaderboard with animated progress bars
+- [x] Top Sites leaderboard with animated progress bars
+- [x] Scraping activity heatmap (day × hour, intensity-shaded)
+- [x] Full property ledger table at bottom: tabs (All/Active/Sold/Rented/Pending), search, CSV export
+- [x] Analytics page redesigned to match ShipNow reference (hero card, leaderboards, heatmap, table)
+
+### Shepherd.js Tour System Overhaul
+- [x] Replace auto-start logic with animated Tour Selector Modal (Framer Motion)
+- [x] Tour Selector: two options — Full Tour vs Choose a Page
+- [x] Full App Tour: ~30 steps across all pages with router.push() navigation between
+- [x] Per-page tours: dashboardSteps, propertiesSteps, propertyDetailSteps, searchSteps
+- [x] Per-page tours: scraperSteps, savedSearchesSteps, dataExplorerSteps, analyticsSteps
+- [x] Per-page tours: auditLogSteps, settingsSteps
+- [x] Tour step rich content: emoji header, description, action hint, step counter pill
+- [x] Tour step progress bar with motivational text variants
+- [x] Tour Selector Modal: animated page-cards grid when "Choose a Page" selected
+- [x] Override Shepherd CSS to match brand blue theme
+- [x] New TourSelectorModal component (Framer Motion, backdrop blur, spring animations)
+- [x] data-tour attributes added to every major UI element across all pages
+- [x] Tour config: modular steps file, easy to add/update per page
+
+---
+
+## Phase 10: Interactive Search Experience (SEARCH_EXPERIENCE.md)
+
+> Airbnb/Zillow-grade map search. See SEARCH_EXPERIENCE.md for full technical spec.
+
+### Phase 1 Priority (High Impact)
+- [x] Search: Replace generic map pins with Price Pill markers (₦5M displayed on map)
+- [x] Search: Price pill shows ₦ with M/K suffix, blue for sale, green for rent
+- [x] Search: Pill highlights (scale 1.25x, fill color) on hover
+
+### Phase 2 Priority (Premium UX)
+- [x] Search: Map ↔ List hover sync — hover card highlights marker and vice versa
+- [x] Search: Hover marker → scroll corresponding card into view (smooth)
+- [x] Search: Highlighted card gets border glow + elevation
+
+### Phase 3 Priority (Wow Factor)
+- [ ] Search: FlyTo on search — extract area from query → smooth camera transition
+- [ ] Search: Pre-built Lagos coordinate lookup table (50+ areas, no API cost)
+- [ ] Search: Staggered marker pop-in (80ms stagger, spring animation, "live crawl" feel)
+- [ ] Search: Markers stagger only after flyTo settles (300ms delay)
+
+### Phase 4 Priority (Scale)
+- [ ] Search: Supercluster integration for zoom-based clustering
+- [ ] Search: Zoom ≤10 → cluster circles with counts, zoom ≥14 → individual price pills
+- [ ] Search: Cluster labels show price range (₦2M–₦45M)
+- [ ] Search: Cap staggered markers at 100–200 visible in viewport
+
+### Phase 5 Priority (Performance)
+- [ ] Search: Virtualized results list (`@tanstack/react-virtual`) for 10K+ cards
+- [ ] Search: Mobile optimized — CSS-only pills, reduced shadows
+
+### New Files Required (from spec)
+- [ ] `components/map/mapbox-map.tsx` — Mapbox GL wrapper with flyTo
+- [ ] `components/map/price-pill-marker.tsx` — Custom price pill component
+- [ ] `components/map/marker-cluster.tsx` — Supercluster integration
+- [ ] `components/map/map-controls.tsx` — Zoom, style switch, locate me
+- [ ] `components/search/search-map-view.tsx` — 50/50 split view
+- [ ] `components/search/search-result-card.tsx` — Card with hover sync
+- [ ] `components/search/live-crawl-overlay.tsx` — Stagger animation controller
+- [ ] `hooks/use-flyto.ts` — FlyTo with area geocoding
+- [ ] `hooks/use-marker-sync.ts` — Map ↔ list hover state
+- [ ] `hooks/use-search-query-parser.ts` — NLP-lite query parsing
+- [ ] `lib/lagos-coordinates.ts` — Pre-built area coordinate lookup table
+- [ ] `lib/cluster-config.ts` — Supercluster options
+
+---
+
+## Phase 11: Dashboard Hero Redesign
+
+### Globe Hero Component
+- [x] Create `GlobeHero` component with `react-globe.gl` and dark hex/polygon map
+- [x] Add 4 Framer Motion animated KPI stat cards (Index Volume, Asset Velocity, etc.) matching dark neon reference
+- [x] Globe drops in, eases in, and rotates for a futuristic feel
+
+---
+
 ## Running Totals
 - **Phase 1:** 42 tasks (40 done, 2 deployment pending)
 - **Phase 2:** 30 tasks (30 done ✅)
@@ -341,7 +461,10 @@
 - **Phase 4:** 21 tasks (19 done, 2 pending — deploy + tests)
 - **Phase 4.5:** 3 tasks (3 done)
 - **Phase 5:** 16 tasks (7 done, 9 pending)
-- **Phase 6:** 22 tasks (0 done)
+- **Phase 6:** 22 tasks (19 done, 6 tests pending)
 - **Phase 7:** 38 tasks (15 done)
 - **Phase 8:** 15 tasks (0 done)
-- **TOTAL:** ~238 tasks (~129 done, ~109 remaining)
+- **Phase 9:** 47 tasks (46 done, 1 pending — `data-tour` attributes)
+- **Phase 10:** 22 tasks (0 done)
+- **Phase 11:** 3 tasks (3 done)
+- **TOTAL:** ~310 tasks (~132 done, ~178 remaining)

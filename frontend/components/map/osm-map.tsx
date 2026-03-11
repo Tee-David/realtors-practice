@@ -15,24 +15,53 @@ L.Icon.Default.mergeOptions({
   shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
 });
 
-function createPriceIcon(price: number | undefined, isHighlighted: boolean) {
+const LISTING_COLORS: Record<string, string> = {
+  SALE: "#0001fc", // Brand primary
+  RENT: "#0a6906", // Brand success green
+  SHORTLET: "#ff6600", // Brand accent orange
+  LEASE: "#8b5cf6",
+};
+
+function createPriceIcon(price: number | undefined, isHighlighted: boolean, listingType: string = "SALE") {
   const label = price ? formatPrice(price) : "N/A";
+  const color = LISTING_COLORS[listingType] || LISTING_COLORS.SALE;
+  
   return L.divIcon({
-    className: "custom-price-marker",
-    html: `<div style="
-      background: ${isHighlighted ? "var(--primary)" : "var(--card)"};
-      color: ${isHighlighted ? "#fff" : "var(--foreground)"};
-      border: 2px solid ${isHighlighted ? "var(--primary)" : "var(--border)"};
-      padding: 2px 8px;
-      border-radius: 20px;
-      font-size: 11px;
-      font-weight: 700;
-      white-space: nowrap;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-      font-family: var(--font-space-grotesk), sans-serif;
-    ">${label}</div>`,
+    className: "custom-price-marker border-0 bg-transparent flex flex-col items-center justify-center",
+    html: `
+      <div style="
+        background: ${isHighlighted ? color : "#ffffff"};
+        color: ${isHighlighted ? "#ffffff" : "#1a1a1a"};
+        border: 2px solid ${color};
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 800;
+        white-space: nowrap;
+        box-shadow: ${isHighlighted ? `0 8px 24px -6px ${color}80` : '0 4px 12px -4px rgba(0,0,0,0.3)'};
+        font-family: var(--font-display), sans-serif;
+        transform: ${isHighlighted ? "scale(1.2) translateY(-4px)" : "scale(1)"};
+        transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        position: relative;
+        z-index: ${isHighlighted ? 9999 : 1};
+      ">
+        ${label}
+      </div>
+      <div style="
+        width: 0;
+        height: 0;
+        border-left: 6px solid transparent;
+        border-right: 6px solid transparent;
+        border-top: 6px solid ${isHighlighted ? color : "#ffffff"};
+        margin-top: -1px;
+        filter: ${isHighlighted ? "none" : "drop-shadow(0px 3px 2px rgba(0,0,0,0.15))"};
+        transform: ${isHighlighted ? "scale(1.2) translateY(-4px)" : "scale(1)"};
+        transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        z-index: ${isHighlighted ? 9999 : 1};
+      "></div>
+    `,
     iconSize: [0, 0],
-    iconAnchor: [40, 20],
+    iconAnchor: [40, 36], // Bottom-center of the pip
   });
 }
 
@@ -76,7 +105,7 @@ export function OSMMap({ properties, hoveredId, onMarkerClick }: PropertyMapProp
         <Marker
           key={property.id}
           position={[property.latitude!, property.longitude!]}
-          icon={createPriceIcon(property.price, hoveredId === property.id)}
+          icon={createPriceIcon(property.price, hoveredId === property.id, property.listingType)}
           eventHandlers={{
             click: () => onMarkerClick(property.id),
           }}

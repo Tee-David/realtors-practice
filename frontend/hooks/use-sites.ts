@@ -29,13 +29,16 @@ export function useSites(page = 1, limit = 20, search?: string, enabled?: boolea
       const params: Record<string, unknown> = { page, limit };
       if (search) params.search = search;
       if (enabled !== undefined) params.enabled = enabled;
-      const { data } = await api.get(`/sites`, { params });
-      // Backend may return { data: Site[] } or { data: { sites, total, page, limit } }
-      // Handle both formats
-      if (Array.isArray(data.data)) {
-        return { sites: data.data as Site[], total: data.data.length, page, limit } as SitesResponse;
-      }
-      return data.data as SitesResponse;
+      const { data: response } = await api.get(`/sites`, { params });
+      // response is the body from axios, which looks like: { success: true, data: [...], meta: { total, page, limit } }
+      const sitesArray = Array.isArray(response.data) ? response.data : [];
+      
+      return {
+        sites: sitesArray,
+        total: response.meta?.total || sitesArray.length,
+        page: response.meta?.page || page,
+        limit: response.meta?.limit || limit
+      } as SitesResponse;
     },
   });
 }

@@ -1,10 +1,11 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 import { PropertyCard } from "./property-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SearchX } from "lucide-react";
 import type { Property } from "@/types/property";
+import { useEffect, useRef } from "react";
 
 interface PropertyGridProps {
   properties: Property[];
@@ -95,8 +96,23 @@ export function PropertyGrid({ properties, isLoading, emptyMessage, selectedId, 
   const gridStyle = typeof columns === "number" ? getGridStyle(columns) : undefined;
   const gridClass = typeof columns === "string" ? columns : undefined;
 
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Scroll to selected element when hovered from map (selectedId becomes active via hover hook usually)
+  // Or in this case we'll rely on a specific prop for "hovered globally" to sync from map -> list
+  // The generic approach: if the card becomes "isActive", we scroll to it if not in view.
+  useEffect(() => {
+    if (selectedId && containerRef.current) {
+      const el = containerRef.current.querySelector(`[data-property-id="${selectedId}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+    }
+  }, [selectedId]);
+
   return (
     <motion.div
+      ref={containerRef}
       className={gridClass}
       style={gridStyle}
       variants={containerVariants}
@@ -104,7 +120,7 @@ export function PropertyGrid({ properties, isLoading, emptyMessage, selectedId, 
       animate="visible"
     >
       {properties.map((property) => (
-        <motion.div key={property.id} variants={itemVariants}>
+        <motion.div key={property.id} variants={itemVariants} data-property-id={property.id}>
           <PropertyCard
             property={property}
             isActive={selectedId === property.id}

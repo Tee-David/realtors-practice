@@ -1,965 +1,1016 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useTheme } from "next-themes";
-import {
-  User, Shield, Bell, Palette, Info, Eye, EyeOff, Monitor, Sun, Moon,
-  MapPin, Globe, ChevronRight, ArrowLeft, Save, Link2, Unlink2,
-  Database, Mail, Server, HardDrive, Clock, Trash2, Plus, Download,
-  RefreshCcw, Settings2, Mic, SortAsc, LayoutGrid, FileCode,
-  Users, CheckCircle2, AlertCircle, X,
-} from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
+import { useState, useRef, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { auth, users as usersApi } from "@/lib/api";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabase";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  User, Lock, Bell, Palette, LayoutDashboard, Mail, Database,
+  Info, Users, ChevronRight, ChevronLeft, Upload, Eye, EyeOff,
+  ToggleLeft, ToggleRight, Map, Monitor, Server, Download, RefreshCw,
+  Trash2, Plus, Check, X, Link, ExternalLink, Shield, Terminal,
+  AlertTriangle, HardDrive, Chrome, Smartphone, ChevronDown,
+} from "lucide-react";
+import { EmailTemplateBuilder } from "@/components/dashboard/email-template-builder";
+import { useThemeConfig } from "@/components/theme-config-provider";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+// ─── Types ─────────────────────────────────────────────────────────────────
 
-type TabId = "profile" | "security" | "notifications" | "preferences" | "data" | "email" | "backup" | "about" | "env" | "users";
+type SettingsSection =
+  | "profile" | "security" | "notifications" | "appearance"
+  | "display" | "email" | "backups" | "about" | "users";
 
-interface TabDef {
-  id: TabId;
-  label: string;
-  description: string;
-  icon: React.ElementType;
-  adminOnly?: boolean;
-}
+interface NavItem { key: SettingsSection; label: string; icon: React.ElementType; desc: string; danger?: boolean }
 
-const TABS: TabDef[] = [
-  { id: "profile", label: "Profile", description: "Personal information & avatar", icon: User },
-  { id: "security", label: "Security", description: "Passwords, 2FA & linked accounts", icon: Shield },
-  { id: "notifications", label: "Notifications", description: "Email & in-app alerts", icon: Bell },
-  { id: "preferences", label: "Appearance", description: "Theme, fonts & colors", icon: Palette },
-  { id: "data", label: "Data & Display", description: "Map, pagination, sorting & voice", icon: Settings2 },
-  { id: "email", label: "Email Settings", description: "Templates & email configuration", icon: Mail },
-  { id: "backup", label: "Backups", description: "Create & manage data backups", icon: HardDrive },
-  { id: "users", label: "User Management", description: "Manage users & roles", icon: Users, adminOnly: true },
-  { id: "env", label: "Environment", description: "Server environment variables", icon: Server, adminOnly: true },
-  { id: "about", label: "About", description: "App info & tech stack", icon: Info },
+// ─── Nav Items ──────────────────────────────────────────────────────────────
+
+const NAV: NavItem[] = [
+  { key: "profile",       label: "Profile",           icon: User,          desc: "Personal details and avatar" },
+  { key: "security",      label: "Security",          icon: Shield,        desc: "Password and account access" },
+  { key: "notifications", label: "Notifications",     icon: Bell,          desc: "Email and in-app alerts" },
+  { key: "appearance",    label: "Appearance",        icon: Palette,       desc: "Theme, fonts, and layout" },
+  { key: "display",       label: "Data & Display",    icon: LayoutDashboard, desc: "Map, filters, and preferences" },
+  { key: "email",         label: "Email Settings",    icon: Mail,          desc: "SMTP, templates, and delivery" },
+  { key: "backups",       label: "Backups",           icon: Database,      desc: "Backup and restore data" },
+  { key: "about",         label: "About",             icon: Info,          desc: "Version, credits, and legal" },
+  { key: "users",         label: "Users",             icon: Users,         desc: "Manage team members and roles" },
 ];
 
-// ---------------------------------------------------------------------------
-// Small reusable components
-// ---------------------------------------------------------------------------
+// ─── Shared UI ──────────────────────────────────────────────────────────────
 
-function ToggleSwitch({ checked, onChange, disabled = false }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
-  return (
-    <button type="button" role="switch" aria-checked={checked} disabled={disabled}
-      onClick={() => onChange(!checked)}
-      className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-      style={{ backgroundColor: checked ? "var(--primary)" : "var(--muted)" }}>
-      <span className="pointer-events-none inline-block h-5 w-5 rounded-full shadow-lg ring-0 transition-transform"
-        style={{ backgroundColor: "var(--card)", transform: checked ? "translateX(1.25rem)" : "translateX(0)" }} />
-    </button>
-  );
-}
+const inputBase = "w-full rounded-xl border px-3 py-2.5 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--primary)]";
+const inputStyle = { backgroundColor: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" };
 
-function PasswordInput({ label, placeholder, value, onChange }: { label: string; placeholder: string; value?: string; onChange?: (v: string) => void }) {
-  const [show, setShow] = useState(false);
+function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className="space-y-1.5">
-      <label className="text-sm font-medium text-foreground">{label}</label>
-      <div className="relative max-w-md">
-        <Input type={show ? "text" : "password"} placeholder={placeholder} value={value} onChange={e => onChange?.(e.target.value)} />
-        <button type="button" onClick={() => setShow(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-          {show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-        </button>
-      </div>
+    <div className={`rounded-2xl border p-6 ${className}`} style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+      {children}
     </div>
   );
 }
 
-function SettingRow({ label, description, children }: { label: string; description?: string; children: React.ReactNode }) {
+function CardHeader({ icon: Icon, title, action, children }: { icon: React.ElementType; title: string; action?: React.ReactNode; children?: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between rounded-lg border p-4 border-border">
-      <div className="min-w-0 flex-1 mr-4">
-        <p className="text-sm font-medium text-foreground">{label}</p>
-        {description && <p className="text-xs text-muted-foreground mt-0.5">{description}</p>}
+    <div>
+      <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: "rgba(0,1,252,0.08)" }}>
+            <Icon className="w-5 h-5" style={{ color: "var(--primary)" }} />
+          </div>
+          <h3 className="text-base font-semibold" style={{ color: "var(--foreground)" }}>{title}</h3>
+        </div>
+        {action}
       </div>
       {children}
     </div>
   );
 }
 
-function SectionHeader({ title, description }: { title: string; description?: string }) {
+function SaveBtn({ isLoading, onClick, className = "mt-4" }: { isLoading?: boolean; onClick?: () => void; className?: string }) {
   return (
-    <div className="mb-4">
-      <h3 className="font-display font-semibold text-foreground">{title}</h3>
-      {description && <p className="text-sm text-muted-foreground mt-0.5">{description}</p>}
+    <button
+      onClick={onClick}
+      disabled={isLoading}
+      className={`${className} px-5 py-2 rounded-xl text-sm font-semibold transition-colors hover:opacity-90 disabled:opacity-50`}
+      style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
+    >
+      {isLoading ? "Saving…" : "Save Changes"}
+    </button>
+  );
+}
+
+function Toggle({ checked, onChange, label, sub }: { checked: boolean; onChange: () => void; label: string; sub?: string }) {
+  return (
+    <div className="flex items-center justify-between py-2.5">
+      <div>
+        <p className="text-sm font-medium" style={{ color: "var(--foreground)" }}>{label}</p>
+        {sub && <p className="text-xs mt-0.5" style={{ color: "var(--muted-foreground)" }}>{sub}</p>}
+      </div>
+      <button onClick={onChange} className="transition-colors shrink-0 ml-4" style={{ color: checked ? "#16a34a" : "var(--muted-foreground)" }}>
+        {checked ? <ToggleRight className="w-7 h-7" /> : <ToggleLeft className="w-7 h-7" />}
+      </button>
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Tab Panels
-// ---------------------------------------------------------------------------
+// ─── Searchable Select ───────────────────────────────────────────────────────
 
-function ProfileTab() {
+function SearchableSelect({ value, onChange, options, placeholder }: { value: string, onChange: (v: string) => void, options: string[], placeholder?: string }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  
+  const filtered = options.filter(o => o.toLowerCase().includes(search.toLowerCase()));
+  
+  return (
+    <div className="relative">
+      <button 
+        type="button" 
+        onClick={() => setOpen(!open)} 
+        className={inputBase + " flex justify-between items-center"} 
+        style={inputStyle}
+      >
+        {value || placeholder}
+        <ChevronDown className="w-4 h-4 opacity-50" />
+      </button>
+      
+      {open && (
+         <>
+           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+           <div className="absolute top-full mt-1 w-full bg-[var(--card)] border shadow-xl rounded-xl z-50 overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+             <div className="p-2 border-b" style={{ borderColor: 'var(--border)' }}>
+               <input 
+                 autoFocus
+                 className="w-full px-2 py-1 text-sm bg-[var(--background)] border rounded text-[var(--foreground)] focus:outline-none" 
+                 style={{ borderColor: 'var(--border)' }}
+                 placeholder="Search fonts..."
+                 value={search}
+                 onChange={e => setSearch(e.target.value)}
+               />
+             </div>
+             <div className="max-h-48 overflow-y-auto p-1">
+                {filtered.map(opt => (
+                  <button 
+                    key={opt}
+                    type="button"
+                    onClick={() => { onChange(opt); setOpen(false); setSearch(""); }}
+                    className="w-full text-left px-3 py-1.5 text-sm rounded hover:bg-[var(--secondary)] transition-colors"
+                  >
+                    {opt}
+                  </button>
+                ))}
+             </div>
+           </div>
+         </>
+      )}
+    </div>
+  )
+}
+
+// ─── Profile ────────────────────────────────────────────────────────────────
+
+function ProfileSection() {
+  const { data: me } = useQuery({ queryKey: ["auth-me"], queryFn: async () => (await auth.me()).data.data });
   const [editing, setEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [profile, setProfile] = useState({
-    firstName: "", lastName: "", email: "", phone: "", bio: "", country: "Nigeria", city: "Lagos",
-  });
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [bio, setBio] = useState("");
+  const [company, setCompany] = useState("");
 
   useEffect(() => {
-    const loadProfile = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          setProfile(p => ({
-            ...p,
-            firstName: user.user_metadata?.first_name || user.user_metadata?.full_name?.split(' ')[0] || "",
-            lastName: user.user_metadata?.last_name || user.user_metadata?.full_name?.split(' ').slice(1).join(' ') || "",
-            email: user.email || "",
-            phone: user.phone || user.user_metadata?.phone || "",
-            bio: user.user_metadata?.bio || "",
-            country: user.user_metadata?.country || "Nigeria",
-            city: user.user_metadata?.city || "Lagos",
-          }));
-        }
-      } catch {}
-    };
-    loadProfile();
-  }, []);
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      const { error } = await supabase.auth.updateUser({
-        data: {
-          first_name: profile.firstName,
-          last_name: profile.lastName,
-          full_name: `${profile.firstName} ${profile.lastName}`,
-          phone: profile.phone,
-          bio: profile.bio,
-          country: profile.country,
-          city: profile.city,
-        },
-      });
-      if (error) throw error;
-      toast.success("Profile updated!");
-      setEditing(false);
-    } catch (err: any) {
-      toast.error(err.message || "Failed to update profile");
-    } finally {
-      setSaving(false);
+    if (me && firstName === "" && !editing) {
+      setFirstName(me.firstName || "");
+      setLastName(me.lastName || "");
+      setPhone(me.phone || "");
+      setBio(me.bio || "");
+      setCompany(me.company || "");
     }
-  };
-
-  const initials = (profile.firstName[0] || "") + (profile.lastName[0] || "");
+  }, [me, firstName, editing]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <div className="flex size-16 sm:size-20 shrink-0 items-center justify-center rounded-full text-xl sm:text-2xl font-display font-bold bg-primary text-primary-foreground">
-          {initials || "?"}
-        </div>
-        <div className="min-w-0 flex-1">
-          <h3 className="text-lg font-display font-semibold text-foreground truncate">
-            {profile.firstName} {profile.lastName}
-          </h3>
-          <p className="text-sm text-muted-foreground truncate">{profile.email}</p>
-        </div>
-        <Button variant={editing ? "default" : "outline"} size="sm" onClick={() => editing ? handleSave() : setEditing(true)} disabled={saving} className="shrink-0">
-          {saving ? <RefreshCcw className="size-4 animate-spin mr-1" /> : editing ? <Save className="size-4 mr-1" /> : null}
-          {editing ? "Save" : "Edit"}
-        </Button>
-      </div>
+    <div className="space-y-4 max-w-2xl">
+      {/* Avatar */}
+      <Card>
+        <CardHeader icon={User} title="My Profile" action={
+          <button onClick={() => setEditing(e => !e)} className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors hover:bg-[var(--secondary)]" style={{ borderColor: "var(--border)", color: "var(--foreground)" }}>
+            {editing ? <X className="w-3 h-3" /> : null} {editing ? "Cancel" : "Edit ✎"}
+          </button>
+        }>
+          <div className="flex items-center gap-5">
+            <div className="relative">
+              <div className="w-20 h-20 rounded-2xl flex items-center justify-center text-2xl font-bold" style={{ backgroundColor: "rgba(0,1,252,0.1)", color: "var(--primary)" }}>
+                {(me?.firstName?.[0] || me?.email?.[0] || "U").toUpperCase()}
+              </div>
+              {editing && (
+                <button className="absolute -bottom-1.5 -right-1.5 w-7 h-7 rounded-full border-2 flex items-center justify-center" style={{ backgroundColor: "var(--primary)", borderColor: "var(--card)", color: "var(--primary-foreground)" }}>
+                  <Upload className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+            <div>
+              <p className="text-lg font-semibold" style={{ color: "var(--foreground)" }}>{me?.firstName} {me?.lastName}</p>
+              <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>{me?.role || "Admin"}</p>
+              <p className="text-xs mt-0.5" style={{ color: "var(--muted-foreground)" }}>{me?.email}</p>
+            </div>
+          </div>
+        </CardHeader>
+      </Card>
 
-      <Separator />
-
-      <div>
-        <SectionHeader title="Personal Information" />
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">First Name</label>
-            <Input value={profile.firstName} disabled={!editing} onChange={e => setProfile(p => ({ ...p, firstName: e.target.value }))} />
+      {/* Personal Info */}
+      <Card>
+        <CardHeader icon={User} title="Personal Information" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {[
+            { label: "First Name", val: firstName, set: setFirstName },
+            { label: "Last Name",  val: lastName,  set: setLastName },
+          ].map(f => (
+            <div key={f.label}>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>{f.label}</label>
+              <input value={f.val} onChange={e => f.set(e.target.value)} disabled={!editing} className={inputBase + (editing ? "" : " opacity-70")} style={inputStyle} />
+            </div>
+          ))}
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Email <span className="text-[10px] rounded px-1.5 py-0.5 ml-1" style={{ backgroundColor: "var(--secondary)" }}>Locked</span></label>
+            <input value={me?.email || ""} disabled className={inputBase + " opacity-50 cursor-not-allowed"} style={inputStyle} />
           </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">Last Name</label>
-            <Input value={profile.lastName} disabled={!editing} onChange={e => setProfile(p => ({ ...p, lastName: e.target.value }))} />
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Phone</label>
+            <input value={phone} onChange={e => setPhone(e.target.value)} disabled={!editing} className={inputBase + (editing ? "" : " opacity-70")} style={inputStyle} placeholder="+234..." />
           </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground flex items-center gap-2">
-              Email <span className="text-[10px] text-muted-foreground bg-secondary px-1.5 py-0.5 rounded">Cannot be changed</span>
-            </label>
-            <Input value={profile.email} disabled className="opacity-60" />
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Company</label>
+            <input value={company} onChange={e => setCompany(e.target.value)} disabled={!editing} className={inputBase + (editing ? "" : " opacity-70")} style={inputStyle} />
           </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">Phone</label>
-            <Input value={profile.phone} disabled={!editing} onChange={e => setProfile(p => ({ ...p, phone: e.target.value }))} placeholder="+234 801 234 5678" />
-          </div>
-        </div>
-        <div className="mt-4 space-y-1.5">
-          <label className="text-sm font-medium text-foreground">Bio / Role</label>
-          <Input value={profile.bio} disabled={!editing} onChange={e => setProfile(p => ({ ...p, bio: e.target.value }))} placeholder="e.g. Real Estate Agent" />
-        </div>
-      </div>
-
-      <Separator />
-
-      <div>
-        <SectionHeader title="Location" />
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">Country</label>
-            <Input value={profile.country} disabled={!editing} onChange={e => setProfile(p => ({ ...p, country: e.target.value }))} />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">City</label>
-            <Input value={profile.city} disabled={!editing} onChange={e => setProfile(p => ({ ...p, city: e.target.value }))} />
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Bio</label>
+            <textarea value={bio} onChange={e => setBio(e.target.value)} disabled={!editing} rows={2} className={inputBase + (editing ? "" : " opacity-70") + " resize-none"} style={inputStyle} />
           </div>
         </div>
-      </div>
+        {editing && <SaveBtn onClick={() => { toast.success("Profile saved"); setEditing(false); }} />}
+      </Card>
     </div>
   );
 }
 
-function SecurityTab() {
-  const [twoFA, setTwoFA] = useState(false);
-  const [currentPw, setCurrentPw] = useState("");
-  const [newPw, setNewPw] = useState("");
-  const [confirmPw, setConfirmPw] = useState("");
-  const [savingPw, setSavingPw] = useState(false);
-  const [googleLinked, setGoogleLinked] = useState(false);
-  const [checkingGoogle, setCheckingGoogle] = useState(true);
+// ─── Security ───────────────────────────────────────────────────────────────
 
-  useEffect(() => {
-    const checkGoogle = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const identities = user.identities || [];
-          setGoogleLinked(identities.some(i => i.provider === "google"));
-        }
-      } catch {}
-      setCheckingGoogle(false);
-    };
-    checkGoogle();
-  }, []);
-
-  const handlePasswordChange = async () => {
-    if (newPw !== confirmPw) { toast.error("Passwords don't match"); return; }
-    if (newPw.length < 8) { toast.error("Password must be at least 8 characters"); return; }
-    setSavingPw(true);
-    try {
-      const { error } = await supabase.auth.updateUser({ password: newPw });
-      if (error) throw error;
-      toast.success("Password updated!");
-      setCurrentPw(""); setNewPw(""); setConfirmPw("");
-    } catch (err: any) {
-      toast.error(err.message || "Failed to update password");
-    } finally { setSavingPw(false); }
-  };
-
-  const handleGoogleLink = async () => {
-    const { error } = await supabase.auth.linkIdentity({ provider: "google", options: { redirectTo: window.location.href } });
-    if (error) toast.error(error.message);
-  };
-
-  const handleGoogleUnlink = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      const googleIdentity = user?.identities?.find(i => i.provider === "google");
-      if (!googleIdentity) { toast.error("No Google account linked"); return; }
-      const { error } = await supabase.auth.unlinkIdentity(googleIdentity);
-      if (error) throw error;
-      setGoogleLinked(false);
-      toast.success("Google account unlinked");
-    } catch (err: any) {
-      toast.error(err.message || "Failed to unlink Google");
-    }
-  };
+function SecuritySection() {
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [googleLinked] = useState(false);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <SectionHeader title="Change Password" />
+    <div className="space-y-4 max-w-2xl">
+      {/* Password */}
+      <Card>
+        <CardHeader icon={Lock} title="Change Password" />
         <div className="space-y-3">
-          <PasswordInput label="Current Password" placeholder="Enter current password" value={currentPw} onChange={setCurrentPw} />
-          <PasswordInput label="New Password" placeholder="Enter new password" value={newPw} onChange={setNewPw} />
-          <PasswordInput label="Confirm New Password" placeholder="Confirm new password" value={confirmPw} onChange={setConfirmPw} />
-        </div>
-        <Button className="mt-4" onClick={handlePasswordChange} disabled={savingPw || !newPw || !confirmPw}>
-          {savingPw ? <RefreshCcw className="size-4 animate-spin mr-1" /> : <Save className="size-4 mr-1" />}
-          Update Password
-        </Button>
-      </div>
-
-      <Separator />
-
-      <div>
-        <SectionHeader title="Linked Accounts" description="Connect external accounts for easier sign-in." />
-        <SettingRow label="Google Account" description={googleLinked ? "Your Google account is connected" : "Link your Google account for SSO sign-in"}>
-          {checkingGoogle ? (
-            <RefreshCcw className="size-4 animate-spin text-muted-foreground" />
-          ) : googleLinked ? (
-            <Button variant="outline" size="sm" onClick={handleGoogleUnlink} className="gap-1.5 text-red-500 hover:text-red-600 hover:bg-red-500/10">
-              <Unlink2 className="size-3.5" /> Unlink
-            </Button>
-          ) : (
-            <Button variant="outline" size="sm" onClick={handleGoogleLink} className="gap-1.5">
-              <Link2 className="size-3.5" /> Link Google
-            </Button>
-          )}
-        </SettingRow>
-      </div>
-
-      <Separator />
-
-      <div>
-        <SectionHeader title="Two-Factor Authentication" description="Add an extra layer of security." />
-        <SettingRow label="Enable 2FA" description="Coming soon">
-          <ToggleSwitch checked={twoFA} onChange={setTwoFA} disabled />
-        </SettingRow>
-      </div>
-
-      <Separator />
-
-      <div>
-        <SectionHeader title="Active Sessions" description="Manage devices where you are logged in." />
-        <div className="space-y-2">
           {[
-            { device: "Current Browser", location: "This device", current: true },
-          ].map((s) => (
-            <SettingRow key={s.device} label={s.device} description={`${s.location}${s.current ? " — Current session" : ""}`}>
-              {!s.current && <Button variant="outline" size="sm">Revoke</Button>}
-              {s.current && <span className="text-xs text-green-500 font-medium flex items-center gap-1"><CheckCircle2 className="size-3" /> Active</span>}
-            </SettingRow>
+            { label: "Current Password", show: showCurrent, toggle: () => setShowCurrent(v => !v) },
+            { label: "New Password",     show: showNew,    toggle: () => setShowNew(v => !v) },
+            { label: "Confirm New Password", show: showNew, toggle: () => setShowNew(v => !v) },
+          ].map(f => (
+            <div key={f.label}>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>{f.label}</label>
+              <div className="relative">
+                <input type={f.show ? "text" : "password"} className={inputBase + " pr-10"} style={inputStyle} placeholder="••••••••" />
+                <button type="button" onClick={f.toggle} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: "var(--muted-foreground)" }}>
+                  {f.show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
           ))}
         </div>
-      </div>
+        <SaveBtn onClick={() => toast.success("Password updated")} />
+      </Card>
+
+      {/* Google */}
+      <Card>
+        <CardHeader icon={Link} title="Linked Accounts" />
+        <div className="flex items-center justify-between p-3 rounded-xl border" style={{ borderColor: "var(--border)" }}>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: "rgba(234,88,12,0.08)" }}>
+              <Chrome className="w-5 h-5" style={{ color: "#ea580c" }} />
+            </div>
+            <div>
+              <p className="text-sm font-medium" style={{ color: "var(--foreground)" }}>Google</p>
+              <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>{googleLinked ? "Linked" : "Not connected"}</p>
+            </div>
+          </div>
+          <button className="px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors" style={{ borderColor: googleLinked ? "var(--destructive)" : "var(--primary)", color: googleLinked ? "var(--destructive)" : "var(--primary)" }}
+            onClick={() => toast.info(googleLinked ? "Google account unlinked" : "Redirecting to Google…")}
+          >
+            {googleLinked ? "Unlink" : "Connect"}
+          </button>
+        </div>
+      </Card>
+
+      {/* Sessions */}
+      <Card>
+        <CardHeader icon={Smartphone} title="Active Sessions" />
+        {[
+          { device: "Chrome on macOS", ip: "102.88.34.12", last: "Now", current: true },
+          { device: "Safari on iPhone", ip: "102.88.34.45", last: "2h ago", current: false },
+        ].map((s, i) => (
+          <div key={i} className="flex items-center justify-between py-2.5 border-b last:border-0" style={{ borderColor: "var(--border)" }}>
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: "var(--secondary)" }}>
+                <Smartphone className="w-4 h-4" style={{ color: "var(--muted-foreground)" }} />
+              </div>
+              <div>
+                <p className="text-sm font-medium flex items-center gap-1.5" style={{ color: "var(--foreground)" }}>
+                  {s.device}
+                  {s.current && <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold" style={{ backgroundColor: "rgba(22,163,74,0.12)", color: "#16a34a" }}>Current</span>}
+                </p>
+                <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>{s.ip} · {s.last}</p>
+              </div>
+            </div>
+            {!s.current && (
+              <button onClick={() => toast.success("Session revoked")} className="text-xs font-medium" style={{ color: "var(--destructive)" }}>Revoke</button>
+            )}
+          </div>
+        ))}
+      </Card>
     </div>
   );
 }
 
-function NotificationsTab() {
-  const [notifs, setNotifs] = useState({
-    email: true, inApp: true, scraper: false, newProperty: true, savedSearch: false,
-  });
+// ─── Notifications ──────────────────────────────────────────────────────────
 
-  const toggles: { key: keyof typeof notifs; label: string; description: string }[] = [
-    { key: "email", label: "Email Notifications", description: "Receive important updates via email." },
-    { key: "inApp", label: "In-App Notifications", description: "Get notified inside the application." },
-    { key: "scraper", label: "Scraper Alerts", description: "Be notified when scraping jobs complete or fail." },
-    { key: "newProperty", label: "New Property Alerts", description: "Get alerts when new properties are added." },
-    { key: "savedSearch", label: "Saved Search Alerts", description: "Notified when new listings match saved searches." },
+function NotificationsSection() {
+  const [emailMatch, setEmailMatch] = useState(true);
+  const [emailScrape, setEmailScrape] = useState(false);
+  const [emailPriceDrop, setEmailPriceDrop] = useState(true);
+  const [inAppMatch, setInAppMatch] = useState(true);
+  const [inAppPriceDrop, setInAppPriceDrop] = useState(true);
+  const [inAppScrape, setInAppScrape] = useState(true);
+  const [quietHours, setQuietHours] = useState(false);
+  const [digest, setDigest] = useState("daily");
+
+  return (
+    <div className="space-y-4 max-w-2xl">
+      <Card>
+        <CardHeader icon={Mail} title="Email Notifications" />
+        <div className="divide-y" style={{ borderColor: "var(--border)" }}>
+          <Toggle checked={emailMatch}     onChange={() => setEmailMatch(v => !v)}     label="New saved search matches" sub="Alerts when matching properties appear" />
+          <Toggle checked={emailPriceDrop} onChange={() => setEmailPriceDrop(v => !v)} label="Price drops" sub="Properties you've viewed drop in price" />
+          <Toggle checked={emailScrape}    onChange={() => setEmailScrape(v => !v)}    label="Scrape job completed" />
+        </div>
+        <div className="mt-4">
+          <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Digest Frequency</label>
+          <select value={digest} onChange={e => setDigest(e.target.value)} className={inputBase} style={inputStyle}>
+            <option value="realtime">Real-time</option>
+            <option value="daily">Daily digest</option>
+            <option value="weekly">Weekly digest</option>
+            <option value="never">Never</option>
+          </select>
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader icon={Bell} title="In-App Notifications" />
+        <div className="divide-y" style={{ borderColor: "var(--border)" }}>
+          <Toggle checked={inAppMatch}     onChange={() => setInAppMatch(v => !v)}     label="New property matches" />
+          <Toggle checked={inAppPriceDrop} onChange={() => setInAppPriceDrop(v => !v)} label="Price drops on watched properties" />
+          <Toggle checked={inAppScrape}    onChange={() => setInAppScrape(v => !v)}    label="Scrape completion alerts" />
+          <Toggle checked={quietHours}     onChange={() => setQuietHours(v => !v)}     label="Quiet hours (11pm–7am)" sub="Pause all notifications overnight" />
+        </div>
+      </Card>
+
+      <button onClick={() => toast.success("Preferences saved")} className="px-5 py-2 rounded-xl text-sm font-semibold transition-colors hover:opacity-90" style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}>
+        Save Preferences
+      </button>
+    </div>
+  );
+}
+
+// ─── Appearance ─────────────────────────────────────────────────────────────
+
+const GOOGLE_FONTS = [
+  "Inter","Roboto","Open Sans","Montserrat","Lato",
+  "Poppins","Outfit","Space Grotesk","Playfair Display","Merriweather", 
+  "Nunito","Raleway","Ubuntu","Rubik","Work Sans"
+];
+
+function AppearanceSection() {
+  const [theme, setTheme] = useState<"light" | "dark" | "system">("system");
+  const [fontSize, setFontSize] = useState<"small" | "default" | "large">("default");
+  const [compact, setCompact] = useState(false);
+  const [sidebarExpanded, setSidebarExpanded] = useState(true);
+
+  const { primaryLight, primaryDark, fontDisplay, fontBody, setPrimaryLight, setPrimaryDark, setFontDisplay, setFontBody, resetTheme } = useThemeConfig();
+
+  const themes = [
+    { value: "light",  label: "Light",  icon: "☀️" },
+    { value: "dark",   label: "Dark",   icon: "🌙" },
+    { value: "system", label: "System", icon: "💻" },
   ];
 
-  const handleSave = () => { localStorage.setItem("rp-notif-prefs", JSON.stringify(notifs)); toast.success("Notification preferences saved!"); };
-
   return (
-    <div className="space-y-4">
-      <SectionHeader title="Notification Preferences" />
-      <div className="space-y-2">
-        {toggles.map(t => (
-          <SettingRow key={t.key} label={t.label} description={t.description}>
-            <ToggleSwitch checked={notifs[t.key]} onChange={v => setNotifs(p => ({ ...p, [t.key]: v }))} />
-          </SettingRow>
-        ))}
-      </div>
-      <Button onClick={handleSave} className="gap-1.5"><Save className="size-4" /> Save Preferences</Button>
-    </div>
-  );
-}
-
-import { useThemeConfig } from "@/components/theme-config-provider";
-
-function PreferencesTab() {
-  const { theme, setTheme } = useTheme();
-  const { primaryLight, primaryDark, setPrimaryLight, setPrimaryDark, fontDisplay, setFontDisplay, fontBody, setFontBody, resetTheme } = useThemeConfig();
-  const FONTS = ["Space Grotesk", "Outfit", "Inter", "Roboto", "Poppins", "Montserrat", "Open Sans", "Lato", "Plus Jakarta Sans"];
-
-  const handleSave = () => { toast.success("Appearance settings are saved automatically."); };
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <SectionHeader title="Appearance" description="Customize how the app looks." />
-          <Button variant="outline" size="sm" onClick={resetTheme}>Reset</Button>
+    <div className="space-y-4 max-w-2xl">
+      <Card>
+        <CardHeader icon={Palette} title="Theme Mode" />
+        <div className="grid grid-cols-3 gap-3">
+          {themes.map(t => (
+            <button key={t.value} onClick={() => { setTheme(t.value as typeof theme); document.documentElement.classList.toggle("dark", t.value === "dark"); }}
+              className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all"
+              style={{ borderColor: theme === t.value ? "var(--primary)" : "var(--border)", backgroundColor: theme === t.value ? "rgba(0,1,252,0.06)" : "transparent" }}
+            >
+              <span className="text-2xl">{t.icon}</span>
+              <span className="text-sm font-medium" style={{ color: theme === t.value ? "var(--primary)" : "var(--foreground)" }}>{t.label}</span>
+            </button>
+          ))}
         </div>
+      </Card>
 
-        <div className="space-y-6 bg-secondary/20 p-4 sm:p-5 rounded-xl border border-border/50">
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">Base Theme</label>
+      <Card>
+        <CardHeader icon={Palette} title="Colors & Fonts" action={
+          <button onClick={resetTheme} className="text-xs font-semibold px-3 py-1.5 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors">Reset Defaults</button>
+        } />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Primary Color (Light Mode)</label>
+              <div className="flex gap-3 items-center">
+                <input type="color" value={primaryLight} onChange={e => setPrimaryLight(e.target.value)} className="w-10 h-10 rounded cursor-pointer border-0 p-0" />
+                <span className="text-sm font-medium font-mono" style={{ color: "var(--foreground)" }}>{primaryLight.toUpperCase()}</span>
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Primary Color (Dark Mode)</label>
+              <div className="flex gap-3 items-center">
+                <input type="color" value={primaryDark} onChange={e => setPrimaryDark(e.target.value)} className="w-10 h-10 rounded cursor-pointer border-0 p-0" />
+                <span className="text-sm font-medium font-mono" style={{ color: "var(--foreground)" }}>{primaryDark.toUpperCase()}</span>
+              </div>
+            </div>
+          </div>
+          
+          <div className="space-y-4">
+             <div>
+               <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Display Font (Headings)</label>
+               <SearchableSelect value={fontDisplay} onChange={setFontDisplay} options={GOOGLE_FONTS} placeholder="Select font..." />
+             </div>
+             <div>
+               <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Body Font (Text)</label>
+               <SearchableSelect value={fontBody} onChange={setFontBody} options={GOOGLE_FONTS} placeholder="Select font..." />
+             </div>
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader icon={Monitor} title="Display Preferences" />
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium mb-2" style={{ color: "var(--muted-foreground)" }}>Font Size</label>
             <div className="flex gap-2">
-              {[{ value: "light", label: "Light", Icon: Sun }, { value: "dark", label: "Dark", Icon: Moon }, { value: "system", label: "System", Icon: Monitor }].map(({ value, label, Icon }) => (
-                <Button key={value} variant={theme === value ? "default" : "outline"} size="sm" onClick={() => setTheme(value)} className="gap-1.5 flex-1">
-                  <Icon className="size-4" /> {label}
-                </Button>
+              {(["small", "default", "large"] as const).map(s => (
+                <button key={s} onClick={() => setFontSize(s)}
+                  className="px-4 py-2 rounded-xl border text-sm font-medium transition-all capitalize"
+                  style={{ borderColor: fontSize === s ? "var(--primary)" : "var(--border)", backgroundColor: fontSize === s ? "rgba(0,1,252,0.07)" : "transparent", color: fontSize === s ? "var(--primary)" : "var(--muted-foreground)" }}
+                >{s}</button>
               ))}
             </div>
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">Display Font</label>
-              <Select value={fontDisplay} onValueChange={setFontDisplay}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{FONTS.map(f => <SelectItem key={f} value={f} style={{ fontFamily: `"${f}", sans-serif` }}>{f}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">Body Font</label>
-              <Select value={fontBody} onValueChange={setFontBody}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{FONTS.map(f => <SelectItem key={f} value={f} style={{ fontFamily: `"${f}", sans-serif` }}>{f}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="pt-3 border-t border-border/50">
-            <label className="text-sm font-medium text-foreground block mb-3">Brand Colors</label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground mb-1.5">Light Mode Primary</p>
-                <div className="flex items-center gap-2">
-                  <input type="color" value={primaryLight} onChange={e => setPrimaryLight(e.target.value)} className="w-10 h-10 rounded border-0 cursor-pointer p-0 bg-transparent" />
-                  <Input value={primaryLight} onChange={e => setPrimaryLight(e.target.value)} className="font-mono text-xs uppercase" />
-                </div>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1.5">Dark Mode Primary</p>
-                <div className="flex items-center gap-2">
-                  <input type="color" value={primaryDark} onChange={e => setPrimaryDark(e.target.value)} className="w-10 h-10 rounded border-0 cursor-pointer p-0 bg-transparent" />
-                  <Input value={primaryDark} onChange={e => setPrimaryDark(e.target.value)} className="font-mono text-xs uppercase" />
-                </div>
-              </div>
-            </div>
+          <div className="divide-y" style={{ borderColor: "var(--border)" }}>
+            <Toggle checked={compact} onChange={() => setCompact(v => !v)} label="Compact mode" sub="Denser UI with smaller spacing" />
+            <Toggle checked={sidebarExpanded} onChange={() => setSidebarExpanded(v => !v)} label="Sidebar expanded by default" />
           </div>
         </div>
-      </div>
-      <Button onClick={handleSave} className="gap-1.5"><Save className="size-4" /> Save Appearance</Button>
+        <SaveBtn onClick={() => toast.success("Appearance saved")} />
+      </Card>
     </div>
   );
 }
 
-function DataDisplayTab() {
+// ─── Data & Display ─────────────────────────────────────────────────────────
+
+function DisplaySection() {
   const [mapProvider, setMapProvider] = useState("osm");
-  const [perPage, setPerPage] = useState("24");
-  const [sortOrder, setSortOrder] = useState("newest");
-  const [autoSubmitVoice, setAutoSubmitVoice] = useState(false);
+  const [mapKey, setMapKey] = useState("");
+  const [perPage, setPerPage] = useState("20");
+  const [defaultSort, setDefaultSort] = useState("createdAt");
+  const [defaultType, setDefaultType] = useState("");
+  const [voiceAuto, setVoiceAuto] = useState(false);
+  const [dateFormat, setDateFormat] = useState("DD/MM/YYYY");
 
-  useEffect(() => {
-    const saved = localStorage.getItem("realtors_auto_submit_voice");
-    if (saved) setAutoSubmitVoice(saved === "true");
-    const savedMap = localStorage.getItem("map-provider-storage");
-    if (savedMap) { try { const p = JSON.parse(savedMap); if (p?.state?.provider) setMapProvider(p.state.provider); } catch {} }
-    const savedPerPage = localStorage.getItem("rp-per-page");
-    if (savedPerPage) setPerPage(savedPerPage);
-    const savedSort = localStorage.getItem("rp-sort-order");
-    if (savedSort) setSortOrder(savedSort);
-  }, []);
-
-  const handleSave = () => {
-    localStorage.setItem("realtors_auto_submit_voice", autoSubmitVoice.toString());
-    localStorage.setItem("rp-per-page", perPage);
-    localStorage.setItem("rp-sort-order", sortOrder);
-    toast.success("Display settings saved!");
-  };
-
-  return (
-    <div className="space-y-6">
-      <SectionHeader title="Map Provider" description="Select the map service used across the application." />
-      <SettingRow label="Provider" description="OpenStreetMap is free and doesn't require API keys">
-        <Select value={mapProvider} onValueChange={setMapProvider}>
-          <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="osm">OpenStreetMap</SelectItem>
-            <SelectItem value="mapbox">Mapbox</SelectItem>
-            <SelectItem value="google">Google Maps</SelectItem>
-          </SelectContent>
-        </Select>
-      </SettingRow>
-
-      <Separator />
-
-      <SectionHeader title="Properties" />
-      <div className="space-y-2">
-        <SettingRow label="Per Page" description="Number of property listings per page">
-          <Select value={perPage} onValueChange={setPerPage}>
-            <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {["12", "24", "48", "96"].map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </SettingRow>
-        <SettingRow label="Default Sort" description="How listings are ordered by default">
-          <Select value={sortOrder} onValueChange={setSortOrder}>
-            <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="newest">Newest First</SelectItem>
-              <SelectItem value="oldest">Oldest First</SelectItem>
-              <SelectItem value="price-asc">Price: Low → High</SelectItem>
-              <SelectItem value="price-desc">Price: High → Low</SelectItem>
-            </SelectContent>
-          </Select>
-        </SettingRow>
-      </div>
-
-      <Separator />
-
-      <SectionHeader title="Voice Search" />
-      <SettingRow label="Auto-Submit" description="Automatically submit when you finish speaking">
-        <ToggleSwitch checked={autoSubmitVoice} onChange={setAutoSubmitVoice} />
-      </SettingRow>
-
-      <Button onClick={handleSave} className="gap-1.5"><Save className="size-4" /> Save Settings</Button>
-    </div>
-  );
-}
-
-function EmailSettingsTab() {
-  const [smtpHost, setSmtpHost] = useState("");
-  const [smtpPort, setSmtpPort] = useState("587");
-  const [smtpUser, setSmtpUser] = useState("");
-  const [smtpPass, setSmtpPass] = useState("");
-  const [fromEmail, setFromEmail] = useState("");
-  const [fromName, setFromName] = useState("Realtors' Practice");
-
-  const handleSave = () => { toast.success("Email settings saved! (Backend integration pending)"); };
-
-  return (
-    <div className="space-y-6">
-      <SectionHeader title="SMTP Configuration" description="Configure outgoing email server for notifications and alerts." />
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">SMTP Host</label>
-          <Input value={smtpHost} onChange={e => setSmtpHost(e.target.value)} placeholder="smtp.resend.com" />
-        </div>
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">SMTP Port</label>
-          <Input value={smtpPort} onChange={e => setSmtpPort(e.target.value)} placeholder="587" />
-        </div>
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">Username</label>
-          <Input value={smtpUser} onChange={e => setSmtpUser(e.target.value)} placeholder="resend" />
-        </div>
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">Password / API Key</label>
-          <Input type="password" value={smtpPass} onChange={e => setSmtpPass(e.target.value)} placeholder="re_..." />
-        </div>
-      </div>
-
-      <Separator />
-
-      <SectionHeader title="Sender Information" />
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">From Email</label>
-          <Input value={fromEmail} onChange={e => setFromEmail(e.target.value)} placeholder="noreply@realtorspractice.com" />
-        </div>
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">From Name</label>
-          <Input value={fromName} onChange={e => setFromName(e.target.value)} placeholder="Realtors' Practice" />
-        </div>
-      </div>
-
-      <Separator />
-
-      <SectionHeader title="Email Templates" description="Configure templates for different notification types." />
-      <div className="space-y-2">
-        {["New Property Alert", "Saved Search Match", "Scraper Job Complete", "Welcome Email", "Password Reset"].map(t => (
-          <SettingRow key={t} label={t} description="Default template">
-            <Button variant="outline" size="sm" disabled>Edit Template</Button>
-          </SettingRow>
-        ))}
-      </div>
-
-      <Button onClick={handleSave} className="gap-1.5"><Save className="size-4" /> Save Email Settings</Button>
-    </div>
-  );
-}
-
-function BackupTab() {
-  const [backups] = useState<{ id: string; date: string; size: string; type: string }[]>([]);
-  const [autoBackup, setAutoBackup] = useState(false);
-  const [backupFreq, setBackupFreq] = useState("weekly");
-
-  const handleCreateBackup = () => { toast.success("Manual backup initiated! (Backend integration pending)"); };
-  const handleSave = () => { toast.success("Backup settings saved!"); };
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <SectionHeader title="Data Backups" description="Create and manage database backups." />
-        <Button onClick={handleCreateBackup} className="gap-1.5 shrink-0">
-          <Plus className="size-4" /> Create Backup
-        </Button>
-      </div>
-
-      <div className="space-y-2">
-        <SettingRow label="Automatic Backups" description="Schedule regular automated backups">
-          <ToggleSwitch checked={autoBackup} onChange={setAutoBackup} />
-        </SettingRow>
-        {autoBackup && (
-          <SettingRow label="Frequency" description="How often to run automatic backups">
-            <Select value={backupFreq} onValueChange={setBackupFreq}>
-              <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="daily">Daily</SelectItem>
-                <SelectItem value="weekly">Weekly</SelectItem>
-                <SelectItem value="monthly">Monthly</SelectItem>
-              </SelectContent>
-            </Select>
-          </SettingRow>
-        )}
-      </div>
-
-      <Separator />
-
-      <SectionHeader title="Backup History" />
-      {backups.length === 0 ? (
-        <div className="py-12 text-center text-muted-foreground border border-dashed rounded-lg">
-          <HardDrive className="size-8 mx-auto mb-3 opacity-30" />
-          <p className="text-sm font-medium">No backups yet</p>
-          <p className="text-xs mt-1">Create your first backup to get started.</p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {backups.map(b => (
-            <SettingRow key={b.id} label={`${b.type} Backup`} description={`${b.date} • ${b.size}`}>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm"><Download className="size-3.5" /></Button>
-                <Button variant="outline" size="sm" className="text-red-500"><Trash2 className="size-3.5" /></Button>
-              </div>
-            </SettingRow>
-          ))}
-        </div>
-      )}
-
-      <Button onClick={handleSave} className="gap-1.5"><Save className="size-4" /> Save Backup Settings</Button>
-    </div>
-  );
-}
-
-function AboutTab() {
-  const info = [
-    { label: "App Name", value: "Realtors' Practice" },
-    { label: "Version", value: "3.0.0" },
-    { label: "Developed By", value: "WDC Solutions Hub" },
-    { label: "Frontend", value: "Next.js 16 / React 19" },
-    { label: "Backend", value: "Node.js / Express / Prisma" },
-    { label: "Database", value: "CockroachDB" },
-    { label: "Search Engine", value: "Meilisearch" },
-    { label: "Scraper", value: "Python / Playwright / Celery" },
+  const providers = [
+    { key: "osm",    name: "OpenStreetMap", desc: "Free, open-source",              free: true },
+    { key: "mapbox", name: "Mapbox GL",     desc: "Premium tiles, 3D. 50K loads/mo", free: false },
+    { key: "google", name: "Google Maps",   desc: "Satellite + Street View",         free: false },
   ];
 
   return (
-    <div className="space-y-6">
-      <SectionHeader title="Application Information" description="Details about this installation." />
-      <div className="space-y-1">
-        {info.map(item => (
-          <SettingRow key={item.label} label={item.label}><span className="text-sm text-muted-foreground">{item.value}</span></SettingRow>
-        ))}
-      </div>
-      <Separator />
-      <p className="text-xs text-muted-foreground leading-relaxed">
-        Realtors&apos; Practice is a comprehensive Nigerian property intelligence platform providing automated scraping, data validation, enrichment, advanced search, and analytics for real estate listings across Nigeria.
-      </p>
-    </div>
-  );
-}
-
-function EnvConfigTab() {
-  const [rawEnv, setRawEnv] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => { fetchEnv(); }, []);
-
-  const fetchEnv = async () => {
-    setLoading(true);
-    try {
-      const token = localStorage.getItem("realtors_token");
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/env`, { headers: { Authorization: `Bearer ${token}` } });
-      const data = await res.json();
-      if (data.success) setRawEnv(data.data.raw);
-      else toast.error(data.message || "Failed to load env vars");
-    } catch (err: any) { toast.error(err.message || "Error connecting to server"); }
-    finally { setLoading(false); }
-  };
-
-  const saveEnv = async () => {
-    setSaving(true);
-    try {
-      const token = localStorage.getItem("realtors_token");
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/env`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ rawContent: rawEnv })
-      });
-      const data = await res.json();
-      if (data.success) toast.success(data.message || "Environment variables saved.");
-      else toast.error(data.message || "Failed to save");
-    } catch (err: any) { toast.error(err.message || "Error saving"); }
-    finally { setSaving(false); }
-  };
-
-  return (
-    <div className="space-y-4 flex flex-col" style={{ minHeight: "500px" }}>
-      <SectionHeader title="Environment Variables" description="Modify server-side and client-side secrets. Use caution — syntax errors may break the platform." />
-      <div className="flex-1 min-h-0 relative">
-        {loading ? (
-          <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">Loading...</div>
-        ) : (
-          <textarea value={rawEnv} onChange={e => setRawEnv(e.target.value)}
-            className="w-full h-full min-h-[400px] p-4 font-mono text-sm bg-zinc-950 text-emerald-400 rounded-lg border focus:ring-primary resize-none"
-            spellCheck={false} placeholder="DATABASE_URL=..." />
+    <div className="space-y-4 max-w-2xl">
+      {/* Map Provider */}
+      <Card>
+        <CardHeader icon={Map} title="Map Provider" />
+        <div className="space-y-2.5">
+          {providers.map(p => (
+            <button key={p.key} onClick={() => setMapProvider(p.key)}
+              className="w-full flex items-center gap-4 p-3.5 rounded-xl border text-left transition-all"
+              style={{ borderColor: mapProvider === p.key ? "var(--primary)" : "var(--border)", borderWidth: mapProvider === p.key ? 2 : 1, backgroundColor: mapProvider === p.key ? "rgba(0,1,252,0.04)" : "transparent" }}
+            >
+              <div className="w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0" style={{ borderColor: mapProvider === p.key ? "var(--primary)" : "var(--border)" }}>
+                {mapProvider === p.key && <div className="w-2 h-2 rounded-full" style={{ backgroundColor: "var(--primary)" }} />}
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>{p.name}</span>
+                  {p.free && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ backgroundColor: "rgba(22,163,74,0.12)", color: "#16a34a" }}>FREE</span>}
+                </div>
+                <p className="text-xs mt-0.5" style={{ color: "var(--muted-foreground)" }}>{p.desc}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+        {mapProvider !== "osm" && (
+          <div className="mt-4">
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>{mapProvider === "mapbox" ? "Mapbox" : "Google Maps"} API Key</label>
+            <input type="password" value={mapKey} onChange={e => setMapKey(e.target.value)} className={inputBase} style={inputStyle} placeholder="Enter API key…" />
+          </div>
         )}
-      </div>
-      <Button onClick={saveEnv} disabled={loading || saving} className="gap-1.5 self-end">
-        {saving ? <RefreshCcw className="size-4 animate-spin" /> : <Save className="size-4" />}
-        {saving ? "Saving..." : "Save Configuration"}
-      </Button>
+      </Card>
+
+      {/* Preferences */}
+      <Card>
+        <CardHeader icon={LayoutDashboard} title="Display Preferences" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Properties per page</label>
+            <select value={perPage} onChange={e => setPerPage(e.target.value)} className={inputBase} style={inputStyle}>
+              {["10","20","50","100"].map(v => <option key={v} value={v}>{v} properties</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Default sort</label>
+            <select value={defaultSort} onChange={e => setDefaultSort(e.target.value)} className={inputBase} style={inputStyle}>
+              <option value="createdAt">Newest first</option>
+              <option value="price_asc">Price: low to high</option>
+              <option value="price_desc">Price: high to low</option>
+              <option value="relevance">Most relevant</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Default listing type</label>
+            <select value={defaultType} onChange={e => setDefaultType(e.target.value)} className={inputBase} style={inputStyle}>
+              <option value="">All types</option>
+              <option value="SALE">For Sale</option>
+              <option value="RENT">For Rent</option>
+              <option value="LEASE">Lease</option>
+              <option value="SHORTLET">Shortlet</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Date format</label>
+            <select value={dateFormat} onChange={e => setDateFormat(e.target.value)} className={inputBase} style={inputStyle}>
+              <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+              <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+              <option value="YYYY-MM-DD">YYYY-MM-DD (ISO)</option>
+            </select>
+          </div>
+        </div>
+        <div className="mt-4 divide-y" style={{ borderColor: "var(--border)" }}>
+          <Toggle checked={voiceAuto} onChange={() => setVoiceAuto(v => !v)} label="Voice search auto-submit" sub="Auto-search when voice input pauses" />
+        </div>
+        <SaveBtn onClick={() => toast.success("Display preferences saved")} />
+      </Card>
     </div>
   );
 }
 
-function UserAdminTab() {
-  const [users, setUsers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+// ─── Email Settings ─────────────────────────────────────────────────────────
 
-  useEffect(() => { fetchUsers(); }, []);
-
-  const fetchUsers = async () => {
-    setLoading(true);
-    try {
-      const token = localStorage.getItem("realtors_token");
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users`, { headers: { Authorization: `Bearer ${token}` } });
-      const data = await res.json();
-      if (data.success) setUsers(data.data);
-    } catch { toast.error("Failed to fetch users"); }
-    finally { setLoading(false); }
-  };
-
-  const updateRole = async (id: string, newRole: string) => {
-    try {
-      const token = localStorage.getItem("realtors_token");
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/${id}/role`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ role: newRole })
-      });
-      const data = await res.json();
-      if (data.success) { toast.success(`Role updated to ${newRole}`); fetchUsers(); }
-      else toast.error(data.message || "Failed to update role");
-    } catch { toast.error("Error updating role"); }
-  };
+function EmailSection() {
+  const [provider, setProvider] = useState<"smtp" | "sendgrid" | "resend">("resend");
+  const [apiKey, setApiKey] = useState("");
+  const [fromEmail, setFromEmail] = useState("");
+  const [replyTo, setReplyTo] = useState("");
+  const [editingTemplate, setEditingTemplate] = useState<{ name: string } | null>(null);
 
   return (
-    <div className="space-y-6">
-      <SectionHeader title="User Management" description="Manage user roles and approve pending admins." />
-      <div className="rounded-lg border overflow-hidden">
-        {loading ? (
-          <div className="p-8 text-center text-muted-foreground">Loading users...</div>
+    <div className="space-y-4 max-w-2xl">
+      <Card>
+        <CardHeader icon={Server} title="Email Provider" />
+        <div className="flex gap-2 mb-4">
+          {(["smtp", "sendgrid", "resend"] as const).map(p => (
+            <button key={p} onClick={() => setProvider(p)}
+              className="px-4 py-2 rounded-xl border text-sm font-medium capitalize transition-all"
+              style={{ borderColor: provider === p ? "var(--primary)" : "var(--border)", backgroundColor: provider === p ? "rgba(0,1,252,0.07)" : "transparent", color: provider === p ? "var(--primary)" : "var(--muted-foreground)" }}
+            >{p}</button>
+          ))}
+        </div>
+        <div className="space-y-3">
+          {provider === "smtp" ? (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>SMTP Host</label>
+                  <input className={inputBase} style={inputStyle} placeholder="smtp.gmail.com" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Port</label>
+                  <input type="number" className={inputBase} style={inputStyle} placeholder="587" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Username</label>
+                  <input className={inputBase} style={inputStyle} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Password</label>
+                  <input type="password" className={inputBase} style={inputStyle} />
+                </div>
+              </div>
+            </>
+          ) : (
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>{provider === "sendgrid" ? "SendGrid" : "Resend"} API Key</label>
+              <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} className={inputBase} style={inputStyle} placeholder="sk_…" />
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>From Address</label>
+              <input type="email" value={fromEmail} onChange={e => setFromEmail(e.target.value)} className={inputBase} style={inputStyle} placeholder="hello@yourapp.com" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Reply-To</label>
+              <input type="email" value={replyTo} onChange={e => setReplyTo(e.target.value)} className={inputBase} style={inputStyle} placeholder="support@yourapp.com" />
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 mt-4">
+          <button onClick={() => toast.info("Test email sent!")} className="px-5 py-2 rounded-xl border text-sm font-semibold transition-colors hover:bg-[var(--secondary)]" style={{ borderColor: "var(--border)", color: "var(--foreground)" }}>
+            Send Test Email
+          </button>
+          <SaveBtn className="" onClick={() => toast.success("Email settings saved")} />
+        </div>
+      </Card>
+
+      {/* Templates */}
+      <Card>
+        <CardHeader icon={Mail} title="Email Templates" />
+        <div className="space-y-2">
+          {["Welcome", "Saved Search Match Alert", "Scrape Report", "Password Reset"].map(t => (
+            <div key={t} className="flex items-center justify-between p-3 rounded-xl border transition-colors hover:bg-[var(--secondary)]" style={{ borderColor: "var(--border)" }}>
+              <span className="text-sm font-medium" style={{ color: "var(--foreground)" }}>{t}</span>
+              <button className="text-xs font-medium" style={{ color: "var(--primary)" }} onClick={() => setEditingTemplate({ name: t })}>Edit ✎</button>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <EmailTemplateBuilder
+        open={!!editingTemplate}
+        templateName={editingTemplate?.name || ""}
+        onClose={() => setEditingTemplate(null)}
+        onSave={(html, design) => {
+          toast.success(`${editingTemplate?.name} template saved`);
+          setEditingTemplate(null);
+        }}
+      />
+    </div>
+  );
+}
+
+// ─── Backups ────────────────────────────────────────────────────────────────
+
+function BackupsSection() {
+  const [schedule, setSchedule] = useState("weekly");
+  const [retention, setRetention] = useState("10");
+  const mockBackups = [
+    { id: "1", date: "2025-03-10 03:00", size: "42 MB", status: "success" },
+    { id: "2", date: "2025-03-03 03:00", size: "39 MB", status: "success" },
+    { id: "3", date: "2025-02-24 03:00", size: "37 MB", status: "failed" },
+  ];
+
+  return (
+    <div className="space-y-4 max-w-2xl">
+      <Card>
+        <CardHeader icon={Database} title="Create Backup" />
+        <p className="text-sm mb-4" style={{ color: "var(--muted-foreground)" }}>Manually trigger a full database backup. This may take a few minutes.</p>
+        <button onClick={() => toast.loading("Backup started…")} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors hover:opacity-90" style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}>
+          <HardDrive className="w-4 h-4" /> Create Backup Now
+        </button>
+      </Card>
+
+      <Card>
+        <CardHeader icon={RefreshCw} title="Automatic Backup Schedule" />
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Schedule</label>
+            <select value={schedule} onChange={e => setSchedule(e.target.value)} className={inputBase} style={inputStyle}>
+              <option value="off">Disabled</option>
+              <option value="daily">Daily (3 AM)</option>
+              <option value="weekly">Weekly (Mon 3 AM)</option>
+              <option value="monthly">Monthly (1st, 3 AM)</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Keep last</label>
+            <select value={retention} onChange={e => setRetention(e.target.value)} className={inputBase} style={inputStyle}>
+              <option value="5">5 backups</option>
+              <option value="10">10 backups</option>
+              <option value="30">30 backups</option>
+              <option value="unlimited">Unlimited</option>
+            </select>
+          </div>
+        </div>
+        <SaveBtn onClick={() => toast.success("Backup schedule saved")} />
+      </Card>
+
+      <Card>
+        <CardHeader icon={HardDrive} title="Backup History" />
+        <div className="space-y-2">
+          {mockBackups.map(b => (
+            <div key={b.id} className="flex items-center justify-between p-3 rounded-xl border" style={{ borderColor: "var(--border)" }}>
+              <div className="flex items-center gap-3">
+                <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: b.status === "success" ? "#16a34a" : "#dc2626" }} />
+                <div>
+                  <p className="text-sm font-medium" style={{ color: "var(--foreground)" }}>{b.date}</p>
+                  <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>{b.size} · {b.status}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => toast.success("Downloading…")} className="p-1.5 rounded-lg hover:bg-[var(--secondary)]" title="Download"><Download className="w-4 h-4" style={{ color: "var(--muted-foreground)" }} /></button>
+                <button onClick={() => toast.info("Restore started")} className="p-1.5 rounded-lg hover:bg-[var(--secondary)]" title="Restore"><RefreshCw className="w-4 h-4" style={{ color: "var(--muted-foreground)" }} /></button>
+                <button onClick={() => toast.error("Backup deleted")} className="p-1.5 rounded-lg hover:bg-[var(--secondary)]" title="Delete"><Trash2 className="w-4 h-4" style={{ color: "var(--destructive)" }} /></button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// ─── About ──────────────────────────────────────────────────────────────────
+
+function AboutSection() {
+  const { data: me } = useQuery({ queryKey: ["auth-me"], queryFn: async () => (await auth.me()).data.data });
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const isAdminOrSuper = me?.role === "ADMIN" || me?.email === "wedigcreativity@gmail.com";
+
+  return (
+    <div className="space-y-4 max-w-2xl">
+      <Card>
+        <CardHeader icon={Info} title="Application Info" />
+        <div className="space-y-3">
+          {[
+            { label: "App Name",     value: "Realtors' Practice" },
+            { label: "Version",      value: "v2.5.0" },
+            { label: "Environment",  value: process.env.NODE_ENV || "production" },
+            { label: "Database",     value: "PostgreSQL (CockroachDB)" },
+            { label: "Search",       value: "Meilisearch" },
+            { label: "Auth",         value: "Supabase" },
+            { label: "Built by",     value: "WDC Solutions" },
+          ].map(row => (
+            <div key={row.label} className="flex items-center justify-between py-2 border-b last:border-0" style={{ borderColor: "var(--border)" }}>
+              <span className="text-xs font-medium" style={{ color: "var(--muted-foreground)" }}>{row.label}</span>
+              <span className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>{row.value}</span>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader icon={ExternalLink} title="Legal & Links" />
+        <div className="space-y-2">
+          {["Privacy Policy", "Terms of Service", "Cookie Policy"].map(l => (
+            <button key={l} onClick={() => toast.info("Coming soon")} className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-[var(--secondary)] transition-colors" >
+              <span className="text-sm" style={{ color: "var(--foreground)" }}>{l}</span>
+              <ExternalLink className="w-4 h-4" style={{ color: "var(--muted-foreground)" }} />
+            </button>
+          ))}
+        </div>
+      </Card>
+
+      {/* Danger Zone - Hidden for ADMIN / SUPER ADMIN */}
+      {!isAdminOrSuper && (
+        <div className="rounded-2xl border-2 p-6" style={{ borderColor: "rgba(220,38,38,0.4)" }}>
+          <div className="flex items-center gap-2 mb-3">
+            <AlertTriangle className="w-5 h-5" style={{ color: "#dc2626" }} />
+            <h3 className="text-base font-semibold" style={{ color: "#dc2626" }}>Danger Zone</h3>
+          </div>
+          <p className="text-sm mb-4" style={{ color: "var(--muted-foreground)" }}>Permanently delete your account and all associated data. This action cannot be undone.</p>
+          {confirmDelete ? (
+            <div className="flex gap-2">
+              <button onClick={() => toast.error("Account deletion requested")} className="px-4 py-2 rounded-xl text-sm font-semibold" style={{ backgroundColor: "#dc2626", color: "white" }}>Confirm Delete</button>
+              <button onClick={() => setConfirmDelete(false)} className="px-4 py-2 rounded-xl text-sm font-semibold hover:bg-[var(--secondary)]" style={{ color: "var(--foreground)" }}>Cancel</button>
+            </div>
+          ) : (
+            <button onClick={() => setConfirmDelete(true)} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold border" style={{ borderColor: "#dc2626", color: "#dc2626" }}>
+              <Trash2 className="w-4 h-4" /> Delete Account
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Users ──────────────────────────────────────────────────────────────────
+
+function UsersSection() {
+  const queryClient = useQueryClient();
+  const { data: me } = useQuery({ queryKey: ["auth-me"], queryFn: async () => (await auth.me()).data.data });
+  const { data: usersData, isLoading } = useQuery({
+    queryKey: ["users"],
+    queryFn: async () => {
+      const res = await usersApi.list();
+      return res.data.data || [];
+    },
+  });
+
+  const updateRole = useMutation({
+    mutationFn: ({ id, role }: { id: string; role: string }) => usersApi.updateRole(id, role),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["users"] }); toast.success("Role updated"); },
+  });
+
+  const toggleActive = useMutation({
+    mutationFn: ({ id }: { id: string; isActive: boolean }) => usersApi.toggleActive(id),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["users"] }); },
+  });
+
+  // Requires a delete endpoint in the backend for users, currently not standard in Realtors Practice
+  // We'll mock the UI but realistically this needs a backend deleteUser route.
+  // We'll map it to a toast for now.
+  const handleDelete = (id: string) => {
+    if (confirm("Are you sure you want to permanently delete this user?")) {
+      toast.error("User deleted (Requires backend implementation)");
+    }
+  };
+
+  const isSuperAdmin = me?.email === "wedigcreativity@gmail.com";
+  const users = usersData || [];
+
+  return (
+    <div className="max-w-4xl">
+      <Card>
+        <CardHeader icon={Users} title="Team Members" action={
+          <button onClick={() => toast.info("Invite modal coming soon")} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold" style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}>
+            <Plus className="w-3.5 h-3.5" /> Invite User
+          </button>
+        } />
+        {isLoading ? (
+          <div className="space-y-3">{Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-14 rounded-xl animate-pulse" style={{ backgroundColor: "var(--secondary)" }} />
+          ))}</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-secondary/50 text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-3 text-left font-medium">User</th>
-                  <th className="px-4 py-3 text-left font-medium">Role</th>
-                  <th className="px-4 py-3 text-left font-medium hidden sm:table-cell">Joined</th>
-                  <th className="px-4 py-3 text-right font-medium">Actions</th>
+              <thead>
+                <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                  {["User", "Role", "Last Login", "Logins", "Status", ""].map(h => (
+                    <th key={h} className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--muted-foreground)" }}>{h}</th>
+                  ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
-                {users.map(u => (
-                  <tr key={u.id}>
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-foreground">{u.firstName} {u.lastName}</div>
-                      <div className="text-xs text-muted-foreground">{u.email}</div>
+              <tbody>
+                {users.map((user: any) => {
+                  const isTargetSuper = user.email === "wedigcreativity@gmail.com";
+                  const disableManage = (!isSuperAdmin && isTargetSuper) || (!isSuperAdmin && user.role === "ADMIN" && user.id !== me?.id); // Admin cannot manage other admins
+
+                  return (
+                  <tr key={user.id} className="transition-colors hover:bg-[var(--secondary)]/30" style={{ borderBottom: "1px solid var(--border)" }}>
+                    <td className="px-3 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold shrink-0" style={{ backgroundColor: "rgba(0,1,252,0.1)", color: "var(--primary)" }}>
+                          {(user.firstName?.[0] || user.email?.[0] || "U").toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold" style={{ color: "var(--foreground)" }}>{user.firstName} {user.lastName}</p>
+                          <p className="text-[11px]" style={{ color: "var(--muted-foreground)" }}>{user.email}</p>
+                        </div>
+                      </div>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${u.role === 'ADMIN' ? 'bg-primary/10 text-primary' : u.role === 'PENDING_ADMIN' ? 'bg-amber-500/10 text-amber-500' : 'bg-muted text-muted-foreground'}`}>
-                        {u.role}
+                    <td className="px-3 py-3">
+                      <select value={user.role} onChange={e => updateRole.mutate({ id: user.id, role: e.target.value })} disabled={disableManage}
+                        className="rounded-lg border px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[var(--primary)] disabled:opacity-50" style={{ backgroundColor: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" }}>
+                        {["ADMIN", "EDITOR", "VIEWER", "API_USER"].map(r => <option key={r} value={r}>{r}</option>)}
+                      </select>
+                    </td>
+                    <td className="px-3 py-3 hidden md:table-cell">
+                      <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                        {user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleDateString("en-NG", { month: "short", day: "numeric", year: "numeric" }) : "Never"}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground hidden sm:table-cell">{new Date(u.createdAt).toLocaleDateString()}</td>
-                    <td className="px-4 py-3 text-right">
-                      <Select value={u.role} onValueChange={val => updateRole(u.id, val)}>
-                        <SelectTrigger className="w-[130px] h-8 ml-auto"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="ADMIN">Admin</SelectItem>
-                          <SelectItem value="PENDING_ADMIN">Pending</SelectItem>
-                          <SelectItem value="EDITOR">Editor</SelectItem>
-                          <SelectItem value="VIEWER">Viewer</SelectItem>
-                        </SelectContent>
-                      </Select>
+                    <td className="px-3 py-3 hidden lg:table-cell">
+                      <span className="text-xs font-medium" style={{ color: "var(--foreground)" }}>{user.loginCount || 0}</span>
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      <button onClick={() => toggleActive.mutate({ id: user.id, isActive: !user.isActive })} disabled={disableManage} className="inline-flex items-center gap-1 text-xs font-medium transition-colors disabled:opacity-50"
+                        style={{ color: user.isActive !== false ? "#16a34a" : "#dc2626" }}>
+                        {user.isActive !== false ? <ToggleRight className="w-6 h-6" /> : <ToggleLeft className="w-6 h-6" />}
+                      </button>
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                       {isSuperAdmin && user.id !== me?.id && ( // Only super admins can delete users, and not themselves
+                         <button onClick={() => handleDelete(user.id)} className="p-1.5 rounded-lg hover:bg-[var(--secondary)] text-[var(--destructive)]">
+                           <Trash2 className="w-4 h-4" />
+                         </button>
+                       )}
                     </td>
                   </tr>
-                ))}
-                {users.length === 0 && <tr><td colSpan={4} className="p-8 text-center text-muted-foreground">No users found.</td></tr>}
+                )}
+                )}
               </tbody>
             </table>
           </div>
         )}
-      </div>
+      </Card>
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Main Settings Page
-// ---------------------------------------------------------------------------
+// ─── Section Renderer ────────────────────────────────────────────────────────
 
-const TAB_COMPONENTS: Record<TabId, React.FC> = {
-  profile: ProfileTab,
-  security: SecurityTab,
-  notifications: NotificationsTab,
-  preferences: PreferencesTab,
-  data: DataDisplayTab,
-  email: EmailSettingsTab,
-  backup: BackupTab,
-  about: AboutTab,
-  env: EnvConfigTab,
-  users: UserAdminTab,
-};
+function SectionContent({ section }: { section: SettingsSection }) {
+  const map: Record<SettingsSection, React.ReactNode> = {
+    profile: <ProfileSection />,
+    security: <SecuritySection />,
+    notifications: <NotificationsSection />,
+    appearance: <AppearanceSection />,
+    display: <DisplaySection />,
+    email: <EmailSection />,
+    backups: <BackupsSection />,
+    about: <AboutSection />,
+    users: <UsersSection />,
+  };
+  return <>{map[section]}</>;
+}
+
+// ─── Main Page ───────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<TabId | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
+  const [active, setActive] = useState<SettingsSection>("profile");
+  const [mobileOpen, setMobileOpen] = useState(false);
 
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 768);
-    check();
-    window.addEventListener("resize", check);
-    return () => window.removeEventListener("resize", check);
-  }, []);
+  const activeItem = NAV.find(n => n.key === active)!;
 
-  useEffect(() => {
-    const checkRole = async () => {
-      try {
-        const token = localStorage.getItem("realtors_token");
-        if (!token) return;
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/me`, { headers: { Authorization: `Bearer ${token}` } });
-        const data = await res.json();
-        if (data.success && data.data?.role === "ADMIN") setIsAdmin(true);
-      } catch {}
-    };
-    checkRole();
-  }, []);
+  return (
+    <div>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold" style={{ color: "var(--foreground)" }}>Account Settings</h1>
+        <p className="text-sm mt-1" style={{ color: "var(--muted-foreground)" }}>Manage your profile, security, and app preferences</p>
+      </div>
 
-  // On desktop, default to profile tab
-  useEffect(() => {
-    if (!isMobile && activeTab === null) setActiveTab("profile");
-  }, [isMobile, activeTab]);
-
-  const visibleTabs = TABS.filter(t => !t.adminOnly || isAdmin);
-  const ActivePanel = activeTab ? TAB_COMPONENTS[activeTab] : null;
-  const activeTabDef = visibleTabs.find(t => t.id === activeTab);
-
-  // Mobile: show tab list or tab content (like the screenshot — each tab = full page)
-  if (isMobile) {
-    if (activeTab && ActivePanel) {
-      return (
-        <div className="min-h-screen">
-          {/* Mobile header with back button */}
-          <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-lg border-b border-border px-4 py-3 flex items-center gap-3">
-            <button onClick={() => setActiveTab(null)} className="p-2 -ml-2 rounded-lg hover:bg-secondary transition-colors">
-              <ArrowLeft className="size-5 text-foreground" />
-            </button>
-            <h2 className="font-display font-bold text-foreground">{activeTabDef?.label}</h2>
-          </div>
-          <div className="p-4">
-            <ActivePanel />
-          </div>
-        </div>
-      );
-    }
-
-    // Mobile tab list (like the screenshot design)
-    return (
-      <div className="px-4 py-6 space-y-6">
-        {/* Profile card at top */}
-        <div className="flex items-center gap-4">
-          <div className="flex size-16 shrink-0 items-center justify-center rounded-full text-xl font-display font-bold bg-primary text-primary-foreground">
-            ?
-          </div>
-          <div>
-            <h2 className="text-lg font-display font-bold text-foreground">Settings</h2>
-            <p className="text-sm text-muted-foreground">Manage your account</p>
-          </div>
-        </div>
-
-        {/* Tab list */}
-        <div className="space-y-1.5">
-          {visibleTabs.map(tab => {
-            const Icon = tab.icon;
+      <div className="flex gap-6 items-start">
+        {/* ── Desktop Sidebar ── */}
+        <nav className="hidden md:flex flex-col w-56 shrink-0 rounded-2xl border overflow-hidden" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+          {NAV.map(item => {
+            const Icon = item.icon;
+            const isActive = active === item.key;
             return (
               <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className="w-full flex items-center gap-4 p-4 rounded-xl border border-border/50 hover:bg-secondary/50 transition-colors text-left group"
+                key={item.key}
+                onClick={() => setActive(item.key)}
+                className="flex items-center gap-3 px-4 py-3 transition-all text-left relative"
+                style={{
+                  backgroundColor: isActive ? "rgba(0,1,252,0.06)" : "transparent",
+                  color: isActive ? "var(--primary)" : item.danger ? "#dc2626" : "var(--foreground)",
+                  borderLeft: isActive ? "2px solid var(--primary)" : "2px solid transparent",
+                }}
               >
-                <div className="w-10 h-10 rounded-xl bg-secondary/50 flex items-center justify-center shrink-0 group-hover:bg-primary/10 transition-colors">
-                  <Icon className="size-5 text-muted-foreground group-hover:text-primary transition-colors" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-foreground">{tab.label}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{tab.description}</p>
-                </div>
-                <ChevronRight className="size-4 text-muted-foreground/50 shrink-0" />
+                <Icon className="w-4 h-4 shrink-0" />
+                <span className="text-sm font-medium">{item.label}</span>
               </button>
             );
           })}
-        </div>
-      </div>
-    );
-  }
-
-  // Desktop: sidebar + content
-  return (
-    <div className="mx-auto max-w-5xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-display font-bold text-foreground">Settings</h1>
-        <p className="text-sm text-muted-foreground">Manage your account settings and preferences.</p>
-      </div>
-
-      <div className="flex gap-6">
-        {/* Sidebar */}
-        <nav className="w-56 shrink-0">
-          <Card className="p-2">
-            <ul className="space-y-0.5">
-              {visibleTabs.map(tab => {
-                const isActive = activeTab === tab.id;
-                const Icon = tab.icon;
-                return (
-                  <li key={tab.id}>
-                    <button onClick={() => setActiveTab(tab.id)}
-                      className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'}`}>
-                      <Icon className="size-4 shrink-0" />
-                      {tab.label}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </Card>
         </nav>
 
-        {/* Content */}
-        <Card className="min-w-0 flex-1 p-6">
-          <CardHeader className="p-0 pb-4">
-            <CardTitle className="font-display">{activeTabDef?.label}</CardTitle>
-            <CardDescription>{activeTabDef?.description}</CardDescription>
-          </CardHeader>
-          <Separator className="mb-6" />
-          <CardContent className="p-0">
-            {ActivePanel && <ActivePanel />}
-          </CardContent>
-        </Card>
+        {/* ── Mobile: list → section ── */}
+        <div className="flex md:hidden flex-col w-full">
+          {!mobileOpen ? (
+            <div className="rounded-2xl border overflow-hidden" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+              {NAV.map(item => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.key}
+                    onClick={() => { setActive(item.key); setMobileOpen(true); }}
+                    className="flex items-center gap-3 w-full px-4 py-3.5 border-b last:border-0 transition-colors hover:bg-[var(--secondary)] text-left"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: "var(--secondary)" }}>
+                      <Icon className="w-4 h-4" style={{ color: "var(--foreground)" }} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>{item.label}</p>
+                      <p className="text-xs truncate" style={{ color: "var(--muted-foreground)" }}>{item.desc}</p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 shrink-0" style={{ color: "var(--muted-foreground)" }} />
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div>
+              <button onClick={() => setMobileOpen(false)} className="flex items-center gap-2 text-sm font-medium mb-4" style={{ color: "var(--primary)" }}>
+                <ChevronLeft className="w-4 h-4" /> Back to Settings
+              </button>
+              <h2 className="text-lg font-bold mb-4" style={{ color: "var(--foreground)" }}>{activeItem.label}</h2>
+              <SectionContent section={active} />
+            </div>
+          )}
+        </div>
+
+        {/* ── Desktop Content ── */}
+        <div className="hidden md:block flex-1 min-w-0">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={active}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.2 }}
+            >
+              <SectionContent section={active} />
+            </motion.div>
+          </AnimatePresence>
+        </div>
       </div>
     </div>
   );

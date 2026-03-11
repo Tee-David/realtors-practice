@@ -82,4 +82,38 @@ export const search = {
   suggestions: (params?: Record<string, unknown>) => api.get("/search/suggestions", { params }),
 };
 
+export const savedSearches = {
+  list: () => api.get("/saved-searches"),
+  get: (id: string) => api.get(`/saved-searches/${id}`),
+  create: (data: Record<string, unknown>) => api.post("/saved-searches", data),
+  update: (id: string, data: Record<string, unknown>) => api.put(`/saved-searches/${id}`, data),
+  delete: (id: string) => api.delete(`/saved-searches/${id}`),
+  getMatches: (id: string, params?: Record<string, unknown>) => api.get(`/saved-searches/${id}/matches`, { params }),
+  markMatchesSeen: (id: string) => api.patch(`/saved-searches/${id}/matches/seen`),
+};
+
+export const notifications = {
+  list: (params?: Record<string, unknown>) => api.get("/notifications", { params }),
+  unreadCount: () => api.get("/notifications/unread-count"),
+  markRead: (id: string) => api.patch(`/notifications/${id}/read`),
+  markAllRead: () => api.patch("/notifications/read-all"),
+};
+
+export const users = {
+  list: () => api.get("/users"),
+  updateRole: (id: string, role: string) => api.patch(`/users/${id}/role`, { role }),
+  toggleActive: (id: string) => api.patch(`/users/${id}/toggle-active`),
+  updateProfile: (data: Record<string, unknown>) => api.patch("/users/me", data),
+};
+
+export const auditLogs = {
+  list: (params?: Record<string, unknown>) => api.get("/audit-logs", { params }),
+  get: (id: string) => api.get(`/audit-logs/${id}`),
+};
+
+export const exports = {
+  csv: (propertyIds?: string[]) => api.post("/export/csv", { propertyIds }, { responseType: "blob" }),
+  csvFiltered: (filters: Record<string, unknown>) => api.post("/export/csv/filtered", filters, { responseType: "blob" }),
+};
+
 export default api;

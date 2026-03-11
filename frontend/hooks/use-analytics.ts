@@ -7,11 +7,18 @@ export interface KPIData {
   newPropertiesToday: number;
   averageQualityScore: number;
   activeDataSources: number;
+  forSale?: number;
+  forRent?: number;
 }
 
 export interface ChartData {
   byCategory: { category: string; count: number }[];
   byStatus: { status: string; count: number }[];
+  byListingType?: { listingType: string; count: number }[];
+  avgPrice?: number;
+  topAreas?: { area: string; count: number }[];
+  topSites?: { name: string; count: number }[];
+  recentProperties?: Record<string, unknown>[];
 }
 
 export interface SiteRanking {

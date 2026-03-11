@@ -104,6 +104,9 @@ model User {
   firstName     String?
   lastName      String?
   avatarUrl     String?
+  phone         String?
+  bio           String?
+  company       String?
 
   lastLoginAt   DateTime?
   loginCount    Int       @default(0)
