@@ -72,7 +72,7 @@ export function EmailTemplateBuilder({
         </div>
 
         {/* Editor */}
-        <div className="flex-1 relative min-h-0 bg-white">
+        <div className="flex-1 relative overflow-hidden bg-white" style={{ minHeight: 0, height: 'calc(100vh - 70px)' }}>
           <EmailEditor
             ref={emailEditorRef}
             onLoad={onLoad}
@@ -82,6 +82,9 @@ export function EmailTemplateBuilder({
                   textEditor: {
                      spellChecker: true,
                   }
+               },
+               appearance: {
+                  theme: 'modern_light',
                },
                mergeTags: {
                    user_first_name: {

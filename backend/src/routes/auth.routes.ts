@@ -149,6 +149,9 @@ router.get("/me", authenticate, async (req: Request, res: Response) => {
         lastName: true,
         role: true,
         avatarUrl: true,
+        phone: true,
+        bio: true,
+        company: true,
         lastLoginAt: true,
         createdAt: true,
       },
@@ -170,4 +173,49 @@ router.get("/me", authenticate, async (req: Request, res: Response) => {
   }
 });
 
+// ── Update Profile ──────────────────────────────────────────────────────────
+
+const updateProfileSchema = z.object({
+  firstName: z.string().max(100).optional(),
+  lastName: z.string().max(100).optional(),
+  phone: z.string().max(20).optional(),
+  bio: z.string().max(500).optional(),
+  company: z.string().max(100).optional(),
+});
+
+router.patch("/me", authenticate, async (req: Request, res: Response) => {
+  try {
+    const body = updateProfileSchema.parse(req.body);
+
+    const updated = await prisma.user.update({
+      where: { id: req.user!.id },
+      data: {
+        ...(body.firstName !== undefined && { firstName: body.firstName }),
+        ...(body.lastName !== undefined && { lastName: body.lastName }),
+        ...(body.phone !== undefined && { phone: body.phone }),
+        ...(body.bio !== undefined && { bio: body.bio }),
+        ...(body.company !== undefined && { company: body.company }),
+      },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        avatarUrl: true,
+        phone: true,
+        bio: true,
+        company: true,
+        lastLoginAt: true,
+        createdAt: true,
+      },
+    });
+
+    return sendSuccess(res, updated, "Profile updated successfully");
+  } catch (err: any) {
+    return sendError(res, err.message, 400);
+  }
+});
+
 export default router;
+

@@ -151,6 +151,7 @@ function SearchableSelect({ value, onChange, options, placeholder }: { value: st
 // ─── Profile ────────────────────────────────────────────────────────────────
 
 function ProfileSection() {
+  const queryClient = useQueryClient();
   const { data: me } = useQuery({ queryKey: ["auth-me"], queryFn: async () => (await auth.me()).data.data });
   const [editing, setEditing] = useState(false);
   const [firstName, setFirstName] = useState("");
@@ -158,6 +159,7 @@ function ProfileSection() {
   const [phone, setPhone] = useState("");
   const [bio, setBio] = useState("");
   const [company, setCompany] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (me && firstName === "" && !editing) {
@@ -228,7 +230,19 @@ function ProfileSection() {
             <textarea value={bio} onChange={e => setBio(e.target.value)} disabled={!editing} rows={2} className={inputBase + (editing ? "" : " opacity-70") + " resize-none"} style={inputStyle} />
           </div>
         </div>
-        {editing && <SaveBtn onClick={() => { toast.success("Profile saved"); setEditing(false); }} />}
+        {editing && <SaveBtn isLoading={saving} onClick={async () => {
+          try {
+            setSaving(true);
+            await auth.updateProfile({ firstName, lastName, phone, bio, company });
+            queryClient.invalidateQueries({ queryKey: ["auth-me"] });
+            toast.success("Profile saved");
+            setEditing(false);
+          } catch (err: any) {
+            toast.error(err?.response?.data?.message || "Failed to save profile");
+          } finally {
+            setSaving(false);
+          }
+        }} />}
       </Card>
     </div>
   );
@@ -240,6 +254,33 @@ function SecuritySection() {
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [googleLinked] = useState(false);
+  const [currentPw, setCurrentPw] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
+  const [changingPw, setChangingPw] = useState(false);
+
+  const handlePasswordChange = async () => {
+    if (!newPw || newPw.length < 8) {
+      toast.error("Password must be at least 8 characters");
+      return;
+    }
+    if (newPw !== confirmPw) {
+      toast.error("Passwords do not match");
+      return;
+    }
+    try {
+      setChangingPw(true);
+      const { supabase } = await import("@/lib/supabase");
+      const { error } = await supabase.auth.updateUser({ password: newPw });
+      if (error) throw error;
+      toast.success("Password updated successfully");
+      setCurrentPw(""); setNewPw(""); setConfirmPw("");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update password");
+    } finally {
+      setChangingPw(false);
+    }
+  };
 
   return (
     <div className="space-y-4 max-w-2xl">
@@ -247,23 +288,32 @@ function SecuritySection() {
       <Card>
         <CardHeader icon={Lock} title="Change Password" />
         <div className="space-y-3">
-          {[
-            { label: "Current Password", show: showCurrent, toggle: () => setShowCurrent(v => !v) },
-            { label: "New Password",     show: showNew,    toggle: () => setShowNew(v => !v) },
-            { label: "Confirm New Password", show: showNew, toggle: () => setShowNew(v => !v) },
-          ].map(f => (
-            <div key={f.label}>
-              <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>{f.label}</label>
-              <div className="relative">
-                <input type={f.show ? "text" : "password"} className={inputBase + " pr-10"} style={inputStyle} placeholder="••••••••" />
-                <button type="button" onClick={f.toggle} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: "var(--muted-foreground)" }}>
-                  {f.show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Current Password</label>
+            <div className="relative">
+              <input type={showCurrent ? "text" : "password"} value={currentPw} onChange={e => setCurrentPw(e.target.value)} className={inputBase + " pr-10"} style={inputStyle} placeholder="••••••••" />
+              <button type="button" onClick={() => setShowCurrent(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: "var(--muted-foreground)" }}>
+                {showCurrent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
-          ))}
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>New Password</label>
+            <div className="relative">
+              <input type={showNew ? "text" : "password"} value={newPw} onChange={e => setNewPw(e.target.value)} className={inputBase + " pr-10"} style={inputStyle} placeholder="••••••••" />
+              <button type="button" onClick={() => setShowNew(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: "var(--muted-foreground)" }}>
+                {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Confirm New Password</label>
+            <div className="relative">
+              <input type={showNew ? "text" : "password"} value={confirmPw} onChange={e => setConfirmPw(e.target.value)} className={inputBase + " pr-10"} style={inputStyle} placeholder="••••••••" />
+            </div>
+          </div>
         </div>
-        <SaveBtn onClick={() => toast.success("Password updated")} />
+        <SaveBtn isLoading={changingPw} onClick={handlePasswordChange} />
       </Card>
 
       {/* Google */}
@@ -382,6 +432,27 @@ function AppearanceSection() {
 
   const { primaryLight, primaryDark, fontDisplay, fontBody, setPrimaryLight, setPrimaryDark, setFontDisplay, setFontBody, resetTheme } = useThemeConfig();
 
+  // Apply theme on mount and when changed
+  useEffect(() => {
+    if (theme === "system") {
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      document.documentElement.classList.toggle("dark", prefersDark);
+    } else {
+      document.documentElement.classList.toggle("dark", theme === "dark");
+    }
+  }, [theme]);
+
+  // Apply font size on mount and when changed
+  useEffect(() => {
+    const size = fontSize === "small" ? "14px" : fontSize === "large" ? "18px" : "16px";
+    document.documentElement.style.fontSize = size;
+  }, [fontSize]);
+
+  // Apply compact mode on mount and when changed
+  useEffect(() => {
+    document.body.classList.toggle("compact-mode", compact);
+  }, [compact]);
+
   const themes = [
     { value: "light",  label: "Light",  icon: "☀️" },
     { value: "dark",   label: "Dark",   icon: "🌙" },
@@ -394,7 +465,7 @@ function AppearanceSection() {
         <CardHeader icon={Palette} title="Theme Mode" />
         <div className="grid grid-cols-3 gap-3">
           {themes.map(t => (
-            <button key={t.value} onClick={() => { setTheme(t.value as typeof theme); document.documentElement.classList.toggle("dark", t.value === "dark"); }}
+            <button key={t.value} onClick={() => setTheme(t.value as typeof theme)}
               className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all"
               style={{ borderColor: theme === t.value ? "var(--primary)" : "var(--border)", backgroundColor: theme === t.value ? "rgba(0,1,252,0.06)" : "transparent" }}
             >
@@ -459,7 +530,7 @@ function AppearanceSection() {
             <Toggle checked={sidebarExpanded} onChange={() => setSidebarExpanded(v => !v)} label="Sidebar expanded by default" />
           </div>
         </div>
-        <SaveBtn onClick={() => toast.success("Appearance saved")} />
+        <p className="mt-3 text-xs" style={{ color: "var(--muted-foreground)" }}>Changes apply immediately and are saved automatically.</p>
       </Card>
     </div>
   );
@@ -805,6 +876,44 @@ function UsersSection() {
     },
   });
 
+  // Invite modal state
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteFirstName, setInviteFirstName] = useState("");
+  const [inviteLastName, setInviteLastName] = useState("");
+  const [invitePassword, setInvitePassword] = useState("");
+  const [inviteRole, setInviteRole] = useState("VIEWER");
+  const [inviting, setInviting] = useState(false);
+
+  const handleInvite = async () => {
+    if (!inviteEmail || !invitePassword) {
+      toast.error("Email and password are required");
+      return;
+    }
+    if (invitePassword.length < 8) {
+      toast.error("Password must be at least 8 characters");
+      return;
+    }
+    try {
+      setInviting(true);
+      await auth.register({
+        email: inviteEmail,
+        password: invitePassword,
+        firstName: inviteFirstName || undefined,
+        lastName: inviteLastName || undefined,
+        role: inviteRole,
+      });
+      toast.success(`User ${inviteEmail} invited successfully`);
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      setInviteOpen(false);
+      setInviteEmail(""); setInvitePassword(""); setInviteFirstName(""); setInviteLastName(""); setInviteRole("VIEWER");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Failed to invite user");
+    } finally {
+      setInviting(false);
+    }
+  };
+
   const updateRole = useMutation({
     mutationFn: ({ id, role }: { id: string; role: string }) => usersApi.updateRole(id, role),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["users"] }); toast.success("Role updated"); },
@@ -815,9 +924,6 @@ function UsersSection() {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["users"] }); },
   });
 
-  // Requires a delete endpoint in the backend for users, currently not standard in Realtors Practice
-  // We'll mock the UI but realistically this needs a backend deleteUser route.
-  // We'll map it to a toast for now.
   const handleDelete = (id: string) => {
     if (confirm("Are you sure you want to permanently delete this user?")) {
       toast.error("User deleted (Requires backend implementation)");
@@ -829,9 +935,52 @@ function UsersSection() {
 
   return (
     <div className="max-w-4xl">
+      {/* Invite Modal */}
+      {inviteOpen && (
+        <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) setInviteOpen(false); }}>
+          <div className="rounded-2xl border p-6 w-full max-w-md mx-4" style={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }}>
+            <h3 className="text-lg font-bold mb-4" style={{ color: "var(--foreground)" }}>Invite New User</h3>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium mb-1" style={{ color: "var(--muted-foreground)" }}>First Name</label>
+                  <input value={inviteFirstName} onChange={e => setInviteFirstName(e.target.value)} className={inputBase} style={inputStyle} placeholder="John" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1" style={{ color: "var(--muted-foreground)" }}>Last Name</label>
+                  <input value={inviteLastName} onChange={e => setInviteLastName(e.target.value)} className={inputBase} style={inputStyle} placeholder="Doe" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1" style={{ color: "var(--muted-foreground)" }}>Email *</label>
+                <input type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} className={inputBase} style={inputStyle} placeholder="user@example.com" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1" style={{ color: "var(--muted-foreground)" }}>Password *</label>
+                <input type="password" value={invitePassword} onChange={e => setInvitePassword(e.target.value)} className={inputBase} style={inputStyle} placeholder="Min 8 characters" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1" style={{ color: "var(--muted-foreground)" }}>Role</label>
+                <select value={inviteRole} onChange={e => setInviteRole(e.target.value)} className={inputBase} style={inputStyle}>
+                  <option value="VIEWER">Viewer</option>
+                  <option value="EDITOR">Editor</option>
+                  <option value="API_USER">API User</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-5">
+              <button onClick={() => setInviteOpen(false)} className="px-4 py-2 rounded-xl text-sm font-medium border hover:bg-[var(--secondary)] transition-colors" style={{ borderColor: "var(--border)", color: "var(--foreground)" }}>Cancel</button>
+              <button onClick={handleInvite} disabled={inviting} className="px-5 py-2 rounded-xl text-sm font-semibold transition-colors hover:opacity-90 disabled:opacity-50" style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}>
+                {inviting ? "Inviting…" : "Send Invite"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Card>
         <CardHeader icon={Users} title="Team Members" action={
-          <button onClick={() => toast.info("Invite modal coming soon")} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold" style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}>
+          <button onClick={() => setInviteOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold" style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}>
             <Plus className="w-3.5 h-3.5" /> Invite User
           </button>
         } />
@@ -852,7 +1001,11 @@ function UsersSection() {
               <tbody>
                 {users.map((user: any) => {
                   const isTargetSuper = user.email === "wedigcreativity@gmail.com";
-                  const disableManage = (!isSuperAdmin && isTargetSuper) || (!isSuperAdmin && user.role === "ADMIN" && user.id !== me?.id); // Admin cannot manage other admins
+                  const isSelf = user.id === me?.id;
+                  // Admin can't change their own role or other admin roles (only super admin can)
+                  // Non-admin users' roles can be changed by any admin
+                  const disableRoleChange = isSelf || isTargetSuper || (!isSuperAdmin && user.role === "ADMIN");
+                  const disableManage = (!isSuperAdmin && isTargetSuper) || isSelf;
 
                   return (
                   <tr key={user.id} className="transition-colors hover:bg-[var(--secondary)]/30" style={{ borderBottom: "1px solid var(--border)" }}>
@@ -868,7 +1021,7 @@ function UsersSection() {
                       </div>
                     </td>
                     <td className="px-3 py-3">
-                      <select value={user.role} onChange={e => updateRole.mutate({ id: user.id, role: e.target.value })} disabled={disableManage}
+                      <select value={user.role} onChange={e => updateRole.mutate({ id: user.id, role: e.target.value })} disabled={disableRoleChange}
                         className="rounded-lg border px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[var(--primary)] disabled:opacity-50" style={{ backgroundColor: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" }}>
                         {["ADMIN", "EDITOR", "VIEWER", "API_USER"].map(r => <option key={r} value={r}>{r}</option>)}
                       </select>

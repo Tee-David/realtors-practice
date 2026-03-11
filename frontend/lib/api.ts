@@ -42,6 +42,8 @@ api.interceptors.response.use(
 // API method namespaces
 export const auth = {
   me: () => api.get("/auth/me"),
+  updateProfile: (data: { firstName?: string; lastName?: string; phone?: string; bio?: string; company?: string }) =>
+    api.patch("/auth/me", data),
   register: (data: { email: string; password: string; firstName?: string; lastName?: string; role?: string }) =>
     api.post("/auth/register", data),
 };
