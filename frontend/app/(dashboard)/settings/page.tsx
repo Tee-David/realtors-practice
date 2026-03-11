@@ -1222,7 +1222,7 @@ export default function SettingsPage() {
         </div>
 
         {/* ── Right Lanyard ── */}
-        <div className="hidden xl:block w-[380px] shrink-0 h-[800px] sticky top-0 overflow-visible z-10">
+        <div className="hidden xl:block w-[380px] shrink-0 h-[800px] sticky top-0 overflow-visible z-10 mt-[-100px]">
           <Lanyard position={[0, 0, 20]} gravity={[0, -40, 0]} transparent={true} />
         </div>
       </div>
