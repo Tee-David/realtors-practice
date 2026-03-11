@@ -106,13 +106,17 @@ export function broadcastScrapeLog(
   details?: Record<string, unknown>
 ): void {
   if (!scrapeNamespace) return;
-  scrapeNamespace.to(`job:${jobId}`).emit("job:log", {
+  const payload = {
     jobId,
     level,
     message,
     details,
     timestamp: new Date().toISOString(),
-  });
+  };
+  // Emit to job-specific room
+  scrapeNamespace.to(`job:${jobId}`).emit("job:log", payload);
+  // Also emit namespace-wide for the live log feed
+  scrapeNamespace.emit("scrape_log", payload);
 }
 
 export function broadcastScrapeProgress(
@@ -142,6 +146,8 @@ export function broadcastScrapeComplete(
     stats,
     timestamp: new Date().toISOString(),
   });
+  // Notify all clients to refresh job list
+  scrapeNamespace.emit("job_update", { jobId, status: "COMPLETED" });
 }
 
 export function broadcastScrapeError(jobId: string, error: string): void {
@@ -151,6 +157,8 @@ export function broadcastScrapeError(jobId: string, error: string): void {
     error,
     timestamp: new Date().toISOString(),
   });
+  // Notify all clients to refresh job list
+  scrapeNamespace.emit("job_update", { jobId, status: "FAILED" });
 }
 
 export function broadcastNotification(

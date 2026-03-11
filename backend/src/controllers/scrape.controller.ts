@@ -45,6 +45,36 @@ export class ScrapeController {
     }
   }
 
+  static async listLogs(req: Request, res: Response) {
+    try {
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 25;
+      const jobId = req.query.jobId as string | undefined;
+      const level = req.query.level as string | undefined;
+      const from = req.query.from as string | undefined;
+      const to = req.query.to as string | undefined;
+      const search = req.query.search as string | undefined;
+      const siteId = req.query.siteId as string | undefined;
+
+      const { data, total } = await ScrapeService.getLogs({
+        page, limit, jobId, level, from, to, search, siteId,
+      });
+      return sendPaginated(res, data, total, page, limit);
+    } catch (err) {
+      return sendError(res, "Failed to fetch scrape logs");
+    }
+  }
+
+  static async getLog(req: Request, res: Response) {
+    try {
+      const log = await ScrapeService.getLog(req.params.id);
+      if (!log) return sendError(res, "Log not found", 404);
+      return sendSuccess(res, log);
+    } catch (err) {
+      return sendError(res, "Failed to fetch scrape log");
+    }
+  }
+
   static async stopJob(req: Request, res: Response) {
     try {
       const job = await ScrapeService.stopJob(req.params.id);

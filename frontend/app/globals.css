@@ -306,21 +306,22 @@ iframe[src*="jotfor"],
 .shepherd-footer {
   padding: 1.25rem 1.5rem !important;
   display: flex !important;
+  flex-direction: row !important;
   flex-wrap: wrap !important;
   gap: 12px !important;
   background: white !important;
   border-top: 1px solid rgba(0, 0, 0, 0.05) !important;
 }
 
-/* First two buttons take 50% each, third button takes 100% */
+/* First two buttons share the first row equally, third button takes full width */
 .shepherd-footer .shepherd-button {
   flex: 1 1 calc(50% - 6px) !important;
-  min-width: calc(50% - 6px) !important;
+  max-width: calc(50% - 6px) !important;
 }
 
 .shepherd-footer .shepherd-button:nth-child(3) {
   flex: 1 1 100% !important;
-  min-width: 100% !important;
+  max-width: 100% !important;
 }
 
 .dark .shepherd-footer {
@@ -339,61 +340,73 @@ iframe[src*="jotfor"],
   cursor: pointer !important;
 }
 
-.shepherd-button-primary {
+/* Primary button (Let's Go / Next) → Brand Blue */
+.shepherd-button-primary,
+.rp-btn-primary {
   background: #0001fc !important;
   color: #ffffff !important;
   box-shadow: 0 4px 14px 0 rgba(0, 1, 252, 0.3) !important;
 }
 
-.dark .shepherd-button-primary {
-  background: #3b82f6 !important; /* Softer blue for dark mode */
+.dark .shepherd-button-primary,
+.dark .rp-btn-primary {
+  background: #3b82f6 !important;
   color: #ffffff !important;
 }
 
-.shepherd-button-primary:hover {
+.shepherd-button-primary:hover,
+.rp-btn-primary:hover {
   transform: translateY(-2px) scale(1.02) !important;
   box-shadow: 0 6px 20px rgba(0, 1, 252, 0.4) !important;
 }
 
-.dark .shepherd-button-primary:hover {
+.dark .shepherd-button-primary:hover,
+.dark .rp-btn-primary:hover {
   box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4) !important;
 }
 
-.shepherd-button-skip {
-  background: #ff6600 !important; /* brand orange */
+/* Skip button → Brand Orange */
+.shepherd-button-skip,
+.rp-btn-skip {
+  background: #ff6600 !important;
   color: white !important;
   box-shadow: 0 4px 14px 0 rgba(255, 102, 0, 0.3) !important;
 }
 
-.dark .shepherd-button-skip {
+.dark .shepherd-button-skip,
+.dark .rp-btn-skip {
   background: #f97316 !important;
 }
 
-.shepherd-button-skip:hover {
+.shepherd-button-skip:hover,
+.rp-btn-skip:hover {
   transform: translateY(-2px) scale(1.02) !important;
   box-shadow: 0 6px 20px rgba(255, 102, 0, 0.4) !important;
 }
 
-/* Secondary button (Exit / Back) → Muted, subtle look */
-.shepherd-button-secondary {
-  background: #f1f5f9 !important;
-  color: #475569 !important;
-  border: 1px solid #e2e8f0 !important;
+/* Secondary button (Exit / Back) → Brand Green */
+.shepherd-button-secondary,
+.rp-btn-secondary {
+  background: #0a6906 !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px 0 rgba(10, 105, 6, 0.3) !important;
 }
 
-.dark .shepherd-button-secondary {
-  background: rgba(255, 255, 255, 0.08) !important;
-  color: #f8fafc !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+.dark .shepherd-button-secondary,
+.dark .rp-btn-secondary {
+  background: #16a34a !important;
+  color: #ffffff !important;
 }
 
-.shepherd-button-secondary:hover {
-  background-color: #e2e8f0 !important;
-  transform: translateY(-2px) !important;
+.shepherd-button-secondary:hover,
+.rp-btn-secondary:hover {
+  transform: translateY(-2px) scale(1.02) !important;
+  box-shadow: 0 6px 20px rgba(10, 105, 6, 0.4) !important;
 }
 
-.dark .shepherd-button-secondary:hover {
-  background-color: rgba(255, 255, 255, 0.15) !important;
+.dark .shepherd-button-secondary:hover,
+.dark .rp-btn-secondary:hover {
+  box-shadow: 0 6px 20px rgba(22, 163, 74, 0.4) !important;
 }
 
 /* Progress Bar in Tour */

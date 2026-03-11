@@ -115,12 +115,19 @@ export function GlobeHero() {
   const [hexData, setHexData] = useState<any>(null);
   const { data: kpis } = useDashboardKPIs();
   const [typingDone, setTypingDone] = useState(false);
-  
-  // Greeter logic
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Good Morning" : hour < 18 ? "Good Afternoon" : "Good Evening";
-  const dateOptions: Intl.DateTimeFormatOptions = { weekday: "long", year: "numeric", month: "long", day: "numeric" };
-  const formattedDate = new Date().toLocaleDateString("en-US", dateOptions);
+  const [clientData, setClientData] = useState<{
+    reqRate: string;
+    greeting: string;
+    formattedDate: string;
+    year: number;
+    isMounted: boolean;
+  }>({
+    reqRate: "1200",
+    greeting: "Hello",
+    formattedDate: "",
+    year: 2024,
+    isMounted: false
+  });
   
   // Format numbers visually
   const totalStr = (kpis?.totalProperties || 18650).toLocaleString();
@@ -129,6 +136,19 @@ export function GlobeHero() {
   const sources = kpis?.activeDataSources || 4;
 
   useEffect(() => {
+    // Generate client-only data to prevent hydration mismatch
+    const hour = new Date().getHours();
+    const currentGreeting = hour < 12 ? "Good Morning" : hour < 18 ? "Good Afternoon" : "Good Evening";
+    const dateOptions: Intl.DateTimeFormatOptions = { weekday: "long", year: "numeric", month: "long", day: "numeric" };
+    
+    setClientData({
+      reqRate: (1200 + Math.random() * 50).toFixed(0),
+      greeting: currentGreeting,
+      formattedDate: new Date().toLocaleDateString("en-US", dateOptions),
+      year: new Date().getFullYear(),
+      isMounted: true
+    });
+
     // Fetch geojson footprint for the glowing hex globe
     fetch("https://raw.githubusercontent.com/vasturiano/globe.gl/master/example/datasets/ne_110m_admin_0_countries.geojson")
       .then(res => res.json())
@@ -175,19 +195,19 @@ export function GlobeHero() {
   };
 
   return (
-    <div className="w-full bg-[#03010b] rounded-[1.5rem] p-5 my-6 overflow-hidden relative shadow-2xl border border-[#5227FF]/10 drop-shadow-[0_0_30px_rgba(82,39,255,0.08)]">
-      
+    <div className="w-full bg-[#03010b] rounded-[1.5rem] p-4 sm:p-5 my-4 sm:my-6 overflow-hidden relative shadow-2xl border border-[#5227FF]/10 drop-shadow-[0_0_30px_rgba(82,39,255,0.08)]">
+
       {/* Top Meta Bar */}
-      <div className="absolute top-6 left-6 right-6 flex items-center justify-between z-10 pointer-events-none">
-        <div className="flex items-center gap-3">
-          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-          <span className="text-[10px] tracking-widest font-bold text-white/50 uppercase">Global Intelligence Engine / </span>
-          <span className="text-[10px] tracking-widest font-bold text-green-500 shadow-green-500 uppercase drop-shadow-[0_0_8px_rgba(34,197,94,0.8)]">Real-Time Sync</span>
+      <div className="relative sm:absolute sm:top-6 sm:left-6 sm:right-6 flex items-center justify-between z-10 pointer-events-none mb-3 sm:mb-0">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0" />
+          <span className="text-[8px] sm:text-[10px] tracking-widest font-bold text-white/50 uppercase truncate">Global Intelligence Engine / </span>
+          <span className="text-[8px] sm:text-[10px] tracking-widest font-bold text-green-500 shadow-green-500 uppercase drop-shadow-[0_0_8px_rgba(34,197,94,0.8)] shrink-0">Real-Time Sync</span>
         </div>
-        <div className="flex gap-4">
+        <div className="hidden sm:flex gap-4">
           <div className="text-right">
             <span className="text-[10px] uppercase tracking-wider text-white/40 block">Network Traffic</span>
-            <span className="text-xs font-mono text-white/80">{(1200 + Math.random() * 50).toFixed(0)} req/s</span>
+            <span className="text-xs font-mono text-white/80">{clientData.isMounted ? clientData.reqRate : "1200"} req/s</span>
           </div>
           <div className="text-right">
             <span className="text-[10px] uppercase tracking-wider text-white/40 block">Engine Latency</span>
@@ -197,41 +217,47 @@ export function GlobeHero() {
       </div>
 
       {/* Greeter Section inside Hero */}
-      <div className="absolute top-16 left-6 z-10 flex flex-col gap-1.5 pointer-events-none">
-        <h1 className="font-display text-2xl sm:text-[28px] font-bold tracking-tight min-h-[36px] sm:min-h-[42px] text-white">
-          <TextType
-            text={[`${greeting}, David`]}
-            typingSpeed={75}
-            pauseDuration={1500}
-            showCursor={false}
-            cursorCharacter="|"
-            deletingSpeed={50}
-            variableSpeedEnabled={true}
-            variableSpeedMin={50}
-            variableSpeedMax={100}
-            cursorBlinkDuration={0.8}
-            loop={false}
-            initialDelay={500}
-            onComplete={() => setTypingDone(true)}
-          />
+      <div className="relative sm:absolute sm:top-16 sm:left-6 z-10 flex flex-col gap-1.5 pointer-events-none mb-4 sm:mb-0">
+        <h1 className="font-display text-xl sm:text-[28px] font-bold tracking-tight min-h-[32px] sm:min-h-[42px] text-white">
+          {clientData.isMounted && (
+            <TextType
+              text={[`${clientData.greeting}, David`]}
+              typingSpeed={75}
+              pauseDuration={1500}
+              showCursor={false}
+              cursorCharacter="|"
+              deletingSpeed={50}
+              variableSpeedEnabled={true}
+              variableSpeedMin={50}
+              variableSpeedMax={100}
+              cursorBlinkDuration={0.8}
+              loop={false}
+              initialDelay={500}
+              onComplete={() => setTypingDone(true)}
+            />
+          )}
         </h1>
-        <motion.div
-           className="flex items-center gap-1.5 text-sm text-white/60"
+         <motion.div
+           className="flex items-center gap-1.5 text-sm text-white/60 min-h-[20px]"
            initial={{ opacity: 0, y: 10 }}
-           animate={typingDone ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
+           animate={typingDone && clientData.isMounted ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
            transition={{ duration: 0.5, ease: "easeOut" }}
          >
-           <Calendar size={15} />
-           <p className="font-medium">{formattedDate}</p>
+           {clientData.isMounted && (
+             <>
+               <Calendar size={15} />
+               <p className="font-medium">{clientData.formattedDate}</p>
+             </>
+           )}
          </motion.div>
        </div>
        
-       {/* Absolute Bottom Left Globe (covers ~50% of container) */}
-       <motion.div 
+       {/* Absolute Bottom Left Globe (covers ~50% of container, hidden on mobile) */}
+       <motion.div
          initial={{ opacity: 0, x: -50 }}
          animate={{ opacity: 1, x: 0 }}
          transition={{ duration: 2, ease: "easeOut" }}
-         className="absolute -bottom-[35%] -left-[45%] w-[60%] h-[120%] pointer-events-auto z-0"
+         className="hidden lg:block absolute -bottom-[35%] -left-[45%] w-[60%] h-[120%] pointer-events-auto z-0"
          style={{ mixBlendMode: 'screen' }}
        >
          {/* Premium scanner sliding line across globe */}
@@ -258,19 +284,19 @@ export function GlobeHero() {
           />
        </motion.div>
 
-       <div className="absolute bottom-6 left-6 z-10 flex items-center gap-2 pointer-events-none drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+       <div className="hidden sm:flex absolute bottom-6 left-6 z-10 items-center gap-2 pointer-events-none drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
          <Activity className="w-3.5 h-3.5 text-green-500 animate-pulse" />
          <span className="text-[10px] text-white/80 uppercase tracking-widest font-mono font-semibold">Sensors Active</span>
        </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-[600px] relative z-10">
-        
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 min-h-0 lg:min-h-[600px] relative z-10">
+
         {/* Left space where the globe sits underneath */}
         <div className="lg:col-span-3 hidden lg:block" />
 
         {/* Right: Stats Grid */}
-        <motion.div 
-          className="lg:col-span-9 grid grid-cols-1 sm:grid-cols-2 gap-4 mt-12 mb-4"
+        <motion.div
+          className="lg:col-span-9 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 sm:mt-12 mb-4"
           variants={containerVars}
           initial="hidden"
           animate="visible"
@@ -400,7 +426,7 @@ export function GlobeHero() {
       {/* Bottom Footer Border effect */}
       <div className="absolute bottom-0 left-4 right-4 h-[1px] bg-gradient-to-r from-transparent via-[#5227FF]/30 to-transparent" />
       <div className="absolute bottom-1 right-6 text-[8px] text-white/30 uppercase tracking-widest font-mono">
-        System Operational • v2.0.4 • {(new Date()).getFullYear()}
+        System Operational • v2.0.4 • {clientData.isMounted ? clientData.year : ""}
       </div>
     </div>
   );

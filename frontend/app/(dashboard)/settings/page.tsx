@@ -15,6 +15,12 @@ import {
 } from "lucide-react";
 import { EmailTemplateBuilder } from "@/components/dashboard/email-template-builder";
 import { useThemeConfig } from "@/components/theme-config-provider";
+import dynamic from "next/dynamic";
+const Lanyard = dynamic(() => import("@/components/ui/lanyard"), {
+  ssr: false,
+  loading: () => <div className="w-full h-64 flex items-center justify-center text-muted-foreground text-sm">Loading 3D preview...</div>,
+});
+import AnimatedList from "@/components/ui/animated-list";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -383,11 +389,15 @@ function NotificationsSection() {
     <div className="space-y-4 max-w-2xl">
       <Card>
         <CardHeader icon={Mail} title="Email Notifications" />
-        <div className="divide-y" style={{ borderColor: "var(--border)" }}>
-          <Toggle checked={emailMatch}     onChange={() => setEmailMatch(v => !v)}     label="New saved search matches" sub="Alerts when matching properties appear" />
-          <Toggle checked={emailPriceDrop} onChange={() => setEmailPriceDrop(v => !v)} label="Price drops" sub="Properties you've viewed drop in price" />
-          <Toggle checked={emailScrape}    onChange={() => setEmailScrape(v => !v)}    label="Scrape job completed" />
-        </div>
+        <AnimatedList 
+          showGradients={false} 
+          displayScrollbar={false}
+          items={[
+            <Toggle key="1" checked={emailMatch}     onChange={() => setEmailMatch(v => !v)}     label="New saved search matches" sub="Alerts when matching properties appear" />,
+            <Toggle key="2" checked={emailPriceDrop} onChange={() => setEmailPriceDrop(v => !v)} label="Price drops" sub="Properties you've viewed drop in price" />,
+            <Toggle key="3" checked={emailScrape}    onChange={() => setEmailScrape(v => !v)}    label="Scrape job completed" />
+          ]} 
+        />
         <div className="mt-4">
           <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Digest Frequency</label>
           <select value={digest} onChange={e => setDigest(e.target.value)} className={inputBase} style={inputStyle}>
@@ -401,12 +411,16 @@ function NotificationsSection() {
 
       <Card>
         <CardHeader icon={Bell} title="In-App Notifications" />
-        <div className="divide-y" style={{ borderColor: "var(--border)" }}>
-          <Toggle checked={inAppMatch}     onChange={() => setInAppMatch(v => !v)}     label="New property matches" />
-          <Toggle checked={inAppPriceDrop} onChange={() => setInAppPriceDrop(v => !v)} label="Price drops on watched properties" />
-          <Toggle checked={inAppScrape}    onChange={() => setInAppScrape(v => !v)}    label="Scrape completion alerts" />
-          <Toggle checked={quietHours}     onChange={() => setQuietHours(v => !v)}     label="Quiet hours (11pm–7am)" sub="Pause all notifications overnight" />
-        </div>
+        <AnimatedList 
+          showGradients={false} 
+          displayScrollbar={false}
+          items={[
+            <Toggle key="1" checked={inAppMatch}     onChange={() => setInAppMatch(v => !v)}     label="New property matches" />,
+            <Toggle key="2" checked={inAppPriceDrop} onChange={() => setInAppPriceDrop(v => !v)} label="Price drops on watched properties" />,
+            <Toggle key="3" checked={inAppScrape}    onChange={() => setInAppScrape(v => !v)}    label="Scrape completion alerts" />,
+            <Toggle key="4" checked={quietHours}     onChange={() => setQuietHours(v => !v)}     label="Quiet hours (11pm–7am)" sub="Pause all notifications overnight" />
+          ]} 
+        />
       </Card>
 
       <button onClick={() => toast.success("Preferences saved")} className="px-5 py-2 rounded-xl text-sm font-semibold transition-colors hover:opacity-90" style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}>
@@ -525,10 +539,14 @@ function AppearanceSection() {
               ))}
             </div>
           </div>
-          <div className="divide-y" style={{ borderColor: "var(--border)" }}>
-            <Toggle checked={compact} onChange={() => setCompact(v => !v)} label="Compact mode" sub="Denser UI with smaller spacing" />
-            <Toggle checked={sidebarExpanded} onChange={() => setSidebarExpanded(v => !v)} label="Sidebar expanded by default" />
-          </div>
+          <AnimatedList 
+            showGradients={false} 
+            displayScrollbar={false}
+            items={[
+              <Toggle key="1" checked={compact} onChange={() => setCompact(v => !v)} label="Compact mode" sub="Denser UI with smaller spacing" />,
+              <Toggle key="2" checked={sidebarExpanded} onChange={() => setSidebarExpanded(v => !v)} label="Sidebar expanded by default" />
+            ]} 
+          />
         </div>
         <p className="mt-3 text-xs" style={{ color: "var(--muted-foreground)" }}>Changes apply immediately and are saved automatically.</p>
       </Card>
@@ -1152,7 +1170,7 @@ export default function SettingsPage() {
         </div>
 
         {/* ── Desktop Content ── */}
-        <div className="hidden md:block flex-1 min-w-0">
+        <div className="hidden md:block flex-1 min-w-0 pb-[80px]">
           <AnimatePresence mode="wait">
             <motion.div
               key={active}
@@ -1164,6 +1182,11 @@ export default function SettingsPage() {
               <SectionContent section={active} />
             </motion.div>
           </AnimatePresence>
+        </div>
+
+        {/* ── Right Lanyard ── */}
+        <div className="hidden xl:block w-[380px] shrink-0 h-[800px] sticky top-0 overflow-visible z-10">
+          <Lanyard position={[0, 0, 20]} gravity={[0, -40, 0]} transparent={true} />
         </div>
       </div>
     </div>

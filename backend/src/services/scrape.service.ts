@@ -206,6 +206,88 @@ export class ScrapeService {
     });
   }
 
+  /**
+   * List scrape logs with filtering, pagination, and search.
+   */
+  static async getLogs(filters: {
+    page?: number;
+    limit?: number;
+    jobId?: string;
+    level?: string;
+    from?: string;
+    to?: string;
+    search?: string;
+    siteId?: string;
+  }) {
+    const page = filters.page || 1;
+    const limit = filters.limit || 25;
+    const where: Prisma.ScrapeLogWhereInput = {};
+
+    if (filters.jobId) {
+      where.jobId = filters.jobId;
+    }
+
+    if (filters.level) {
+      where.level = filters.level;
+    }
+
+    if (filters.siteId) {
+      where.siteId = filters.siteId;
+    }
+
+    if (filters.from || filters.to) {
+      where.timestamp = {};
+      if (filters.from) {
+        where.timestamp.gte = new Date(filters.from);
+      }
+      if (filters.to) {
+        where.timestamp.lte = new Date(filters.to);
+      }
+    }
+
+    if (filters.search) {
+      where.message = { contains: filters.search, mode: "insensitive" };
+    }
+
+    const [data, total] = await Promise.all([
+      prisma.scrapeLog.findMany({
+        where,
+        orderBy: { timestamp: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+        include: {
+          job: { select: { id: true, status: true, type: true } },
+        },
+      }),
+      prisma.scrapeLog.count({ where }),
+    ]);
+
+    return { data, total, page, limit };
+  }
+
+  /**
+   * Get a single scrape log by ID with full details and related job info.
+   */
+  static async getLog(id: string) {
+    return prisma.scrapeLog.findUnique({
+      where: { id },
+      include: {
+        job: {
+          select: {
+            id: true,
+            status: true,
+            type: true,
+            siteIds: true,
+            startedAt: true,
+            completedAt: true,
+            totalListings: true,
+            errors: true,
+          },
+        },
+      },
+    });
+  }
+
   // --- Internal callback handlers (called by Python scraper) ---
 
   /**

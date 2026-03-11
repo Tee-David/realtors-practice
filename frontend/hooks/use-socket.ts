@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import io, { type Socket } from "socket.io-client";
+import io from "socket.io-client";
+type SocketInstance = ReturnType<typeof io>;
 
 interface UseSocketOptions {
   namespace?: string;
@@ -10,7 +11,7 @@ interface UseSocketOptions {
 
 export function useSocket({ namespace = "", autoConnect = true }: UseSocketOptions = {}) {
   const [isConnected, setIsConnected] = useState(false);
-  const socketRef = useRef<Socket | null>(null);
+  const socketRef = useRef<SocketInstance | null>(null);
 
   useEffect(() => {
     if (!autoConnect) return;

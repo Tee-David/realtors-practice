@@ -17,6 +17,14 @@ import {
   BottomSheet,
   BottomSheetContent,
 } from "@/components/ui/bottom-sheet";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { AdvancedDateRangePicker } from "@/components/ui/advanced-date-picker";
+import { ScrapeLogsSection } from "@/components/scraper/scrape-logs-section";
 
 // Saved config type
 interface ScrapeConfig {
@@ -71,6 +79,9 @@ export default function ScraperControlPage() {
   // Saved config state — shows summary card after saving
   const [savedConfig, setSavedConfig] = useState<ScrapeConfig | null>(null);
   const [isEditing, setIsEditing] = useState(false); // true when editing existing saved config
+
+  // Execution History state
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
 
   // Load saved config on mount
   useEffect(() => {
@@ -385,12 +396,15 @@ export default function ScraperControlPage() {
               </button>
             )}
           </label>
-          <input
-            type="datetime-local"
-            value={scheduleTime}
-            onChange={e => setScheduleTime(e.target.value)}
-            min={new Date().toISOString().slice(0, 16)}
-            className="w-full px-4 py-3 rounded-xl border bg-secondary/30 focus:bg-background transition-colors focus:ring-2 focus:ring-primary outline-none text-sm dark:[color-scheme:dark] max-w-full"
+          <AdvancedDateRangePicker
+            value={scheduleTime ? { from: new Date(scheduleTime), to: new Date(scheduleTime) } : undefined}
+            onChange={(range) => {
+              if (range?.from) {
+                setScheduleTime(range.from.toISOString().slice(0, 16));
+              } else {
+                setScheduleTime("");
+              }
+            }}
           />
           <p className="text-[10px] text-muted-foreground pl-1">Leave empty to dispatch immediately.</p>
         </div>
@@ -610,50 +624,57 @@ export default function ScraperControlPage() {
           </Card>
 
           {/* Recent Jobs History */}
-          <Card className="bg-background/60 backdrop-blur-md border border-white/10 shadow-lg flex-1">
-            <CardHeader className="pb-3 border-b border-white/5">
+          <Card className="bg-background/60 backdrop-blur-md border border-white/10 shadow-lg flex-1 flex flex-col">
+            <CardHeader className="pb-3 border-b border-white/5 flex flex-row items-center justify-between space-y-0">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
                 <Clock className="w-4 h-4 text-muted-foreground" />
                 Execution History
               </CardTitle>
+              {/* Add Advanced Date Range Picker Here */}
+              <div className="scale-90 origin-right">
+                 <AdvancedDateRangePicker />
+              </div>
             </CardHeader>
-            <CardContent className="pt-0 px-0">
+            <CardContent className="pt-0 px-0 flex-1 overflow-hidden flex flex-col">
               {isLoading ? (
-                <div className="p-8 flex flex-col items-center justify-center text-muted-foreground">
+                <div className="p-8 flex flex-col items-center justify-center text-muted-foreground flex-1">
                   <RefreshCcw className="w-5 h-5 animate-spin mb-3 opacity-50" />
                   <span className="text-xs">Loading history...</span>
                 </div>
               ) : !jobs || jobs.length === 0 ? (
-                <div className="p-8 text-sm text-center text-muted-foreground flex flex-col items-center">
+                <div className="p-8 text-sm text-center text-muted-foreground flex flex-col items-center flex-1 justify-center">
                   <Terminal className="w-6 h-6 mb-2 opacity-20" />
                   No historical logs found.
                 </div>
               ) : (
-                <div className="divide-y divide-white/5">
-                  {jobs.slice(0, 5).map(job => (
-                    <div key={job.id} className="p-4 hover:bg-secondary/30 transition-colors flex items-center justify-between group">
-                      <div>
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                <div className="divide-y divide-white/5 overflow-y-auto max-h-[400px]">
+                  {jobs.slice(0, 10).map((job) => (
+                    <div key={job.id} onClick={() => {
+                        setSelectedJobId(job.id);
+                    }} className="p-4 hover:bg-secondary/30 transition-colors flex flex-col gap-2 group cursor-pointer">
+                      <div className="flex items-center justify-between">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider ${
                             job.status === 'COMPLETED' ? 'bg-green-500/10 text-green-600 border border-green-500/20' :
                             job.status === 'FAILED' ? 'bg-red-500/10 text-red-600 border border-red-500/20' :
                             'bg-zinc-500/10 text-zinc-500 border border-zinc-500/20'
-                          }`}>
-                            {job.status === 'COMPLETED' && <CheckCircle2 className="w-3 h-3" />}
-                            {job.status === 'FAILED' && <AlertCircle className="w-3 h-3" />}
-                            {job.status}
-                          </span>
-                          <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">
-                            {formatDistanceToNow(new Date(job.createdAt), { addSuffix: true })}
-                          </span>
+                        }`}>
+                          {job.status === 'COMPLETED' && <CheckCircle2 className="w-3.5 h-3.5" />}
+                          {job.status === 'FAILED' && <AlertCircle className="w-3.5 h-3.5" />}
+                          {job.status}
+                        </span>
+                        <div className="flex items-center gap-2">
+                           <span className="text-sm text-foreground transition-colors group-hover:text-primary">
+                             {formatDistanceToNow(new Date(job.createdAt), { addSuffix: true })}
+                           </span>
+                           <div className="w-6 h-6 rounded-full bg-secondary flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                             <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
+                           </div>
                         </div>
-                        <p className="text-xs text-muted-foreground/80 mt-1">
-                          <strong className="text-foreground">{job.successfulItems}</strong> indexed &bull; {job.failedItems} errors
-                        </p>
                       </div>
-                      <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Terminal className="w-3 h-3 text-muted-foreground" />
-                      </div>
+                      
+                      <p className="text-sm text-muted-foreground/80 flex items-center gap-2">
+                        <span className="text-foreground font-medium">{job.successfulItems}</span> indexed &bull; <span className="text-foreground font-medium">{job.failedItems}</span> errors
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -735,7 +756,7 @@ export default function ScraperControlPage() {
                 </div>
               )}
             </CardContent>
-            <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-[#0A0A0B] to-transparent pointer-events-none z-10" />
+            <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-white dark:from-[#0A0A0B] to-transparent pointer-events-none z-10" />
           </Card>
         </div>
       </div>
@@ -773,6 +794,9 @@ export default function ScraperControlPage() {
           </div>
         </div>
       )}
+
+      {/* Full Scrape Logs Section */}
+      <ScrapeLogsSection />
 
       {/* Scraper Configuration Responsive Sheets */}
       {isMobile ? (
