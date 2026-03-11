@@ -61,12 +61,51 @@ export default function Lanyard({
   transparent = true
 }: LanyardProps) {
   const [isMobile, setIsMobile] = useState<boolean>(() => typeof window !== 'undefined' && window.innerWidth < 768);
+  const [glbValid, setGlbValid] = useState<boolean | null>(null);
 
   useEffect(() => {
     const handleResize = (): void => setIsMobile(window.innerWidth < 768);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Pre-validate the GLB file before mounting the heavy 3D scene
+  useEffect(() => {
+    fetch(cardGLB, { method: 'HEAD' })
+      .then((res) => {
+        if (!res.ok) { setGlbValid(false); return; }
+        // Also do a range check — fetch first 12 bytes (GLB magic + version + length)
+        return fetch(cardGLB).then(r => r.arrayBuffer()).then(buf => {
+          const view = new DataView(buf);
+          const magic = view.getUint32(0, true);
+          // GLB magic is 0x46546C67 ("glTF")
+          if (magic === 0x46546C67) {
+            const statedLen = view.getUint32(8, true);
+            // If stated length is wildly different from actual, file is corrupt
+            setGlbValid(Math.abs(statedLen - buf.byteLength) < 1000);
+          } else {
+            setGlbValid(false);
+          }
+        });
+      })
+      .catch(() => setGlbValid(false));
+  }, []);
+
+  if (glbValid === null) {
+    return (
+      <div className="w-full h-64 flex items-center justify-center text-muted-foreground text-sm">
+        Loading 3D preview...
+      </div>
+    );
+  }
+
+  if (!glbValid) {
+    return (
+      <div className="w-full h-64 flex items-center justify-center text-muted-foreground text-sm">
+        <p>3D preview unavailable — card.glb could not be loaded.</p>
+      </div>
+    );
+  }
 
   return (
     <LanyardErrorBoundary>
