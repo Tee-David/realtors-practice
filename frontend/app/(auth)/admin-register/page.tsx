@@ -17,7 +17,7 @@ interface InviteData {
   lastName?: string;
 }
 
-export default function AdminRegisterPage() {
+function AdminRegisterForm() {
   const searchParams = useSearchParams();
 
   const [step, setStep] = useState<Step>("code");
@@ -377,5 +377,15 @@ export default function AdminRegisterPage() {
         </Link>
       </p>
     </div>
+  );
+}
+
+import { Suspense } from "react";
+
+export default function AdminRegisterPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-[400px]"><Loader2 className="animate-spin" /></div>}>
+      <AdminRegisterForm />
+    </Suspense>
   );
 }
