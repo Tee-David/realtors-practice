@@ -53,7 +53,8 @@ export class SiteController {
       if (err?.code === "P2002") {
         return sendError(res, "A site with this domain already exists. Check if it was previously deleted.", 409);
       }
-      return sendError(res, "Failed to create site");
+      const message = err?.message || "Failed to create site";
+      return sendError(res, message);
     }
   }
 
@@ -68,6 +69,12 @@ export class SiteController {
 
   static async toggleEnabled(req: Request, res: Response) {
     try {
+      // If body contains explicit `enabled` value, set it directly instead of toggling
+      if (req.body && typeof req.body.enabled === "boolean") {
+        const site = await SiteService.setEnabled(req.params.id, req.body.enabled);
+        if (!site) return sendError(res, "Site not found", 404);
+        return sendSuccess(res, site, `Site ${site.enabled ? "enabled" : "disabled"}`);
+      }
       const site = await SiteService.toggleEnabled(req.params.id);
       if (!site) return sendError(res, "Site not found", 404);
       return sendSuccess(res, site, `Site ${site.enabled ? "enabled" : "disabled"}`);

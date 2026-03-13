@@ -10,13 +10,24 @@ jobs:
   trigger-scrape:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Scrape API
+      - name: Trigger Scheduled Scrape
         run: |
-          if [ -n "${{ secrets.PROD_API_URL }}" ] && [ -n "${{ secrets.INTERNAL_API_KEY }}" ]; then
-            curl -X POST "${{ secrets.PROD_API_URL }}/api/scrape/start" \
-              -H "Content-Type: application/json" \
-              -H "X-Internal-Key: ${{ secrets.INTERNAL_API_KEY }}" \
-              -d '{"type": "SCHEDULED"}'
-          else
+          if [ -z "${{ secrets.PROD_API_URL }}" ] || [ -z "${{ secrets.INTERNAL_API_KEY }}" ]; then
             echo "PROD_API_URL or INTERNAL_API_KEY secret not set. Skipping."
+            exit 0
           fi
+
+          HTTP_STATUS=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+            -X POST "${{ secrets.PROD_API_URL }}/api/internal/scrape/scheduled" \
+            -H "Content-Type: application/json" \
+            -H "X-Internal-Key: ${{ secrets.INTERNAL_API_KEY }}")
+
+          echo "Response: $(cat /tmp/response.json)"
+          echo "HTTP status: $HTTP_STATUS"
+
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+            echo "Scrape trigger failed with HTTP $HTTP_STATUS"
+            exit 1
+          fi
+
+          echo "Scheduled scrape triggered successfully."

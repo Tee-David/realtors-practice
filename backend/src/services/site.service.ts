@@ -71,6 +71,13 @@ export class SiteService {
     });
   }
 
+  static async setEnabled(id: string, enabled: boolean) {
+    return prisma.site.update({
+      where: { id },
+      data: { enabled },
+    });
+  }
+
   static async softDelete(id: string) {
     return prisma.site.update({
       where: { id },

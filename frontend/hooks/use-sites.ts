@@ -10,7 +10,7 @@ export interface Site {
   baseUrl: string;
   enabled: boolean;
   selectors: Record<string, string>;
-  lastScrapedAt: string | null;
+  lastScrapeAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -102,7 +102,7 @@ export function useBulkToggleSites() {
 
   return useMutation({
     mutationFn: async ({ ids, enable }: { ids: string[], enable: boolean }) => {
-      const promises = ids.map(id => api.patch(`/sites/${id}/toggle`));
+      const promises = ids.map(id => api.patch(`/sites/${id}/toggle`, { enabled: enable }));
       await Promise.all(promises);
       return { success: true };
     },

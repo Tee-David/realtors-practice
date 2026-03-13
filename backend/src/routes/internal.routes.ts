@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { internalAuth } from "../middlewares/internal.middleware";
 import { ScrapeService } from "../services/scrape.service";
 import { Logger } from "../utils/logger.util";
+import prisma from "../prismaClient";
 
 const router = Router();
 
@@ -82,6 +83,33 @@ router.post("/scrape-log", async (req: Request, res: Response) => {
     return res.json({ success: true });
   } catch (err: any) {
     return res.status(500).json({ error: "Internal error" });
+  }
+});
+
+/**
+ * POST /internal/scrape/scheduled
+ * Triggered by GitHub Actions cron — starts a SCHEDULED scrape across all enabled sites.
+ * Uses X-Internal-Key auth (no Supabase JWT required).
+ */
+router.post("/scrape/scheduled", async (req: Request, res: Response) => {
+  try {
+    const sites = await prisma.site.findMany({
+      where: { enabled: true, deletedAt: null },
+      select: { id: true },
+    });
+
+    if (sites.length === 0) {
+      return res.status(200).json({ success: true, message: "No enabled sites — nothing to scrape" });
+    }
+
+    const siteIds = sites.map((s) => s.id);
+    const job = await ScrapeService.startJob({ siteIds, type: "SCHEDULED" });
+
+    Logger.info(`Scheduled scrape triggered via GitHub Actions: job ${job.id}, ${siteIds.length} sites`);
+    return res.json({ success: true, jobId: job.id, sites: siteIds.length });
+  } catch (err: any) {
+    Logger.error(`Scheduled scrape trigger failed: ${err.message}`);
+    return res.status(500).json({ error: err.message || "Failed to start scheduled scrape" });
   }
 });
 

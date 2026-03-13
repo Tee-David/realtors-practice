@@ -9,6 +9,8 @@ interface UseSocketOptions {
   autoConnect?: boolean;
 }
 
+const SOCKET_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api").replace("/api", "");
+
 export function useSocket({ namespace = "", autoConnect = true }: UseSocketOptions = {}) {
   const [isConnected, setIsConnected] = useState(false);
   const socketRef = useRef<SocketInstance | null>(null);
@@ -16,7 +18,7 @@ export function useSocket({ namespace = "", autoConnect = true }: UseSocketOptio
   useEffect(() => {
     if (!autoConnect) return;
 
-    const url = process.env.NEXT_PUBLIC_API_URL?.replace("/api", "") || "http://localhost:5000";
+    const url = SOCKET_URL;
     const token = localStorage.getItem("rp_session");
 
     const socket = io(`${url}${namespace}`, {

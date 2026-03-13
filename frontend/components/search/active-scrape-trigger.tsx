@@ -26,7 +26,7 @@ export function ActiveScrapeTrigger({ query, onTriggerScrape, isLoading }: Activ
         </div>
         <div className="flex-1 min-w-0">
           <h3 className="font-display font-semibold text-sm" style={{ color: "var(--foreground)" }}>
-            Want more results?
+            Didn't find what you were looking for?
           </h3>
           <p className="text-xs mt-0.5 truncate" style={{ color: "var(--muted-foreground)" }}>
             Run a targeted scrape for &ldquo;{query}&rdquo;

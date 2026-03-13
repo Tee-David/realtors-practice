@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { savedSearches } from "@/lib/api";
+import { toast } from "sonner";
 
 export function useSavedSearches() {
   return useQuery({
@@ -44,6 +45,11 @@ export function useCreateSavedSearch() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["saved-searches"] });
+      toast.success("Saved search created");
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message || err?.response?.data?.error || err?.message || "Failed to create saved search";
+      toast.error(msg);
     },
   });
 }
@@ -57,6 +63,11 @@ export function useUpdateSavedSearch() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["saved-searches"] });
+      toast.success("Saved search updated");
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message || err?.response?.data?.error || err?.message || "Failed to update saved search";
+      toast.error(msg);
     },
   });
 }
@@ -69,6 +80,11 @@ export function useDeleteSavedSearch() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["saved-searches"] });
+      toast.success("Saved search deleted");
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message || err?.response?.data?.error || err?.message || "Failed to delete saved search";
+      toast.error(msg);
     },
   });
 }

@@ -423,34 +423,34 @@
 - [x] Search: Highlighted card gets border glow + elevation
 
 ### Phase 3 Priority (Wow Factor)
-- [ ] Search: FlyTo on search — extract area from query → smooth camera transition
-- [ ] Search: Pre-built Lagos coordinate lookup table (50+ areas, no API cost)
-- [ ] Search: Staggered marker pop-in (80ms stagger, spring animation, "live crawl" feel)
-- [ ] Search: Markers stagger only after flyTo settles (300ms delay)
+- [x] Search: FlyTo on search — extract area from query → smooth camera transition
+- [x] Search: Pre-built Lagos coordinate lookup table (50+ areas, no API cost)
+- [x] Search: Staggered marker pop-in (80ms stagger, spring animation, "live crawl" feel)
+- [x] Search: Markers stagger only after flyTo settles (300ms delay)
 
 ### Phase 4 Priority (Scale)
-- [ ] Search: Supercluster integration for zoom-based clustering
-- [ ] Search: Zoom ≤10 → cluster circles with counts, zoom ≥14 → individual price pills
-- [ ] Search: Cluster labels show price range (₦2M–₦45M)
-- [ ] Search: Cap staggered markers at 100–200 visible in viewport
+- [x] Search: Supercluster integration for zoom-based clustering
+- [x] Search: Zoom ≤10 → cluster circles with counts, zoom ≥14 → individual price pills
+- [x] Search: Cluster labels show price range (₦2M–₦45M)
+- [x] Search: Cap staggered markers at 100–200 visible in viewport
 
 ### Phase 5 Priority (Performance)
 - [ ] Search: Virtualized results list (`@tanstack/react-virtual`) for 10K+ cards
-- [ ] Search: Mobile optimized — CSS-only pills, reduced shadows
+- [x] Search: Mobile optimized — CSS-only pills, reduced shadows
 
 ### New Files Required (from spec)
 - [ ] `components/map/mapbox-map.tsx` — Mapbox GL wrapper with flyTo
-- [ ] `components/map/price-pill-marker.tsx` — Custom price pill component
-- [ ] `components/map/marker-cluster.tsx` — Supercluster integration
-- [ ] `components/map/map-controls.tsx` — Zoom, style switch, locate me
-- [ ] `components/search/search-map-view.tsx` — 50/50 split view
-- [ ] `components/search/search-result-card.tsx` — Card with hover sync
-- [ ] `components/search/live-crawl-overlay.tsx` — Stagger animation controller
-- [ ] `hooks/use-flyto.ts` — FlyTo with area geocoding
-- [ ] `hooks/use-marker-sync.ts` — Map ↔ list hover state
-- [ ] `hooks/use-search-query-parser.ts` — NLP-lite query parsing
-- [ ] `lib/lagos-coordinates.ts` — Pre-built area coordinate lookup table
-- [ ] `lib/cluster-config.ts` — Supercluster options
+- [x] `components/map/price-pill-marker.tsx` — Custom price pill component
+- [x] `components/map/marker-cluster.tsx` — Supercluster integration
+- [x] `components/map/map-controls.tsx` — Zoom, style switch, locate me
+- [x] `components/search/search-map-view.tsx` — 50/50 split view
+- [x] `components/search/search-result-card.tsx` — Card with hover sync
+- [x] `components/search/live-crawl-overlay.tsx` — Stagger animation controller
+- [x] `hooks/use-flyto.ts` — FlyTo with area geocoding (updated for MapLibre GL)
+- [x] `hooks/use-marker-sync.ts` — Map ↔ list hover state
+- [x] `hooks/use-search-query-parser.ts` — NLP-lite query parsing
+- [x] `lib/lagos-coordinates.ts` — Pre-built area coordinate lookup table
+- [x] `lib/cluster-config.ts` — Supercluster options
 
 ---
 
@@ -470,18 +470,239 @@
 
 ---
 
+## Phase 12: Bug Fixes & Polish (from suggestions.md)
+
+### Dashboard & Theme
+- [x] Fix dashboard hero section light mode — still dark-themed in light mode
+- [x] Ensure all dashboard components respect light/dark CSS variables
+
+### Tour System
+- [ ] Make tour responsive on both mobile and desktop
+- [ ] Tour must highlight the exact element being explained (overlay + highlight)
+- [ ] Tour must be interactive — click sidebar to navigate pages during tour
+- [ ] Tour modal button layout: 2 rows — first row has 2 buttons (50/50 width), second row has 1 button (full width)
+- [ ] Fix confetti animation at tour end (not popping/animating properly)
+- [ ] Tour should cover every part of the app with specific steps per scenario
+
+### Email & Communications
+- [x] Fix email template editor responsiveness (cutoff on desktop and mobile)
+- [x] Add more shortcodes to the email template editor
+- [x] Ensure email configuration (SMTP/Resend) is working correctly
+- [x] Test email button must validate config fields and actually send a test email
+
+### Authentication & Users
+- [x] Set up Google OAuth link/unlink (provide setup requirements to user)
+- [x] Ensure Sign in with Google works end-to-end
+- [ ] Verify invite users system works for different roles (ADMIN, VIEWER, etc.)
+
+### AI Assistant
+- [ ] Give AI assistant read access to database so it can answer data questions
+- [ ] Make AI ubiquitous — available across all app pages for inquiries
+
+### Data & Mock Removal
+- [ ] Remove all mock data from production URL
+- [ ] Analytics page: replace mock data generation with real API data
+- [ ] Active sessions: replace mock session data with real Supabase sessions
+- [ ] Backup section: connect to real backup endpoints (not just toasts)
+
+### Export System
+- [ ] Add XLSX export support
+- [ ] Add PDF export support
+- [ ] Add logo watermark to all export formats (CSV, XLSX, PDF)
+
+### Mobile Fixes
+- [x] Sites page: move options/bulk-action bar above sites list (covered by mobile bottom nav)
+- [x] Saved searches: make "New Search" button responsive (text wrapping issue)
+- [x] Sidebar: fix mobile scroll — admin/logout buttons unreachable on Chrome mobile
+- [x] Notification modal: make responsive on mobile (page is fine, modal isn't)
+
+### Profile & Avatar
+- [x] Profile avatar click in top bar should navigate to profile settings
+- [x] Fix profile image upload — must save and persist
+- [x] Uploaded image must appear on: profile card (lanyard), avatar in settings, avatar in top bar
+
+### Settings & Security
+- [ ] Fix "Revoke session" in active sessions (currently only shows toast)
+- [ ] Ensure password change works correctly
+- [x] Remove "current password" field from password change form
+- [x] Add "Save Settings" button to Appearance section
+- [ ] Fix schedule datetime picker in scrape config sheet (not clickable)
+- [x] Remove "Delete Account" button from About tab
+- [ ] Fix profile name save failing on live URL
+
+### Activity Logs & Notifications
+- [ ] Ensure audit logs capture and record every user action
+- [ ] Ensure notifications system works end-to-end (in-app + email)
+
+### Backups
+- [ ] Ensure backups truly work (not just UI — actual backup/restore)
+- [ ] Fix backup toast not dismissing after click
+- [ ] Add timezone settings for the app (affects scrape schedules, logs, backups)
+
+### Globe Hero (Light Mode)
+- [ ] Fix globe not rendering/visible in light mode (dark globe imagery invisible on white bg)
+- [ ] Adjust globe or add light-mode alternative globe texture
+
+### Search Page
+- [ ] Fix search page AxiosError (Network Error) — backend connection issue on localhost/prod
+- [x] Fix search autocomplete: NL queries like "3 bed flat in magodo under 5m" return no suggestions (only location-only queries work)
+- [x] Apply NLP parsing to autocomplete suggestions (extract location/keywords, ignore price/bedroom tokens for Meilisearch)
+- [x] Fix autocomplete dropdown z-index — currently blocked/hidden by results sidesheet
+- [x] Convert desktop results from left sidesheet → draggable bottom sheet (3 snap points: peek, half, full)
+- [x] Make bottom sheet draggable with touch + mouse support, responsive on all screen sizes
+- [x] Keep search bar at top with proper z-index, never blocked by the bottom sheet
+- [x] Update "Want more results?" → "Didn't find what you were looking for?"
+- [x] Update subtitle → `Run a targeted scrape for "[query]"`
+- [x] "Search the Web" button navigates to scraper page with config sheet open, active mode, all sources selected, query pre-filled
+- [x] Ensure search page is fully responsive (desktop + tablet + mobile)
+
+### Scraper Configuration
+- [x] Replace scraper schedule date-time picker with a new UI (calendar + scrollable time columns) that matches the app's styling
+- [x] Fix "No active sources" in config — sites added on Sites page not appearing in config picker
+- [x] Fix phantom "2 sources" appearing after saving config when no real sources exist
+- [x] Ensure config sheet works correctly with both localhost and production API URLs
+
+### Site Management
+- [ ] Fix "Failed to add site" error on single site creation
+- [ ] Fix bulk import not working
+- [x] Ensure site CRUD works on both localhost (port 5000) and production URL
+
+### Saved Searches
+- [x] Fix saved search creation — currently failing silently
+- [x] Change single-select dropdowns to multi-select where appropriate (location, property type, features)
+
+### Lanyard & Profile Card
+- [ ] Center profile card on lanyard (currently offset)
+- [x] Show real user full name on lanyard (not hardcoded "Tee David")
+- [x] Show real user role under name on lanyard
+- [x] Show real user profile picture on lanyard
+- [ ] Make lanyard card text responsive
+
+### Profile Image Upload
+- [x] Fix profile image upload button (currently non-functional)
+- [x] Save uploaded image to database (Supabase storage or CockroachDB)
+- [x] Persist uploaded image across: lanyard card, settings avatar, top bar avatar
+
+### App-Wide Settings (Admin Defaults)
+- [ ] Admin-saved settings (theme, font, etc.) become app-wide defaults for all users
+- [ ] Each user can override defaults with their own preferences
+- [ ] Store user-specific overrides in DB, fall back to admin defaults
+
+### Google OAuth
+- [x] Provide setup instructions for Google OAuth in Supabase (client ID, redirect URLs)
+- [x] Test Google link/unlink flow end-to-end
+- [x] Test "Continue with Google" sign-in flow
+
+### Email & SMTP
+- [x] Fix Resend integration (not sending emails)
+- [x] Fix SMTP test email button (must validate fields + actually send)
+- [x] Fix email template editor — cut off on mobile and desktop, needs full-screen mode
+- [x] Add more relevant shortcodes to email template editor (e.g. {{property.location}}, {{property.bedrooms}}, {{savedSearch.name}})
+
+### Invite Users
+- [ ] Fix invite users flow end-to-end (invite → email → accept → account creation)
+- [ ] Test invite for all roles: ADMIN, EDITOR, VIEWER
+
+### UI Polish
+- [ ] Install ModernLoader component (`npx shadcn@latest add @scrollxui/modern-loader`)
+- [ ] Replace all page loading spinners/skeletons with `<ModernLoader>` using contextual word arrays
+- [ ] Use contextual loading messages per page (search: "Scanning listings...", scraper: "Writing magic...", etc.)
+
+### Page Load Performance
+- [x] Investigate and fix slow page load times across the app
+- [x] Audit dynamic imports — ensure heavy components (globe, maps, charts, three.js) are properly lazy-loaded
+- [x] Check for unnecessary re-renders and optimize React component memoization
+- [x] Verify TanStack Query caching settings (staleTime, gcTime) are optimal
+- [x] Check if large client-side bundles are being shipped unnecessarily
+
+### Scraper Reliability
+- [ ] Detailed scraper dispatch → execution → callback → result pipeline verification
+- [x] Add scraper health check endpoint
+- [x] Ensure scraper logs show meaningful error messages when dispatch fails
+- [ ] GitHub Actions cron trigger tested and verified working
+
+---
+
+## Phase 13: AI Intelligence Layer (BitNet + ZeroClaw + Oracle Free Tier)
+
+> ⚠️ **DO NOT START THIS PHASE** until we are fully confident that all other parts of the app (Phases 1–12) are working correctly — frontend, backend, scraper, search, notifications, settings, and all bug fixes. This phase adds a new layer on top of a stable foundation. Starting it on a broken app will only create more problems.
+>
+> See `AI_INTELLIGENCE.md` for the full technical vision and `AI_SETUP_GUIDE.md` for step-by-step setup instructions.
+
+### Phase 13.1: Oracle Cloud VM Setup (🔵 You Do This)
+- [ ] Create Oracle Cloud Always Free account ([oracle.com/cloud/free](https://oracle.com/cloud/free))
+- [ ] Create ARM VM instance (VM.Standard.A1.Flex — 4 OCPUs, 24GB RAM, Ubuntu 22.04)
+- [ ] Download SSH private key and connect to VM via terminal
+- [ ] Run initial server setup (apt update, firewall, essential tools)
+
+### Phase 13.2: BitNet Model Deployment (🟡 You Run Commands)
+- [ ] Clone and build BitNet on Oracle VM (`git clone --recursive https://github.com/microsoft/BitNet.git`)
+- [ ] Download model weights (`microsoft/bitnet-b1.58-2B-4T`, ~400MB)
+- [ ] Run test inference and verify output (~5–7 tokens/sec on ARM)
+- [ ] Create FastAPI REST wrapper (`/v1/chat/completions` — OpenAI-compatible format)
+- [ ] Test REST API locally on VM (`curl http://localhost:8080/health`)
+- [ ] Create systemd service for auto-start on reboot (`bitnet-api.service`)
+
+### Phase 13.3: ZeroClaw Agent Runtime (🟡 You Run Commands)
+- [ ] Install ZeroClaw on Oracle VM (official installer or build from Rust source)
+- [ ] Configure `agent.toml` (point LLM to local BitNet, enable tools + SQLite memory)
+- [ ] Start ZeroClaw agent and verify it connects to BitNet
+- [ ] Create systemd service for auto-start (`zeroclaw.service`)
+
+### Phase 13.4: Oracle VM Security & Networking (🔵 You Do This)
+- [ ] Open port 8080 (BitNet API) in Oracle Security List
+- [ ] Open port 9090 (ZeroClaw) in Oracle Security List
+- [ ] Restrict ingress to Render backend IP only (not 0.0.0.0/0) for production
+- [ ] (Optional) Set up Nginx reverse proxy + Let's Encrypt HTTPS
+
+### Phase 13.5: Backend AI Service Integration (🟢 Antigravity Does This)
+- [ ] Add AI env vars to `.env` (`BITNET_URL`, `OLLAMA_URL`, `ZEROCLAW_URL`, `AI_ENABLED`)
+- [ ] Create `backend/src/services/ai.service.ts` (dual-model routing: BitNet for fast tasks, Ollama for complex reasoning)
+- [ ] Create `backend/src/controllers/ai.controller.ts`
+- [ ] Create `backend/src/routes/ai.routes.ts` (query-parse, listing-analysis, market-report, chat, health)
+- [ ] Register AI routes in Express app
+- [ ] Add AI service tests
+
+### Phase 13.6: Frontend AI Components (🟢 Antigravity Does This)
+- [ ] Floating AI Chat Button — available on every page, WebSocket to ZeroClaw
+- [ ] Insight Cards on dashboard — auto-populated market summaries from BitNet
+- [ ] "AI Analyze" button on property detail page — investment analysis + yield estimate
+- [ ] Smart Search Enhancement — show AI-interpreted query ("Interpreted as: 3-bed flat in Lekki, max ₦30M")
+
+### Phase 13.7: AI Use Case Implementation (🟢 Antigravity Does This)
+- [ ] Natural Language Query Parser (replace regex parser with BitNet)
+- [ ] Property Description Quality & Fraud Scoring (semantic analysis on scraped listings)
+- [ ] Auto-Generated Area Market Reports (weekly cron, plain-English summaries)
+- [ ] Comparable Property Matching (embedding-based semantic similarity via SQLite vector store)
+- [ ] Scrape Failure Diagnosis Agent (ZeroClaw auto-diagnoses scraper errors)
+- [ ] Notification Smart Digest (AI-generated weekly email summaries)
+- [ ] Data Explorer Anomaly Detection (nightly agent job — price outliers, near-duplicates, bad geocoding)
+
+### Phase 13.8: Testing & Verification
+- [ ] Test: BitNet API responds from backend server (network connectivity)
+- [ ] Test: NL query parser returns correct structured filters for Nigerian property queries
+- [ ] Test: Fraud scoring flags "too good to be true" listings
+- [ ] Test: AI chat answers data questions ("How many properties this week?")
+- [ ] Test: Market report generates readable English summary from real data
+- [ ] Test: Dual-model routing sends simple tasks to BitNet, complex to Ollama
+- [ ] Test: ZeroClaw agent maintains memory across sessions
+
+---
+
 ## Running Totals
 - **Phase 1:** 42 tasks (40 done, 2 deployment pending)
 - **Phase 2:** 30 tasks (30 done ✅)
 - **Phase 2.5:** 11 tasks (11 done ✅)
 - **Phase 3:** 40 tasks (30 done, 10 pending — testing/verification)
 - **Phase 4:** 21 tasks (19 done, 2 pending — deploy + tests)
-- **Phase 4.5:** 3 tasks (3 done)
+- **Phase 4.5:** 3 tasks (3 done ✅)
 - **Phase 5:** 16 tasks (7 done, 9 pending)
 - **Phase 6:** 22 tasks (19 done, 6 tests pending)
 - **Phase 7:** 38 tasks (15 done)
 - **Phase 8:** 15 tasks (0 done)
 - **Phase 9:** 47 tasks (46 done, 1 pending — `data-tour` attributes)
-- **Phase 10:** 22 tasks (0 done)
-- **Phase 11:** 3 tasks (3 done)
-- **TOTAL:** ~310 tasks (~132 done, ~178 remaining)
+- **Phase 10:** 22 tasks (17 done, 5 pending — mapbox, search-map-view, search-result-card, virtualized list)
+- **Phase 11:** 3 tasks (3 done ✅)
+- **Phase 12:** ~75 tasks (~30 done — email, OAuth, profile, perf, saved search, site CRUD, scraper fixes)
+- **Phase 13:** 39 tasks (0 done — ⚠️ blocked until Phases 1–12 are stable)
+- **TOTAL:** ~384 tasks (~179 done, ~205 remaining)

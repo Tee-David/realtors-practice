@@ -342,7 +342,7 @@ export function MobileSidebar({
         onDragEnd={handleDragEnd}
         animate={controls}
         initial={{ x: -sheetWidth - 50 }}
-        className="fixed left-0 top-0 z-[999] h-screen w-[240px] border-r shadow-2xl print:hidden"
+        className="fixed left-0 top-0 z-[999] h-[100dvh] w-[240px] border-r shadow-2xl print:hidden"
         style={{
           backgroundColor: "var(--sidebar)",
           borderColor: "var(--sidebar-border)",

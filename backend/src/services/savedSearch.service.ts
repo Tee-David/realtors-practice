@@ -2,15 +2,15 @@ import prisma from "../prismaClient";
 import { Logger } from "../utils/logger.util";
 
 interface SavedSearchFilters {
-  listingType?: string;
-  category?: string;
+  listingType?: string | string[];
+  category?: string | string[];
   minPrice?: number;
   maxPrice?: number;
   bedrooms?: number;
   state?: string;
   area?: string;
   features?: string[];
-  propertyType?: string;
+  propertyType?: string | string[];
 }
 
 export class SavedSearchService {
@@ -190,12 +190,18 @@ export class SavedSearchService {
     const filters = search.filters as unknown as SavedSearchFilters;
     const where: any = { deletedAt: null };
 
-    if (filters.listingType) where.listingType = filters.listingType;
-    if (filters.category) where.category = filters.category;
+    if (filters.listingType) {
+      where.listingType = Array.isArray(filters.listingType) ? { in: filters.listingType } : filters.listingType;
+    }
+    if (filters.category) {
+      where.category = Array.isArray(filters.category) ? { in: filters.category } : filters.category;
+    }
     if (filters.state) where.state = filters.state;
     if (filters.area) where.area = { contains: filters.area, mode: "insensitive" };
     if (filters.bedrooms) where.bedrooms = filters.bedrooms;
-    if (filters.propertyType) where.propertyType = { contains: filters.propertyType, mode: "insensitive" };
+    if (filters.propertyType) {
+      where.propertyType = Array.isArray(filters.propertyType) ? { in: filters.propertyType } : { contains: filters.propertyType, mode: "insensitive" };
+    }
     if (filters.minPrice || filters.maxPrice) {
       where.price = {};
       if (filters.minPrice) where.price.gte = filters.minPrice;

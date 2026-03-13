@@ -5,7 +5,10 @@ import { SearchBar } from "@/components/search/search-bar";
 import { SearchResults } from "@/components/search/search-results";
 import { ActiveScrapeTrigger } from "@/components/search/active-scrape-trigger";
 import dynamic from "next/dynamic";
-import { formatPrice } from "@/lib/utils";
+import { useFlyTo } from "@/hooks/use-flyto";
+import { CLUSTER_CONFIG } from "@/lib/cluster-config";
+import { useRouter } from "next/navigation";
+import type MapLibreGL from "maplibre-gl";
 
 const FullscreenMap = dynamic(
   () => import("@/components/search/fullscreen-map").then((mod) => mod.FullscreenMap),
@@ -13,9 +16,10 @@ const FullscreenMap = dynamic(
 );
 import { SideSheet, SideSheetContent } from "@/components/ui/side-sheet";
 import { BottomSheet, BottomSheetContent, BottomSheetClose } from "@/components/ui/bottom-sheet";
+import { DraggableBottomSheet } from "@/components/ui/draggable-bottom-sheet";
 import { PropertyDetailPanel } from "@/components/property/property-detail-panel";
 import { useSearch } from "@/hooks/use-search";
-import { MapPin, ChevronUp, ChevronDown, Sparkles, X } from "lucide-react";
+import { MapPin, Sparkles, X } from "lucide-react";
 import type { Property, PropertyCategory } from "@/types/property";
 
 const QUICK_SEARCHES = [
@@ -38,6 +42,7 @@ export default function SearchPage() {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [scrapeLoading, setScrapeLoading] = useState(false);
+  const [markersReady, setMarkersReady] = useState(true);
 
   const [limit, setLimit] = useState(30);
   const [sort, setSort] = useState("newest");
@@ -47,6 +52,13 @@ export default function SearchPage() {
   const [hasSearched, setHasSearched] = useState(false);
   const [hasDismissedSplash, setHasDismissedSplash] = useState(false);
 
+  const { setMap, flyToQuery, resetFlyState } = useFlyTo();
+
+  // Connect map to flyTo hook when map loads
+  const handleMapReady = useCallback((map: MapLibreGL.Map) => {
+    setMap(map);
+  }, [setMap]);
+
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
     checkMobile();
@@ -54,21 +66,18 @@ export default function SearchPage() {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  // Listen for mobile nav filter/search toggle
   useEffect(() => {
     const handleToggleFilters = () => setMobileSheetOpen(true);
     document.addEventListener("toggle-mobile-filters", handleToggleFilters);
     return () => document.removeEventListener("toggle-mobile-filters", handleToggleFilters);
   }, []);
 
-  // When query becomes truthy on mobile, open the sheet automatically
   useEffect(() => {
     if (query && isMobile) {
       setMobileSheetOpen(true);
     }
   }, [query, isMobile]);
 
-  // Pick 5 random pills on mount
   useEffect(() => {
     const shuffled = [...QUICK_SEARCHES].sort(() => 0.5 - Math.random());
     setDynamicPills(shuffled.slice(0, 5));
@@ -85,10 +94,9 @@ export default function SearchPage() {
   const hits: Property[] = searchData?.hits || [];
   const totalHits = searchData?.estimatedTotalHits || searchData?.nbHits || hits.length;
   const facets = searchData?.facetDistribution || {};
-  const parsedInfo = searchData?.parsedQuery || null; // In case the backend sends parsed NL info
+  const parsedInfo = searchData?.parsedQuery || null;
   const hasMore = totalHits > hits.length;
 
-  // Properties with coordinates for the map
   const mappableProperties = useMemo(
     () => hits.filter((p) => p.latitude && p.longitude),
     [hits]
@@ -101,9 +109,20 @@ export default function SearchPage() {
       setMobileSheetOpen(true);
     }
     if (cat) setSelectedCategory(cat);
-    setActiveFilters([]); // Reset filters on new search
-    setLimit(30); // reset limit
-  }, [isMobile]);
+    setActiveFilters([]);
+    setLimit(30);
+
+    // FlyTo: extract area from query and fly the map there
+    if (q) {
+      resetFlyState();
+      setMarkersReady(false);
+      const didFly = flyToQuery(q);
+      // Markers stagger only after flyTo settles
+      setTimeout(() => {
+        setMarkersReady(true);
+      }, didFly ? CLUSTER_CONFIG.flyToSettleDelay : 0);
+    }
+  }, [isMobile, flyToQuery, resetFlyState]);
 
   const handleFacetChange = useCallback((facetKey: string, facetValue: string) => {
     setActiveFilters((prev) => {
@@ -123,41 +142,49 @@ export default function SearchPage() {
     [hits]
   );
 
-  const handleTriggerScrape = useCallback(async () => {
+  const router = useRouter();
+
+  const handleTriggerScrape = useCallback(() => {
     setScrapeLoading(true);
-    // TODO: wire to actual scrape API when ready
-    setTimeout(() => setScrapeLoading(false), 3000);
-  }, []);
+    // Navigate to scraper page with params to auto-open config sheet
+    const params = new URLSearchParams({
+      action: "new_scrape",
+      keyword: query,
+      mode: "ACTIVE"
+    });
+    router.push(`/scraper?${params.toString()}`);
+  }, [query, router]);
 
   return (
     <div className="absolute inset-0 z-0 overflow-hidden md:ml-[60px] pt-[76px] md:pt-[56px] pb-[76px] md:pb-0 flex flex-col bg-background">
       <div className="relative flex-1 w-full overflow-hidden">
-        
-        {/* Full Screen Map */}
+
+        {/* Full Screen Map with Supercluster + Staggered Markers */}
         <FullscreenMap
+          onMapReady={handleMapReady}
           properties={mappableProperties}
           hoveredId={hoveredId}
           setHoveredId={setHoveredId}
           onPropertyClick={handlePropertyClick}
+          markersReady={markersReady}
         />
-        
-        {/* Top Search Bar Overlay (Only when results are showing) */}
+
+        {/* Top Search Bar Overlay */}
         {(hasSearched || hasDismissedSplash) && (
-          <div className="absolute top-4 left-0 right-0 z-10 px-4 md:px-8 pointer-events-none flex justify-center">
+          <div className="absolute top-4 left-0 right-0 z-[50] px-4 md:px-8 pointer-events-none flex justify-center">
              <div className="max-w-3xl w-full pointer-events-auto drop-shadow-xl">
                 <SearchBar onSearch={handleSearch} initialQuery={query} initialCategory={selectedCategory} />
              </div>
           </div>
         )}
 
-        {/* Results Panel Container */}
+        {/* Results Panel */}
         {(hasSearched || hasDismissedSplash) && (
            <>
              {isMobile ? (
                <BottomSheet open={mobileSheetOpen} onOpenChange={setMobileSheetOpen} height="85vh">
                  <BottomSheetContent>
                    <div className="flex flex-col h-full overflow-hidden pt-6">
-                     {/* Sidebar Header */}
                      <div className="p-4 border-b shrink-0 flex items-center justify-between gap-3">
                        <div className="flex items-center gap-3 min-w-0">
                          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
@@ -177,7 +204,6 @@ export default function SearchPage() {
                        </BottomSheetClose>
                      </div>
 
-                     {/* Scrollable Results List */}
                      <div className="flex-1 overflow-y-auto p-4 scroller space-y-4">
                          <SearchResults
                             hits={hits}
@@ -196,7 +222,7 @@ export default function SearchPage() {
                             onClear={() => handleSearch("")}
                             compact={true}
                          />
-                         
+
                          <div className="pt-4 border-t border-border/50 pb-8">
                            <ActiveScrapeTrigger query={query} onTriggerScrape={handleTriggerScrape} isLoading={scrapeLoading} />
                          </div>
@@ -205,63 +231,60 @@ export default function SearchPage() {
                  </BottomSheetContent>
                </BottomSheet>
              ) : (
-               <div className="absolute top-[80px] md:top-[90px] left-4 md:left-8 bottom-4 w-full max-w-[400px] z-[11] pointer-events-none transition-all duration-300">
-                  <div className="bg-background/95 backdrop-blur-xl w-full h-full rounded-2xl shadow-2xl border pointer-events-auto flex flex-col overflow-hidden">
-                     
-                     {/* Sidebar Header */}
-                     <div className="p-4 border-b shrink-0 bg-card/80 flex items-center gap-3">
-                       <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                         <Sparkles size={18} className="text-primary" />
-                       </div>
-                       <div className="min-w-0">
-                         <h2 className="font-bold text-lg leading-tight truncate">{totalHits} results</h2>
-                         <p className="text-xs text-muted-foreground truncate">
-                           {parsedInfo ? `Showing ${parsedInfo.bedrooms ? `${parsedInfo.bedrooms} bed ` : ""}${parsedInfo.propertyType || 'properties'}` : query}
-                         </p>
-                       </div>
+               <DraggableBottomSheet snapPoints={[0.15, 0.5, 0.85]} defaultSnapPoint={0.5} className="z-[20]">
+                 <div className="flex flex-col h-full overflow-hidden">
+                   <div className="p-4 border-b shrink-0 bg-background/95 backdrop-blur-xl flex items-center gap-3">
+                     <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                       <Sparkles size={18} className="text-primary" />
                      </div>
+                     <div className="min-w-0">
+                       <h2 className="font-bold text-lg leading-tight truncate">{totalHits} results</h2>
+                       <p className="text-xs text-muted-foreground truncate">
+                         {parsedInfo ? `Showing ${parsedInfo.bedrooms ? `${parsedInfo.bedrooms} bed ` : ""}${parsedInfo.propertyType || 'properties'}` : query}
+                       </p>
+                     </div>
+                   </div>
 
-                     {/* Scrollable Results List */}
-                     <div className="flex-1 overflow-y-auto p-4 scroller space-y-4">
-                         <SearchResults
-                            hits={hits}
-                            totalHits={totalHits}
-                            query={query}
-                            facets={facets}
-                            isLoading={isLoading}
-                            onPropertyClick={handlePropertyClick}
-                            onPropertyHover={setHoveredId}
-                            onFacetChange={handleFacetChange}
-                            activeFilters={activeFilters}
-                            sort={sort}
-                            onSortChange={setSort}
-                            hasMore={hasMore}
-                            onLoadMore={() => setLimit(l => l + 30)}
-                            onClear={() => handleSearch("")}
-                            compact={true}
-                         />
-                         
-                         <div className="pt-4 border-t border-border/50">
-                           <ActiveScrapeTrigger query={query} onTriggerScrape={handleTriggerScrape} isLoading={scrapeLoading} />
-                         </div>
-                     </div>
-                  </div>
-               </div>
+                   <div className="flex-1 overflow-y-auto p-4 scroller space-y-4">
+                       <SearchResults
+                          hits={hits}
+                          totalHits={totalHits}
+                          query={query}
+                          facets={facets}
+                          isLoading={isLoading}
+                          onPropertyClick={handlePropertyClick}
+                          onPropertyHover={setHoveredId}
+                          onFacetChange={handleFacetChange}
+                          activeFilters={activeFilters}
+                          sort={sort}
+                          onSortChange={setSort}
+                          hasMore={hasMore}
+                          onLoadMore={() => setLimit(l => l + 30)}
+                          onClear={() => handleSearch("")}
+                          compact={true}
+                       />
+
+                       <div className="pt-4 border-t border-border/50 pb-8">
+                         <ActiveScrapeTrigger query={query} onTriggerScrape={handleTriggerScrape} isLoading={scrapeLoading} />
+                       </div>
+                   </div>
+                 </div>
+               </DraggableBottomSheet>
              )}
            </>
         )}
 
          {/* Empty State Overlay */}
         {!hasSearched && !hasDismissedSplash && (
-           <div 
+           <div
              className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-background/20 backdrop-blur-sm p-4"
              onClick={(e) => {
                if (e.target === e.currentTarget) setHasDismissedSplash(true);
              }}
            >
               <div className="bg-background/95 backdrop-blur-md px-6 py-8 sm:px-10 sm:py-12 rounded-[2rem] shadow-2xl border pointer-events-auto max-w-md w-full max-h-full overflow-y-auto scroller text-center flex flex-col items-center relative transition-all hover:shadow-primary/5">
-                 
-                 <button 
+
+                 <button
                    onClick={() => setHasDismissedSplash(true)}
                    className="absolute top-4 right-4 p-2 rounded-full hover:bg-secondary/80 transition-colors text-muted-foreground hover:text-foreground"
                    aria-label="Dismiss"
@@ -279,12 +302,6 @@ export default function SearchPage() {
                     Search using natural language, explore the map, or dive straight into one of our quick suggestions below.
                  </p>
 
-                 {/* Integrated Search Bar inside Empty State */}
-                 <div className="w-full mb-8">
-                    <SearchBar onSearch={handleSearch} initialQuery={query} initialCategory={selectedCategory} />
-                 </div>
-
-                  {/* Quick search suggestions */}
                  <div className="flex flex-wrap justify-center gap-2.5 w-full">
                     {dynamicPills.map((suggestion) => (
                       <button
@@ -301,7 +318,7 @@ export default function SearchPage() {
         )}
 
       </div>
-      
+
       {/* Detail Sheet */}
       <SideSheet
         open={!!selectedProperty}

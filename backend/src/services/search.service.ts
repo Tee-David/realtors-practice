@@ -183,9 +183,13 @@ export class SearchService {
     if (!meiliClient || !q || q.length < 2) return [];
 
     try {
-      // Don't NLP parse for suggestions since it's just typeahead
-      const result = await meiliClient.index(this.INDEX_NAME).search(q, {
+      // Parse query to handle complex strings like "3 bed flat in magodo under 5m"
+      const parsed = this.parseNaturalLanguage(q);
+      const filterString = parsed.filters.length > 0 ? parsed.filters.join(" AND ") : undefined;
+
+      const result = await meiliClient.index(this.INDEX_NAME).search(parsed.cleanQuery, {
         limit,
+        filter: filterString,
         attributesToRetrieve: ["title", "location", "categoryName", "listingType", "price"],
       });
       return result.hits;

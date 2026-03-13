@@ -1,39 +1,65 @@
 import axios from "axios";
 import { supabase } from "./supabase";
 
-let API_URL = "http://localhost:5000/api";
-if (typeof process !== "undefined" && process.env && process.env.NEXT_PUBLIC_API_URL) {
-  API_URL = process.env.NEXT_PUBLIC_API_URL;
-}
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
 const api = axios.create({
   baseURL: API_URL,
-  timeout: 15000,
+  timeout: 10000,
   headers: { "Content-Type": "application/json" },
 });
 
+// Cache the session token to avoid blocking getSession() on every request
+let cachedToken: string | null = null;
+let tokenExpiry = 0;
+
+if (typeof window !== "undefined") {
+  supabase.auth.onAuthStateChange((_event, session) => {
+    cachedToken = session?.access_token || null;
+    tokenExpiry = session?.expires_at ? session.expires_at * 1000 : 0;
+  });
+  // Initialize from current session
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    cachedToken = session?.access_token || null;
+    tokenExpiry = session?.expires_at ? session.expires_at * 1000 : 0;
+  });
+}
+
 // Attach auth token to every request
 api.interceptors.request.use(async (config) => {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
+  // Use cached token if still valid (with 60s buffer)
+  if (cachedToken && tokenExpiry > Date.now() + 60000) {
+    config.headers.Authorization = `Bearer ${cachedToken}`;
+    return config;
+  }
+  // Fallback: refresh from Supabase
+  const { data: { session } } = await supabase.auth.getSession();
   if (session?.access_token) {
+    cachedToken = session.access_token;
+    tokenExpiry = session.expires_at ? session.expires_at * 1000 : 0;
     config.headers.Authorization = `Bearer ${session.access_token}`;
   }
   return config;
 });
 
-// Handle 401 responses
+// Handle 401 responses — retry once after refreshing session
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    if (error.response?.status === 401) {
-      const { error: refreshError } = await supabase.auth.refreshSession();
-      if (refreshError) {
+    const originalRequest = error.config;
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      const { data, error: refreshError } = await supabase.auth.refreshSession();
+      if (refreshError || !data.session) {
         await supabase.auth.signOut();
-        window.location.href = "/login";
+        if (typeof window !== "undefined") {
+          window.location.href = "/login";
+        }
+        return Promise.reject(error);
       }
+      // Retry with the new token
+      originalRequest.headers.Authorization = `Bearer ${data.session.access_token}`;
+      return api(originalRequest);
     }
     return Promise.reject(error);
   }
@@ -42,12 +68,13 @@ api.interceptors.response.use(
 // API method namespaces
 export const auth = {
   me: () => api.get("/auth/me"),
-  updateProfile: (data: { firstName?: string; lastName?: string; phone?: string; bio?: string; company?: string }) =>
+  updateProfile: (data: { firstName?: string; lastName?: string; phone?: string; bio?: string; company?: string; avatarUrl?: string | null }) =>
     api.patch("/auth/me", data),
   register: (data: { email: string; password: string; firstName?: string; lastName?: string; role?: string }) =>
     api.post("/auth/register", data),
   invite: (data: { email: string; firstName?: string; lastName?: string; role?: string }) =>
     api.post("/auth/invite", data),
+  testEmail: (to?: string) => api.post("/auth/test-email", { to }),
   validateInvite: (code: string) =>
     api.post("/auth/validate-invite", { code }),
   registerWithCode: (data: { code: string; email: string; password: string; firstName?: string; lastName?: string }) =>

@@ -7,6 +7,7 @@ and reports results/progress back via HTTP callbacks.
 import asyncio
 import os
 import glob
+import random
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
@@ -27,6 +28,8 @@ from pipeline.deduplicator import Deduplicator
 from pipeline.normalizer import normalize_property
 from pipeline.enricher import enrich_property
 from utils.callback import report_progress, report_results, report_error, report_log
+from utils.robots_checker import is_allowed as robots_allowed, get_crawl_delay
+from utils.url_normalizer import normalize_url, VisitedSet
 from utils.logger import get_logger
 
 import redis
@@ -169,7 +172,9 @@ async def _run_scrape_job(request: ScrapeJobRequest) -> None:
     all_properties: list[dict[str, Any]] = []
     deduplicator = Deduplicator()
     fetcher = AdaptiveFetcher()
+    visited = VisitedSet()
     total_errors = 0
+    block_count = 0
 
     try:
         await report_log(job_id, "INFO", f"Starting scrape job with {len(request.sites)} site(s)")
@@ -183,6 +188,16 @@ async def _run_scrape_job(request: ScrapeJobRequest) -> None:
             site_properties: list[dict[str, Any]] = []
 
             try:
+                # Check robots.txt before scraping
+                if not robots_allowed(site.baseUrl):
+                    await report_log(job_id, "WARN", f"robots.txt disallows scraping {site.baseUrl} — skipping site")
+                    continue
+
+                # Respect Crawl-Delay from robots.txt if set
+                crawl_delay = get_crawl_delay(site.baseUrl)
+                if crawl_delay:
+                    await report_log(job_id, "INFO", f"robots.txt Crawl-Delay: {crawl_delay}s for {site.name}")
+
                 # Fetch listing pages
                 page_num = 0
                 while page_num < site.maxPages:
@@ -199,13 +214,23 @@ async def _run_scrape_job(request: ScrapeJobRequest) -> None:
 
                     # Extract listing URLs from the page
                     extractor = UniversalExtractor(site.selectors)
-                    listing_urls = extractor.extract_listing_urls(html, site.baseUrl, site.listingSelector)
+                    raw_listing_urls = extractor.extract_listing_urls(html, site.baseUrl, site.listingSelector)
+
+                    # Normalize and deduplicate URLs via visited set
+                    listing_urls = []
+                    for u in raw_listing_urls:
+                        normalized = normalize_url(u)
+                        if visited.add(normalized):
+                            listing_urls.append(normalized)
 
                     if not listing_urls:
                         await report_log(job_id, "INFO", f"No more listings found on page {page_num + 1}")
                         break
 
-                    await report_log(job_id, "INFO", f"Found {len(listing_urls)} listings on page {page_num + 1}")
+                    skipped = len(raw_listing_urls) - len(listing_urls)
+                    if skipped:
+                        await report_log(job_id, "DEBUG", f"Skipped {skipped} already-visited URLs on page {page_num + 1}")
+                    await report_log(job_id, "INFO", f"Found {len(listing_urls)} new listings on page {page_num + 1}")
 
                     # Process each listing
                     for listing_url in listing_urls:
@@ -218,6 +243,13 @@ async def _run_scrape_job(request: ScrapeJobRequest) -> None:
                             listing_html = await fetcher.fetch(listing_url, requires_js=site.requiresJs)
                             if not listing_html:
                                 total_errors += 1
+                                # Track block detection
+                                if fetcher.last_block_reason:
+                                    block_count += 1
+                                    await report_log(job_id, "WARN", f"Blocked ({fetcher.last_block_reason}): {listing_url}")
+                                    if block_count >= 3:
+                                        await report_log(job_id, "WARN", f"Multiple blocks detected for {site.name} — slowing down")
+                                        await asyncio.sleep(random.uniform(10, 20))
                                 continue
 
                             # Extract raw data

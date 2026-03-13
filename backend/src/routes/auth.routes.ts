@@ -349,6 +349,7 @@ const updateProfileSchema = z.object({
   phone: z.string().max(20).optional(),
   bio: z.string().max(500).optional(),
   company: z.string().max(100).optional(),
+  avatarUrl: z.string().max(200000).optional().nullable(),
 });
 
 router.patch("/me", authenticate, async (req: Request, res: Response) => {
@@ -363,6 +364,7 @@ router.patch("/me", authenticate, async (req: Request, res: Response) => {
         ...(body.phone !== undefined && { phone: body.phone }),
         ...(body.bio !== undefined && { bio: body.bio }),
         ...(body.company !== undefined && { company: body.company }),
+        ...(body.avatarUrl !== undefined && { avatarUrl: body.avatarUrl }),
       },
       select: {
         id: true,
@@ -382,6 +384,21 @@ router.patch("/me", authenticate, async (req: Request, res: Response) => {
     return sendSuccess(res, updated, "Profile updated successfully");
   } catch (err: any) {
     return sendError(res, err.message, 400);
+  }
+});
+
+// ── Send Test Email ──────────────────────────────────────────────────────────
+
+router.post("/test-email", authenticate, async (req: Request, res: Response) => {
+  try {
+    const { to } = req.body;
+    const email = to || req.user?.email;
+    if (!email) return sendError(res, "No email address provided", 400);
+
+    await EmailService.sendTestEmail(email);
+    return sendSuccess(res, null, `Test email sent to ${email}`);
+  } catch (err: any) {
+    return sendError(res, err.message || "Failed to send test email", 500);
   }
 });
 

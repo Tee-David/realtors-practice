@@ -46,10 +46,13 @@ const nav = (hasBack = true): object[] =>
 
 const endNav = (): object[] => [btn.back("tour"), btn.done()];
 
-const attach = (sel: string, pos: "bottom" | "top" | "right" | "left" = "bottom") =>
-  typeof window !== "undefined" && window.innerWidth >= 1024
-    ? { element: sel, on: pos }
-    : undefined;
+const attach = (sel: string, pos: "bottom" | "top" | "right" | "left" = "bottom") => {
+  if (typeof window === "undefined") return undefined;
+  // On mobile, prefer bottom/top positioning since left/right can overflow
+  const mobilePos = pos === "left" || pos === "right" ? "bottom" : pos;
+  const finalPos = window.innerWidth < 768 ? mobilePos : pos;
+  return { element: sel, on: finalPos };
+};
 
 // Rich step text builder
 function richText(icon: string, heading: string, body: string, tip?: string): string {

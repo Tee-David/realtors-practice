@@ -166,6 +166,8 @@ function ProfileSection() {
   const [bio, setBio] = useState("");
   const [company, setCompany] = useState("");
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (me && firstName === "" && !editing) {
@@ -176,6 +178,49 @@ function ProfileSection() {
       setCompany(me.company || "");
     }
   }, [me, firstName, editing]);
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { toast.error("Please select an image file"); return; }
+    if (file.size > 500 * 1024) { toast.error("Image must be under 500KB"); return; }
+
+    try {
+      setUploadingAvatar(true);
+      // Resize and convert to base64 data URL — stored directly in DB
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement("canvas");
+            const size = 200; // 200x200 avatar
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext("2d")!;
+            const scale = Math.max(size / img.width, size / img.height);
+            const x = (size - img.width * scale) / 2;
+            const y = (size - img.height * scale) / 2;
+            ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
+            resolve(canvas.toDataURL("image/jpeg", 0.8));
+          };
+          img.onerror = reject;
+          img.src = reader.result as string;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      await auth.updateProfile({ avatarUrl: dataUrl });
+      queryClient.invalidateQueries({ queryKey: ["auth-me"] });
+      toast.success("Avatar updated");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to upload avatar");
+    } finally {
+      setUploadingAvatar(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   return (
     <div className="space-y-4 max-w-2xl">
@@ -188,13 +233,25 @@ function ProfileSection() {
         }>
           <div className="flex items-center gap-5">
             <div className="relative">
-              <div className="w-20 h-20 rounded-2xl flex items-center justify-center text-2xl font-bold" style={{ backgroundColor: "rgba(0,1,252,0.1)", color: "var(--primary)" }}>
-                {(me?.firstName?.[0] || me?.email?.[0] || "U").toUpperCase()}
-              </div>
+              {me?.avatarUrl ? (
+                <img src={me.avatarUrl} alt="Avatar" className="w-20 h-20 rounded-2xl object-cover" />
+              ) : (
+                <div className="w-20 h-20 rounded-2xl flex items-center justify-center text-2xl font-bold" style={{ backgroundColor: "rgba(0,1,252,0.1)", color: "var(--primary)" }}>
+                  {(me?.firstName?.[0] || me?.email?.[0] || "U").toUpperCase()}
+                </div>
+              )}
               {editing && (
-                <button className="absolute -bottom-1.5 -right-1.5 w-7 h-7 rounded-full border-2 flex items-center justify-center" style={{ backgroundColor: "var(--primary)", borderColor: "var(--card)", color: "var(--primary-foreground)" }}>
-                  <Upload className="w-3 h-3" />
-                </button>
+                <>
+                  <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadingAvatar}
+                    className="absolute -bottom-1.5 -right-1.5 w-7 h-7 rounded-full border-2 flex items-center justify-center"
+                    style={{ backgroundColor: "var(--primary)", borderColor: "var(--card)", color: "var(--primary-foreground)" }}
+                  >
+                    {uploadingAvatar ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+                  </button>
+                </>
               )}
             </div>
             <div>
@@ -257,24 +314,33 @@ function ProfileSection() {
 // ─── Security ───────────────────────────────────────────────────────────────
 
 function SecuritySection() {
-  const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [googleLinked, setGoogleLinked] = useState(false);
   const [googleLinking, setGoogleLinking] = useState(false);
-  const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
   const [changingPw, setChangingPw] = useState(false);
 
-  // Check if Google identity is already linked
+  // Check if Google identity is already linked — also re-checks after OAuth redirect
   useEffect(() => {
-    (async () => {
+    const checkGoogleLink = async () => {
       const { supabase } = await import("@/lib/supabase");
       const { data: { user } } = await supabase.auth.getUser();
       if (user?.identities) {
         setGoogleLinked(user.identities.some((id: any) => id.provider === "google"));
       }
+      setGoogleLinking(false);
+    };
+    checkGoogleLink();
+
+    // Listen for auth state changes (covers returning from OAuth redirect)
+    let sub: { unsubscribe: () => void } | undefined;
+    (async () => {
+      const { supabase } = await import("@/lib/supabase");
+      const { data } = supabase.auth.onAuthStateChange(() => { checkGoogleLink(); });
+      sub = data.subscription;
     })();
+    return () => { sub?.unsubscribe(); };
   }, []);
 
   const handleGoogleLink = async () => {
@@ -322,7 +388,7 @@ function SecuritySection() {
       const { error } = await supabase.auth.updateUser({ password: newPw });
       if (error) throw error;
       toast.success("Password updated successfully");
-      setCurrentPw(""); setNewPw(""); setConfirmPw("");
+      setNewPw(""); setConfirmPw("");
     } catch (err: any) {
       toast.error(err?.message || "Failed to update password");
     } finally {
@@ -336,15 +402,6 @@ function SecuritySection() {
       <Card>
         <CardHeader icon={Lock} title="Change Password" />
         <div className="space-y-3">
-          <div>
-            <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Current Password</label>
-            <div className="relative">
-              <input type={showCurrent ? "text" : "password"} value={currentPw} onChange={e => setCurrentPw(e.target.value)} className={inputBase + " pr-10"} style={inputStyle} placeholder="••••••••" />
-              <button type="button" onClick={() => setShowCurrent(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: "var(--muted-foreground)" }}>
-                {showCurrent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
           <div>
             <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>New Password</label>
             <div className="relative">
@@ -591,7 +648,7 @@ function AppearanceSection() {
             ]} 
           />
         </div>
-        <p className="mt-3 text-xs" style={{ color: "var(--muted-foreground)" }}>Changes apply immediately and are saved automatically.</p>
+        <SaveBtn className="mt-4" onClick={() => toast.success("Appearance settings saved")} />
       </Card>
     </div>
   );
@@ -696,50 +753,69 @@ function DisplaySection() {
 // ─── Email Settings ─────────────────────────────────────────────────────────
 
 function EmailSection() {
-  const [provider, setProvider] = usePersistedState<"smtp" | "sendgrid" | "resend">("email-provider", "resend");
+  const [provider, setProvider] = usePersistedState<"smtp" | "resend">("email-provider", "resend");
   const [apiKey, setApiKey] = usePersistedState("email-api-key", "");
+  const [smtpHost, setSmtpHost] = usePersistedState("smtp-host", "");
+  const [smtpPort, setSmtpPort] = usePersistedState("smtp-port", "587");
+  const [smtpUser, setSmtpUser] = usePersistedState("smtp-user", "");
+  const [smtpPass, setSmtpPass] = usePersistedState("smtp-pass", "");
   const [fromEmail, setFromEmail] = usePersistedState("email-from", "");
   const [replyTo, setReplyTo] = usePersistedState("email-reply-to", "");
+  const [testTo, setTestTo] = useState("");
+  const [sendingTest, setSendingTest] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<{ name: string } | null>(null);
+
+  const handleTestEmail = async () => {
+    try {
+      setSendingTest(true);
+      await auth.testEmail(testTo || undefined);
+      toast.success(`Test email sent to ${testTo || "your account email"}`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Failed to send test email. Check backend env vars: RESEND_API_KEY or SMTP_HOST/SMTP_USER/SMTP_PASS.");
+    } finally {
+      setSendingTest(false);
+    }
+  };
 
   return (
     <div className="space-y-4 max-w-2xl">
       <Card>
         <CardHeader icon={Server} title="Email Provider" />
+        <p className="text-xs mb-3" style={{ color: "var(--muted-foreground)" }}>
+          Configure via backend environment variables: <code className="text-[10px] px-1 py-0.5 rounded" style={{ backgroundColor: "var(--secondary)" }}>RESEND_API_KEY</code> or <code className="text-[10px] px-1 py-0.5 rounded" style={{ backgroundColor: "var(--secondary)" }}>SMTP_HOST</code>, <code className="text-[10px] px-1 py-0.5 rounded" style={{ backgroundColor: "var(--secondary)" }}>SMTP_USER</code>, <code className="text-[10px] px-1 py-0.5 rounded" style={{ backgroundColor: "var(--secondary)" }}>SMTP_PASS</code>
+        </p>
         <div className="flex gap-2 mb-4">
-          {(["smtp", "sendgrid", "resend"] as const).map(p => (
+          {(["smtp", "resend"] as const).map(p => (
             <button key={p} onClick={() => setProvider(p)}
               className="px-4 py-2 rounded-xl border text-sm font-medium capitalize transition-all"
               style={{ borderColor: provider === p ? "var(--primary)" : "var(--border)", backgroundColor: provider === p ? "rgba(0,1,252,0.07)" : "transparent", color: provider === p ? "var(--primary)" : "var(--muted-foreground)" }}
-            >{p}</button>
+            >{p === "smtp" ? "SMTP" : "Resend"}</button>
           ))}
         </div>
         <div className="space-y-3">
           {provider === "smtp" ? (
-            <>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>SMTP Host</label>
-                  <input className={inputBase} style={inputStyle} placeholder="smtp.gmail.com" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Port</label>
-                  <input type="number" className={inputBase} style={inputStyle} placeholder="587" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Username</label>
-                  <input className={inputBase} style={inputStyle} />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Password</label>
-                  <input type="password" className={inputBase} style={inputStyle} />
-                </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>SMTP Host</label>
+                <input value={smtpHost} onChange={e => setSmtpHost(e.target.value)} className={inputBase} style={inputStyle} placeholder="smtp.gmail.com" />
               </div>
-            </>
+              <div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Port</label>
+                <input type="number" value={smtpPort} onChange={e => setSmtpPort(e.target.value)} className={inputBase} style={inputStyle} placeholder="587" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Username</label>
+                <input value={smtpUser} onChange={e => setSmtpUser(e.target.value)} className={inputBase} style={inputStyle} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Password</label>
+                <input type="password" value={smtpPass} onChange={e => setSmtpPass(e.target.value)} className={inputBase} style={inputStyle} />
+              </div>
+            </div>
           ) : (
             <div>
-              <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>{provider === "sendgrid" ? "SendGrid" : "Resend"} API Key</label>
-              <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} className={inputBase} style={inputStyle} placeholder="sk_…" />
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Resend API Key</label>
+              <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} className={inputBase} style={inputStyle} placeholder="re_…" />
             </div>
           )}
           <div className="grid grid-cols-2 gap-3">
@@ -753,11 +829,16 @@ function EmailSection() {
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-3 mt-4">
-          <button onClick={() => toast.info("Test email sent!")} className="px-5 py-2 rounded-xl border text-sm font-semibold transition-colors hover:bg-[var(--secondary)]" style={{ borderColor: "var(--border)", color: "var(--foreground)" }}>
-            Send Test Email
+        <div className="flex items-center gap-3 mt-4 flex-wrap">
+          <input type="email" value={testTo} onChange={e => setTestTo(e.target.value)} className={inputBase + " max-w-[200px]"} style={inputStyle} placeholder="Recipient email" />
+          <button
+            onClick={handleTestEmail}
+            disabled={sendingTest}
+            className="px-5 py-2 rounded-xl border text-sm font-semibold transition-colors hover:bg-[var(--secondary)] disabled:opacity-50"
+            style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
+          >
+            {sendingTest ? "Sending..." : "Send Test Email"}
           </button>
-          <SaveBtn className="" onClick={() => toast.success("Email settings saved")} />
         </div>
       </Card>
 
@@ -861,11 +942,6 @@ function BackupsSection() {
 // ─── About ──────────────────────────────────────────────────────────────────
 
 function AboutSection() {
-  const { data: me } = useQuery({ queryKey: ["auth-me"], queryFn: async () => (await auth.me()).data.data });
-  const [confirmDelete, setConfirmDelete] = useState(false);
-
-  const isAdminOrSuper = me?.role === "ADMIN" || me?.email === "wedigcreativity@gmail.com";
-
   return (
     <div className="space-y-4 max-w-2xl">
       <Card>
@@ -900,26 +976,6 @@ function AboutSection() {
         </div>
       </Card>
 
-      {/* Danger Zone - Hidden for ADMIN / SUPER ADMIN */}
-      {!isAdminOrSuper && (
-        <div className="rounded-2xl border-2 p-6" style={{ borderColor: "rgba(220,38,38,0.4)" }}>
-          <div className="flex items-center gap-2 mb-3">
-            <AlertTriangle className="w-5 h-5" style={{ color: "#dc2626" }} />
-            <h3 className="text-base font-semibold" style={{ color: "#dc2626" }}>Danger Zone</h3>
-          </div>
-          <p className="text-sm mb-4" style={{ color: "var(--muted-foreground)" }}>Permanently delete your account and all associated data. This action cannot be undone.</p>
-          {confirmDelete ? (
-            <div className="flex gap-2">
-              <button onClick={() => toast.error("Account deletion requested")} className="px-4 py-2 rounded-xl text-sm font-semibold" style={{ backgroundColor: "#dc2626", color: "white" }}>Confirm Delete</button>
-              <button onClick={() => setConfirmDelete(false)} className="px-4 py-2 rounded-xl text-sm font-semibold hover:bg-[var(--secondary)]" style={{ color: "var(--foreground)" }}>Cancel</button>
-            </div>
-          ) : (
-            <button onClick={() => setConfirmDelete(true)} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold border" style={{ borderColor: "#dc2626", color: "#dc2626" }}>
-              <Trash2 className="w-4 h-4" /> Delete Account
-            </button>
-          )}
-        </div>
-      )}
     </div>
   );
 }
@@ -1136,6 +1192,7 @@ function SectionContent({ section }: { section: SettingsSection }) {
 export default function SettingsPage() {
   const [active, setActive] = useState<SettingsSection>("profile");
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { data: meData } = useQuery({ queryKey: ["auth-me"], queryFn: async () => (await auth.me()).data.data });
 
   const activeItem = NAV.find(n => n.key === active)!;
 
@@ -1223,7 +1280,15 @@ export default function SettingsPage() {
 
         {/* ── Right Lanyard ── */}
         <div className="hidden xl:block w-[380px] shrink-0 h-[800px] sticky top-0 overflow-visible z-10 mt-[-100px]">
-          <Lanyard position={[0, 0, 20]} gravity={[0, -40, 0]} transparent={true} />
+          <Lanyard
+            position={[0, 0, 20]}
+            gravity={[0, -40, 0]}
+            transparent={true}
+            userName={meData?.firstName ? `${meData.firstName} ${meData.lastName || ""}`.trim() : undefined}
+            userRole={meData?.role || undefined}
+            userHandle={meData?.email?.split("@")[0] || undefined}
+            userAvatarUrl={meData?.avatarUrl || undefined}
+          />
         </div>
       </div>
     </div>

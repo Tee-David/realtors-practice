@@ -2,6 +2,7 @@
 
 import { useCallback, useRef } from "react";
 import { extractAreaFromQuery, getZoomForArea } from "@/lib/lagos-coordinates";
+import type MapLibreGL from "maplibre-gl";
 
 interface FlyToOptions {
   duration?: number;
@@ -11,13 +12,13 @@ interface FlyToOptions {
 /**
  * Hook for flying the map to a location based on a search query.
  * Uses the pre-built Nigerian coordinate lookup table.
- * Works with Leaflet maps (our current OSM provider).
+ * Works with MapLibre GL maps (used by the search page).
  */
 export function useFlyTo() {
-  const mapRef = useRef<L.Map | null>(null);
+  const mapRef = useRef<MapLibreGL.Map | null>(null);
   const lastFlyRef = useRef<string>("");
 
-  const setMap = useCallback((map: L.Map | null) => {
+  const setMap = useCallback((map: MapLibreGL.Map | null) => {
     mapRef.current = map;
   }, []);
 
@@ -33,11 +34,13 @@ export function useFlyTo() {
 
     const [lng, lat] = result.coords;
     const zoom = options?.zoom || getZoomForArea(result.area);
-    const duration = options?.duration || 2;
+    const duration = options?.duration || 2000;
 
-    mapRef.current.flyTo([lat, lng], zoom, {
+    mapRef.current.flyTo({
+      center: [lng, lat],
+      zoom,
       duration,
-      easeLinearity: 0.25,
+      essential: true,
     });
 
     return true;
@@ -45,9 +48,11 @@ export function useFlyTo() {
 
   const flyToCoords = useCallback((lat: number, lng: number, zoom = 14) => {
     if (!mapRef.current) return;
-    mapRef.current.flyTo([lat, lng], zoom, {
-      duration: 2,
-      easeLinearity: 0.25,
+    mapRef.current.flyTo({
+      center: [lng, lat],
+      zoom,
+      duration: 2000,
+      essential: true,
     });
   }, []);
 

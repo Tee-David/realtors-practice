@@ -1,10 +1,12 @@
 """Adaptive fetcher with fallback chain: requests -> Playwright -> proxy.
 
 Tries the simplest method first, escalates when blocked or JS-rendered content needed.
+Detects 403/captcha blocks and reports them.
 """
 
 import asyncio
 import random
+import re
 from typing import Optional
 
 import httpx
@@ -16,6 +18,22 @@ from utils.rate_limiter import rate_limiter
 from utils.user_agents import get_random_headers, get_random_ua
 
 logger = get_logger(__name__)
+
+# Patterns that indicate a captcha / block page
+BLOCK_PATTERNS = [
+    re.compile(r"captcha", re.IGNORECASE),
+    re.compile(r"cf-challenge", re.IGNORECASE),          # Cloudflare
+    re.compile(r"challenge-platform", re.IGNORECASE),     # Cloudflare
+    re.compile(r"recaptcha", re.IGNORECASE),
+    re.compile(r"hCaptcha", re.IGNORECASE),
+    re.compile(r"Access\s+Denied", re.IGNORECASE),
+    re.compile(r"blocked\s+your\s+access", re.IGNORECASE),
+    re.compile(r"unusual\s+traffic", re.IGNORECASE),
+    re.compile(r"are\s+you\s+a\s+robot", re.IGNORECASE),
+    re.compile(r"verify\s+you\s+are\s+human", re.IGNORECASE),
+    re.compile(r"bot\s+detection", re.IGNORECASE),
+    re.compile(r"please\s+complete\s+the\s+security\s+check", re.IGNORECASE),
+]
 
 
 class AdaptiveFetcher:
@@ -30,6 +48,7 @@ class AdaptiveFetcher:
         self._browser: Optional[Browser] = None
         self._browser_context: Optional[BrowserContext] = None
         self._playwright = None
+        self.last_block_reason: Optional[str] = None
 
     async def _get_browser(self) -> BrowserContext:
         """Lazy-init Playwright browser with stealth settings."""
@@ -92,13 +111,40 @@ class AdaptiveFetcher:
 
         return await self._fetch_playwright(url)
 
+    @staticmethod
+    def _is_blocked(html: str) -> bool:
+        """Detect if the response is a captcha/block page rather than real content."""
+        if not html or len(html) < 100:
+            return False
+        # Only check the first 5KB for efficiency
+        snippet = html[:5000]
+        for pattern in BLOCK_PATTERNS:
+            if pattern.search(snippet):
+                return True
+        return False
+
     async def _fetch_http(self, url: str) -> Optional[str]:
         """Simple HTTP GET with rotating headers."""
         try:
             headers = get_random_headers()
             resp = await self._http_client.get(url, headers=headers)
+
+            if resp.status_code == 403:
+                logger.warning(f"HTTP 403 Forbidden for {url} — likely blocked")
+                self.last_block_reason = "403 Forbidden"
+                return None
+            if resp.status_code == 429:
+                logger.warning(f"HTTP 429 Too Many Requests for {url}")
+                self.last_block_reason = "429 Rate Limited"
+                return None
             if resp.status_code == 200:
+                if self._is_blocked(resp.text):
+                    logger.warning(f"Captcha/block page detected for {url}")
+                    self.last_block_reason = "Captcha/Block page"
+                    return None
+                self.last_block_reason = None
                 return resp.text
+
             logger.debug(f"HTTP {resp.status_code} for {url}")
             return None
         except Exception as e:
@@ -128,6 +174,13 @@ class AdaptiveFetcher:
                 await page.wait_for_timeout(random.randint(500, 1000))
 
                 html = await page.content()
+
+                if self._is_blocked(html):
+                    logger.warning(f"Captcha/block page detected (Playwright) for {url}")
+                    self.last_block_reason = "Captcha/Block page (Playwright)"
+                    return None
+
+                self.last_block_reason = None
                 return html
 
             finally:

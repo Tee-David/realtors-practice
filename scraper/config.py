@@ -2,12 +2,15 @@
 
 import os
 from dataclasses import dataclass, field
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 @dataclass
 class Config:
-    # API callback
-    api_base_url: str = os.getenv("API_BASE_URL", "http://localhost:5000/api")
+    # API callback (supports both API_BASE_URL and API_CALLBACK_URL for backwards compat)
+    api_base_url: str = os.getenv("API_BASE_URL", os.getenv("API_CALLBACK_URL", "http://localhost:5000/api"))
     internal_api_key: str = os.getenv("INTERNAL_API_KEY", "dev-internal-key")
 
     # Server

@@ -108,18 +108,41 @@ export default function SitesPage() {
     }
   };
 
+  /** Generate a clean, valid key from a URL hostname */
+  const generateKey = (url: string): string => {
+    try {
+      return new URL(url).hostname
+        .replace(/^www\./, '')
+        .replace(/[^a-z0-9]/g, '-')
+        .replace(/-+/g, '-')      // collapse multiple hyphens
+        .replace(/^-|-$/g, '')     // trim leading/trailing hyphens
+        .toLowerCase();
+    } catch {
+      return url.replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').toLowerCase();
+    }
+  };
+
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (addMode === "single") {
-      const fullUrl = urlProtocol + newSiteUrlPath;
       if (!newSiteName || !newSiteUrlPath) {
         toast.error("Name and URL are required.");
         return;
       }
+      // Ensure the URL path doesn't accidentally include a protocol
+      const cleanPath = newSiteUrlPath.replace(/^https?:\/\//, '');
+      const fullUrl = urlProtocol + cleanPath;
+
+      // Validate URL before sending
+      try { new URL(fullUrl); } catch {
+        toast.error("Invalid URL. Please enter a valid website address.");
+        return;
+      }
+
       addSite.mutate({
         name: newSiteName,
         baseUrl: fullUrl,
-        key: new URL(fullUrl).hostname.replace(/^www\./, '').replace(/[^a-zA-Z0-9]/g, '-').toLowerCase(),
+        key: generateKey(fullUrl),
         enabled: true,
         selectors: {},
       }, {
@@ -130,7 +153,7 @@ export default function SitesPage() {
           setNewSiteUrlPath("");
         },
         onError: (err: any) => {
-          const msg = err.response?.data?.message || err.response?.data?.error || "Failed to add site.";
+          const msg = err.response?.data?.message || err.response?.data?.error || err.message || "Failed to add site.";
           const details = err.response?.data?.details;
           if (details?.length) {
             toast.error(`${msg}: ${details.map((d: any) => `${d.field} — ${d.message}`).join(", ")}`);
@@ -144,6 +167,7 @@ export default function SitesPage() {
       if (lines.length === 0) { toast.error("Enter at least one source."); return; }
       const toastId = toast.loading(`Adding ${lines.length} sources...`);
       let successCount = 0;
+      let lastError = "";
       for (const line of lines) {
         try {
           let nameStr = "", urlStr = "";
@@ -151,15 +175,18 @@ export default function SitesPage() {
           if (parts.length >= 2) { nameStr = parts[0].trim(); urlStr = parts.slice(1).join(',').trim(); }
           else { urlStr = line; }
           if (!urlStr.startsWith('http')) { if (nameStr?.startsWith('http')) { [urlStr, nameStr] = [nameStr, urlStr]; } }
-          if (!urlStr.startsWith('http')) continue;
+          if (!urlStr.startsWith('http')) urlStr = 'https://' + urlStr;
+          try { new URL(urlStr); } catch { continue; }
           const hostname = new URL(urlStr).hostname.replace('www.', '');
-          await addSite.mutateAsync({ name: nameStr || hostname, baseUrl: urlStr, key: hostname.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase(), enabled: true, selectors: {} });
+          await addSite.mutateAsync({ name: nameStr || hostname, baseUrl: urlStr, key: generateKey(urlStr), enabled: true, selectors: {} });
           successCount++;
-        } catch { /* skip */ }
+        } catch (err: any) {
+          lastError = err.response?.data?.message || err.response?.data?.error || err.message || "";
+        }
       }
       toast.dismiss(toastId);
-      if (successCount > 0) { toast.success(`Added ${successCount} sources!`); setIsAddModalOpen(false); setBulkUrls(""); }
-      else { toast.error("No valid sources found."); }
+      if (successCount > 0) { toast.success(`Added ${successCount} of ${lines.length} sources!`); setIsAddModalOpen(false); setBulkUrls(""); }
+      else { toast.error(lastError || "No valid sources could be added. Check URLs and try again."); }
     }
   };
 
@@ -279,7 +306,7 @@ export default function SitesPage() {
             </span>
             <span className="flex items-center gap-1">
               <RefreshCcw className="w-3 h-3" />
-              {site.lastScrapedAt ? formatDistanceToNow(new Date(site.lastScrapedAt), { addSuffix: true }) : "Never"}
+              {site.lastScrapeAt ? formatDistanceToNow(new Date(site.lastScrapeAt), { addSuffix: true }) : "Never"}
             </span>
           </div>
         </div>
@@ -329,7 +356,7 @@ export default function SitesPage() {
 
         {/* Last scraped */}
         <span className="hidden lg:flex items-center gap-1 text-xs text-muted-foreground shrink-0 w-28 justify-end">
-          {site.lastScrapedAt ? formatDistanceToNow(new Date(site.lastScrapedAt), { addSuffix: true }) : "Never"}
+          {site.lastScrapeAt ? formatDistanceToNow(new Date(site.lastScrapeAt), { addSuffix: true }) : "Never"}
         </span>
 
         {/* Toggle */}
@@ -645,7 +672,7 @@ export default function SitesPage() {
 
       {/* Bulk Actions Bar */}
       {selectedSites.length > 0 && (
-        <div className="fixed bottom-6 xl:bottom-10 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-5 fade-in duration-300">
+        <div className="fixed bottom-20 md:bottom-6 xl:bottom-10 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-5 fade-in duration-300">
           <div className="bg-foreground text-background shadow-2xl rounded-full px-4 sm:px-6 py-3 flex items-center gap-3 sm:gap-5 border border-white/20">
             <div className="flex items-center gap-2 font-semibold">
               <span className="bg-background text-foreground w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold">

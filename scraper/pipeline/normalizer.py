@@ -5,6 +5,7 @@ and ensures data matches the Prisma Property model schema.
 """
 
 import re
+import unicodedata
 from typing import Any
 
 from utils.logger import get_logger
@@ -41,7 +42,8 @@ def normalize_property(raw_data: dict[str, Any], site_name: str) -> dict[str, An
         if isinstance(val, str):
             # Strip HTML
             val = HTML_TAG_RE.sub("", val)
-            # Collapse whitespace
+            # Unicode NFC normalization + collapse whitespace
+            val = unicodedata.normalize("NFC", val)
             val = MULTI_SPACE_RE.sub(" ", val).strip()
             data[field] = val if val else None
 

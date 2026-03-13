@@ -78,7 +78,7 @@ export function NotificationBell() {
       {/* Dropdown panel */}
       {open && (
         <div
-          className="absolute right-0 top-full mt-2 w-[400px] rounded-2xl border shadow-2xl overflow-hidden z-[1000]"
+          className="absolute right-0 top-full mt-2 w-[calc(100vw-2rem)] max-w-[400px] rounded-2xl border shadow-2xl overflow-hidden z-[1000]"
           style={{
             backgroundColor: "var(--card)",
             borderColor: "var(--border)",

@@ -67,7 +67,12 @@ const levelConfig: Record<string, { color: string; bgColor: string; borderColor:
 
 const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100];
 
-export function ScrapeLogsSection() {
+interface ScrapeLogsSectionProps {
+  jobId?: string | null;
+  onClearJobFilter?: () => void;
+}
+
+export function ScrapeLogsSection({ jobId, onClearJobFilter }: ScrapeLogsSectionProps = {}) {
   // Filter state
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(25);
@@ -102,6 +107,7 @@ export function ScrapeLogsSection() {
   const filters: ScrapeLogsFilters = {
     page,
     limit,
+    jobId: jobId || undefined,
     search: debouncedSearch || undefined,
     level: selectedLevel || undefined,
     siteId: selectedSiteId || undefined,
@@ -262,6 +268,26 @@ export function ScrapeLogsSection() {
             </div>
           )}
         </CardHeader>
+
+        {/* Job filter banner */}
+        {jobId && (
+          <div className="px-4 py-2.5 bg-primary/5 border-b border-primary/20 flex items-center justify-between">
+            <span className="text-xs font-semibold text-primary flex items-center gap-1.5">
+              <Filter className="w-3.5 h-3.5" />
+              Showing logs for selected job
+              <code className="font-mono text-[10px] bg-primary/10 px-1.5 py-0.5 rounded">{jobId.slice(0, 8)}...</code>
+            </span>
+            {onClearJobFilter && (
+              <button
+                onClick={onClearJobFilter}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold text-muted-foreground hover:bg-secondary transition-colors"
+              >
+                <X className="w-3 h-3" />
+                Clear
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Logs Table */}
         <CardContent className="p-0">

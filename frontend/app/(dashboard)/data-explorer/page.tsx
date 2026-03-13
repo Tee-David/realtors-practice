@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { properties as propertiesApi, exports as exportsApi } from "@/lib/api";
-import { Database, CheckCircle, AlertTriangle, Shield, Download, Search, ChevronDown, Eye, X, ArrowUpDown } from "lucide-react";
+import { Database, CheckCircle, AlertTriangle, Shield, Download, Search, ChevronDown, Eye, X, ArrowUpDown, RefreshCcw } from "lucide-react";
 
 type Tab = "all" | "raw" | "enriched" | "flagged";
 

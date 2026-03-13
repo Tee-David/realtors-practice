@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Search, X, Loader2, Mic, MicOff, ChevronDown, Clock, Trash2 } from "lucide-react";
+import { Search, X, Loader2, Mic, MicOff, ChevronDown, Clock, Trash2, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { useSearchSuggestions } from "@/hooks/use-search";
+import { useGeocode } from "@/hooks/use-geocode";
 import { formatPrice } from "@/lib/utils";
 import TextType from "@/components/ui/TextType";
 import type { PropertyCategory } from "@/types/property";
@@ -173,7 +174,15 @@ export function SearchBar({
   const containerRef = useRef<HTMLDivElement>(null);
   const categoryRef = useRef<HTMLDivElement>(null);
 
+  const [debouncedGeoQuery, setDebouncedGeoQuery] = useState("");
   const { data: suggestions, isLoading: suggestionsLoading } = useSearchSuggestions(query);
+  const { data: geoSuggestions } = useGeocode(debouncedGeoQuery);
+
+  // Debounce geocoding requests
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedGeoQuery(query), 400);
+    return () => clearTimeout(timer);
+  }, [query]);
 
   const handleVoiceResult = useCallback((text: string, isFinal: boolean) => {
     setQuery(text);
@@ -450,10 +459,10 @@ export function SearchBar({
         </div>
       )}
 
-      {/* Dropdown: Suggestions */}
+      {/* Dropdown: Suggestions + Location Autocomplete */}
       {showSuggestions && (
         <div
-          className="absolute top-full left-0 right-0 mt-2 rounded-xl shadow-lg overflow-hidden z-50"
+          className="absolute top-full left-0 right-0 mt-2 rounded-xl shadow-lg overflow-hidden z-50 max-h-[60vh] overflow-y-auto"
           style={{
             backgroundColor: "var(--card)",
             border: "1px solid var(--border)",
@@ -470,46 +479,100 @@ export function SearchBar({
                 Searching...
               </span>
             </div>
-          ) : suggestions && suggestions.length > 0 ? (
-            <ul>
-              {suggestions.map((item: any, idx: number) => (
-                <li key={idx}>
-                  <button
-                    type="button"
-                    onClick={() => handleSuggestionClick(item.title)}
-                    className="w-full text-left px-4 py-2.5 flex items-center justify-between hover:bg-[var(--secondary)] transition-colors"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <Search size={13} style={{ color: "var(--muted-foreground)" }} className="shrink-0" />
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate" style={{ color: "var(--foreground)" }}>
-                          {item.title}
-                        </p>
-                        {item.location && (
-                          <p className="text-xs truncate" style={{ color: "var(--muted-foreground)" }}>
-                            {item.location}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    {item.price && (
-                      <span
-                        className="text-xs font-semibold shrink-0 ml-3"
-                        style={{ color: "var(--accent)" }}
-                      >
-                        {formatPrice(item.price)}
-                      </span>
-                    )}
-                  </button>
-                </li>
-              ))}
-            </ul>
           ) : (
-            <div className="py-5 text-center">
-              <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-                No suggestions found
-              </p>
-            </div>
+            <>
+              {/* Property suggestions */}
+              {suggestions && suggestions.length > 0 && (
+                <>
+                  <div className="px-4 py-2 border-b" style={{ borderColor: "var(--border)" }}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "var(--muted-foreground)" }}>
+                      Properties
+                    </span>
+                  </div>
+                  <ul>
+                    {suggestions.map((item: any, idx: number) => (
+                      <li key={idx}>
+                        <button
+                          type="button"
+                          onClick={() => handleSuggestionClick(item.title)}
+                          className="w-full text-left px-4 py-2.5 flex items-center justify-between hover:bg-[var(--secondary)] transition-colors"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <Search size={13} style={{ color: "var(--muted-foreground)" }} className="shrink-0" />
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium truncate" style={{ color: "var(--foreground)" }}>
+                                {item.title}
+                              </p>
+                              {item.location && (
+                                <p className="text-xs truncate" style={{ color: "var(--muted-foreground)" }}>
+                                  {item.location}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          {item.price && (
+                            <span
+                              className="text-xs font-semibold shrink-0 ml-3"
+                              style={{ color: "var(--accent)" }}
+                            >
+                              {formatPrice(item.price)}
+                            </span>
+                          )}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+
+              {/* Location autocomplete from Nominatim */}
+              {geoSuggestions && geoSuggestions.length > 0 && (
+                <>
+                  <div className="px-4 py-2 border-b border-t" style={{ borderColor: "var(--border)" }}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "var(--muted-foreground)" }}>
+                      Locations
+                    </span>
+                  </div>
+                  <ul>
+                    {geoSuggestions.map((place, idx) => {
+                      const parts = place.display_name.split(",");
+                      const primary = parts.slice(0, 2).join(",").trim();
+                      const secondary = parts.slice(2, 4).join(",").trim();
+                      return (
+                        <li key={idx}>
+                          <button
+                            type="button"
+                            onClick={() => handleSuggestionClick(primary)}
+                            className="w-full text-left px-4 py-2.5 flex items-center gap-2.5 hover:bg-[var(--secondary)] transition-colors"
+                          >
+                            <MapPin size={13} style={{ color: "var(--primary)" }} className="shrink-0" />
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium truncate" style={{ color: "var(--foreground)" }}>
+                                {primary}
+                              </p>
+                              {secondary && (
+                                <p className="text-xs truncate" style={{ color: "var(--muted-foreground)" }}>
+                                  {secondary}
+                                </p>
+                              )}
+                            </div>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </>
+              )}
+
+              {/* No results at all */}
+              {(!suggestions || suggestions.length === 0) && (!geoSuggestions || geoSuggestions.length === 0) && (
+                <div className="py-5 text-center">
+                  <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+                    No suggestions found
+                  </p>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

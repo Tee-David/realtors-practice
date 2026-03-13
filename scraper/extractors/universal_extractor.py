@@ -37,23 +37,54 @@ class UniversalExtractor:
         """
         self.selectors = selectors
 
+    @staticmethod
+    def _is_honeypot(el: Tag) -> bool:
+        """Detect hidden honeypot links (display:none, visibility:hidden, zero-size)."""
+        style = (el.get("style") or "").lower().replace(" ", "")
+        classes = " ".join(el.get("class", [])).lower()
+
+        if "display:none" in style or "visibility:hidden" in style:
+            return True
+        if "opacity:0" in style:
+            return True
+        if "width:0" in style or "height:0" in style:
+            return True
+
+        honeypot_names = ("hidden", "trap", "honeypot", "nofollow", "invisible", "d-none")
+        if any(name in classes for name in honeypot_names):
+            return True
+
+        # Check parent one level up
+        parent = el.parent
+        if parent and isinstance(parent, Tag):
+            ps = (parent.get("style") or "").lower().replace(" ", "")
+            if "display:none" in ps or "visibility:hidden" in ps:
+                return True
+
+        return False
+
     def extract_listing_urls(
         self, html: str, base_url: str, listing_selector: str
     ) -> list[str]:
-        """Extract listing URLs from a search/listing page."""
+        """Extract listing URLs from a search/listing page, filtering honeypots."""
         soup = BeautifulSoup(html, "lxml")
         urls: list[str] = []
 
-        # The listing_selector should target anchor tags or containers with links
         elements = soup.select(listing_selector)
         for el in elements:
+            if self._is_honeypot(el):
+                logger.debug(f"Skipped honeypot element: {el.get('href', '')[:80]}")
+                continue
+
             href = None
             if el.name == "a":
                 href = el.get("href")
             else:
-                # Look for first anchor inside the container
                 link = el.select_one("a[href]")
                 if link:
+                    if self._is_honeypot(link):
+                        logger.debug(f"Skipped honeypot link: {link.get('href', '')[:80]}")
+                        continue
                     href = link.get("href")
 
             if href:

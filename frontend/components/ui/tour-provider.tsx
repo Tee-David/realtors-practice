@@ -34,7 +34,7 @@ function injectProgress(tour: ShepherdTour, step: unknown & { getElement(): HTML
         prog.className = "tour-progress";
         prog.innerHTML = `
           <div class="tour-progress-bar-container">
-            <div class="tour-progress-bar" style="width:${pct}%"></div>
+            <div class="tour-progress-bar-fill" style="width:${pct}%"></div>
           </div>
           <div class="tour-progress-text">${texts[idx % texts.length]}</div>
         `;

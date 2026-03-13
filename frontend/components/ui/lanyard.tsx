@@ -52,13 +52,21 @@ interface LanyardProps {
   gravity?: [number, number, number];
   fov?: number;
   transparent?: boolean;
+  userName?: string;
+  userRole?: string;
+  userHandle?: string;
+  userAvatarUrl?: string;
 }
 
 export default function Lanyard({
   position = [0, 0, 30],
   gravity = [0, -40, 0],
   fov = 20,
-  transparent = true
+  transparent = true,
+  userName,
+  userRole,
+  userHandle,
+  userAvatarUrl,
 }: LanyardProps) {
   const [isMobile, setIsMobile] = useState<boolean>(() => typeof window !== 'undefined' && window.innerWidth < 768);
   const [glbValid, setGlbValid] = useState<boolean | null>(null);
@@ -119,7 +127,7 @@ export default function Lanyard({
         <Suspense fallback={null}>
           <ambientLight intensity={Math.PI} />
           <Physics gravity={gravity} timeStep={isMobile ? 1 / 30 : 1 / 60}>
-            <Band isMobile={isMobile} />
+            <Band isMobile={isMobile} userName={userName} userRole={userRole} userHandle={userHandle} userAvatarUrl={userAvatarUrl} />
           </Physics>
           <Environment blur={0.75}>
             <Lightformer
@@ -162,9 +170,13 @@ interface BandProps {
   maxSpeed?: number;
   minSpeed?: number;
   isMobile?: boolean;
+  userName?: string;
+  userRole?: string;
+  userHandle?: string;
+  userAvatarUrl?: string;
 }
 
-function Band({ maxSpeed = 50, minSpeed = 0, isMobile = false }: BandProps) {
+function Band({ maxSpeed = 50, minSpeed = 0, isMobile = false, userName, userRole, userHandle, userAvatarUrl }: BandProps) {
   // Using "any" for refs since the exact types depend on Rapier's internals
   const band = useRef<any>(null);
   const fixed = useRef<any>(null);
@@ -301,12 +313,12 @@ function Band({ maxSpeed = 50, minSpeed = 0, isMobile = false }: BandProps) {
               center
             >
               <ProfileCard
-                name="Tee David"
-                title="Super Admin"
-                handle="teedavid"
+                name={userName || "User"}
+                title={userRole || "Member"}
+                handle={userHandle || "user"}
                 status="Online"
                 contactText="Contact Me"
-                avatarUrl="https://api.dicebear.com/7.x/avataaars/svg?seed=Tee"
+                avatarUrl={userAvatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${userName || "User"}`}
                 showUserInfo={false}
                 enableTilt={false}
                 behindGlowColor="rgba(0, 1, 252, 0.3)"

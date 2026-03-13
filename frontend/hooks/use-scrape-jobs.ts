@@ -70,7 +70,7 @@ export function useStopScrape() {
   
   return useMutation({
     mutationFn: async (jobId: string) => {
-      const { data } = await api.post("/scrape/stop", { jobId });
+      const { data } = await api.post(`/scrape/jobs/${jobId}/stop`);
       return data.data;
     },
     onSuccess: () => {

@@ -67,7 +67,9 @@ export class ScrapeService {
         maxPages: site.maxPages,
       })),
       maxListingsPerSite,
-      callbackUrl: `${config.cors.origin}/api/internal`,
+      callbackUrl: config.env === "production"
+        ? `${process.env.API_BASE_URL || "https://realtors-practice-new-api.onrender.com/api"}/internal`
+        : `http://localhost:${config.port}/api/internal`,
       parameters: parameters || {},
     };
 

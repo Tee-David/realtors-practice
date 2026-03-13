@@ -54,6 +54,8 @@ def _release_domain_lock(domain: str):
     retry_backoff_max=480,  # Max: 8 minutes
     retry_jitter=True,
     max_retries=3,
+    time_limit=1800,        # Hard kill after 30 minutes
+    soft_time_limit=1500,   # Raise SoftTimeLimitExceeded after 25 minutes
 )
 def process_job(self, payload: dict):
     """Process a scrape job. Retries on transient network errors with exponential backoff."""

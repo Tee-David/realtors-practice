@@ -1,6 +1,6 @@
 # Intelligence Layer: ZeroClaw + Ollama for Nigerian Property Intelligence
 
-> **Status**: Proposal — for review before any implementation begins.
+> tatus**: Proposal — for review before any implementation begins.
 > **Scope**: Separate feature wrapper on top of the existing Realtors' Practice platform.
 > **TL;DR**: Yes, ZeroClaw + Ollama can give you a genuine competitive moat. But only if scoped to the right problems. This document breaks down exactly where it fits, where it doesn't, and what the architecture looks like at 1M properties / 10K users.
 

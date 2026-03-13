@@ -24,6 +24,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { AdvancedDateRangePicker } from "@/components/ui/advanced-date-picker";
+import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { ScrapeLogsSection } from "@/components/scraper/scrape-logs-section";
 
 // Saved config type
@@ -56,7 +57,7 @@ export default function ScraperControlPage() {
   const { data: jobs, isLoading, refetch } = useScrapeJobs();
   const startScrape = useStartScrape();
   const stopScrape = useStopScrape();
-  const { data: sitesData } = useSites(1, 100);
+  const { data: sitesData, isLoading: isSitesLoading } = useSites(1, 100);
   const allSites = useMemo(() => {
     if (!sitesData) return [];
     return sitesData.sites ?? (sitesData as unknown as Site[]);
@@ -65,6 +66,7 @@ export default function ScraperControlPage() {
 
   const [logs, setLogs] = useState<{ id: number; message: string; timestamp: string; level: string }[]>([]);
   const logsEndRef = useRef<HTMLDivElement>(null);
+  const logsSectionRef = useRef<HTMLDivElement>(null);
 
   // Config state
   const [isConfigOpen, setIsConfigOpen] = useState(false);
@@ -217,9 +219,16 @@ export default function ScraperControlPage() {
     toast.success("Configuration cleared.");
   };
 
-  // Get site names for display
+  // Get valid site IDs by checking against current allSites
+  const getValidSiteIds = (ids: string[]) => {
+    return ids.filter(id => allSites.some(s => s.id === id));
+  };
+
+  // Get site names for display, filtering out unknowns
   const getSelectedSiteNames = (ids: string[]) => {
-    return ids.map(id => allSites.find(s => s.id === id)?.name || "Unknown").slice(0, 3);
+    return ids
+      .map(id => allSites.find(s => s.id === id)?.name)
+      .filter(Boolean) as string[];
   };
 
   // ---- Config Sheet Content ----
@@ -317,7 +326,14 @@ export default function ScraperControlPage() {
             </div>
 
             <div className="max-h-52 overflow-y-auto rounded-xl border bg-secondary/10 divide-y divide-border/30">
-              {filteredSources.length === 0 ? (
+              {isSitesLoading ? (
+                <div className="p-8 flex items-center justify-center">
+                  <ModernLoader 
+                    fullPage={false} 
+                    words={["Fetching sources...", "Contacting crawler nodes...", "Validating registries..."]} 
+                  />
+                </div>
+              ) : filteredSources.length === 0 ? (
                 <div className="p-4 text-center text-xs text-muted-foreground">
                   {enabledSites.length === 0 ? "No active sources. Enable sources in Data Sources." : "No sources match your search."}
                 </div>
@@ -396,15 +412,16 @@ export default function ScraperControlPage() {
               </button>
             )}
           </label>
-          <AdvancedDateRangePicker
-            value={scheduleTime ? { from: new Date(scheduleTime), to: new Date(scheduleTime) } : undefined}
-            onChange={(range) => {
-              if (range?.from) {
-                setScheduleTime(range.from.toISOString().slice(0, 16));
+          <DateTimePicker
+            value={scheduleTime ? new Date(scheduleTime) : undefined}
+            onChange={(date) => {
+              if (date) {
+                setScheduleTime(date.toISOString().slice(0, 16));
               } else {
                 setScheduleTime("");
               }
             }}
+            placeholder="Select date and time"
           />
           <p className="text-[10px] text-muted-foreground pl-1">Leave empty to dispatch immediately.</p>
         </div>
@@ -498,11 +515,11 @@ export default function ScraperControlPage() {
                   </span>
                   {savedConfig.scrapeMode === "PASSIVE_BULK" && (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-secondary text-muted-foreground font-medium">
-                      {savedConfig.selectedSiteIds.length} source{savedConfig.selectedSiteIds.length !== 1 ? 's' : ''}
-                      {savedConfig.selectedSiteIds.length > 0 && (
+                      {getValidSiteIds(savedConfig.selectedSiteIds).length} source{getValidSiteIds(savedConfig.selectedSiteIds).length !== 1 ? 's' : ''}
+                      {getValidSiteIds(savedConfig.selectedSiteIds).length > 0 && (
                         <span className="text-foreground ml-0.5">
                           ({getSelectedSiteNames(savedConfig.selectedSiteIds).join(", ")}
-                          {savedConfig.selectedSiteIds.length > 3 ? ` +${savedConfig.selectedSiteIds.length - 3}` : ""})
+                          {getValidSiteIds(savedConfig.selectedSiteIds).length > 3 ? ` +${getValidSiteIds(savedConfig.selectedSiteIds).length - 3}` : ""})
                         </span>
                       )}
                     </span>
@@ -651,6 +668,7 @@ export default function ScraperControlPage() {
                   {jobs.slice(0, 10).map((job) => (
                     <div key={job.id} onClick={() => {
                         setSelectedJobId(job.id);
+                        setTimeout(() => logsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
                     }} className="p-4 hover:bg-secondary/30 transition-colors flex flex-col gap-2 group cursor-pointer">
                       <div className="flex items-center justify-between">
                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider ${
@@ -796,7 +814,9 @@ export default function ScraperControlPage() {
       )}
 
       {/* Full Scrape Logs Section */}
-      <ScrapeLogsSection />
+      <div ref={logsSectionRef}>
+        <ScrapeLogsSection jobId={selectedJobId} onClearJobFilter={() => setSelectedJobId(null)} />
+      </div>
 
       {/* Scraper Configuration Responsive Sheets */}
       {isMobile ? (

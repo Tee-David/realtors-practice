@@ -3,38 +3,50 @@
 import { ThemeSwitch } from "@/components/ui/theme-switch";
 import { Menu, WandSparkles } from "lucide-react";
 import { NotificationBell } from "@/components/layout/notification-bell";
+import { useQuery } from "@tanstack/react-query";
+import { auth } from "@/lib/api";
+import Link from "next/link";
 
 interface TopBarProps {
   title: string;
   onOpenSidebar?: () => void;
 }
 
-function UserProfileDropdown() {
-  const initials = "AD";
-  const name = "Admin";
+function UserProfileAvatar() {
+  const { data: me } = useQuery({ queryKey: ["auth-me"], queryFn: async () => (await auth.me()).data.data, staleTime: 30 * 60 * 1000 });
+  const name = me?.firstName ? `${me.firstName}${me.lastName ? ` ${me.lastName}` : ""}` : me?.email?.split("@")[0] || "User";
+  const initials = me?.firstName
+    ? `${me.firstName[0]}${me.lastName?.[0] || ""}`.toUpperCase()
+    : (me?.email?.[0] || "U").toUpperCase();
 
   return (
-    <button
+    <Link
+      href="/settings"
       className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-[var(--secondary)]"
+      title="Profile Settings"
     >
-      <div
-        className="flex items-center justify-center shrink-0 rounded-full font-semibold text-xs select-none"
-        style={{
-          width: 32,
-          height: 32,
-          backgroundColor: "var(--primary)",
-          color: "var(--primary-foreground)",
-        }}
-      >
-        {initials}
-      </div>
+      {me?.avatarUrl ? (
+        <img src={me.avatarUrl} alt="Avatar" className="shrink-0 rounded-full object-cover" style={{ width: 32, height: 32 }} />
+      ) : (
+        <div
+          className="flex items-center justify-center shrink-0 rounded-full font-semibold text-xs select-none"
+          style={{
+            width: 32,
+            height: 32,
+            backgroundColor: "var(--primary)",
+            color: "var(--primary-foreground)",
+          }}
+        >
+          {initials}
+        </div>
+      )}
       <span
         className="hidden sm:inline text-sm font-medium"
         style={{ color: "var(--foreground)" }}
       >
         {name}
       </span>
-    </button>
+    </Link>
   );
 }
 
@@ -109,7 +121,7 @@ export function TopBar({ title, onOpenSidebar }: TopBarProps) {
         <NotificationBell />
 
         {/* User profile */}
-        <UserProfileDropdown />
+        <UserProfileAvatar />
       </div>
     </header>
   );

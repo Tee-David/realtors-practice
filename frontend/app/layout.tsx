@@ -3,9 +3,7 @@ import { Space_Grotesk, Outfit } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "sonner";
 import { Providers } from "@/components/providers";
-import SmoothCursor from "@/components/ui/smooth-cursor";
-import { JotformAgent } from "@/components/ui/jotform-agent";
-import { Preloader } from "@/components/ui/preloader";
+import { ClientOnlyWidgets } from "@/components/ui/client-only-widgets";
 
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-space-grotesk",
@@ -41,17 +39,7 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         <Providers>
-          <Preloader />
-          <SmoothCursor 
-            size={16} 
-            showTrail={true} 
-            trailLength={6} 
-            color="black"
-            darkColor="white"
-            magneticElements="button, a, [role='button'], [data-magnetic]"
-            glowEffect={true}
-          />
-          <JotformAgent />
+          <ClientOnlyWidgets />
           {children}
         </Providers>
         <Toaster richColors position="top-right" duration={5000} />

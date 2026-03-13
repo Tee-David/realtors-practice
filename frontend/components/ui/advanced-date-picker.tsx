@@ -66,7 +66,7 @@ export function AdvancedDateRangePicker({ value, onChange }: AdvancedDateRangePi
         <Button
           variant={"outline"}
           className={cn(
-            "w-[260px] justify-start text-left font-normal",
+            "w-full justify-start text-left font-normal",
             !date && "text-muted-foreground"
           )}
         >
@@ -84,10 +84,10 @@ export function AdvancedDateRangePicker({ value, onChange }: AdvancedDateRangePi
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start">
+      <PopoverContent className="w-auto p-0 z-[9999]" align="start" side="bottom" sideOffset={4} avoidCollisions>
         <div className="flex flex-col sm:flex-row divide-y sm:divide-y-0 sm:divide-x border-b">
            {/* Sidebar Presets */}
-           <div className="flex flex-col w-48 py-2">
+           <div className="flex flex-col w-full sm:w-48 py-2">
              <div className="px-3 pb-2 pt-1 border-b mb-2 flex items-center justify-between">
                 <span className="text-xs font-semibold text-primary">Date Range</span>
                 <Button variant="ghost" size="icon" className="h-6 w-6 rounded text-muted-foreground"><Plus className="w-4 h-4" /></Button>
@@ -121,7 +121,7 @@ export function AdvancedDateRangePicker({ value, onChange }: AdvancedDateRangePi
            {/* Calendar Area */}
            <div className="p-4 flex flex-col">
               {/* Top Controls */}
-              <div className="flex items-center gap-2 mb-4 justify-between border rounded-md p-1 bg-muted/20">
+              <div className="flex flex-wrap items-center gap-2 mb-4 justify-between border rounded-md p-1 bg-muted/20">
                  <Select defaultValue="days">
                     <SelectTrigger className="w-[100px] h-8 border-none bg-transparent shadow-none focus:ring-0">
                        <SelectValue placeholder="Days" />
@@ -227,7 +227,7 @@ export function AdvancedDateRangePicker({ value, onChange }: AdvancedDateRangePi
            
            <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button size="sm" onClick={() => setOpen(false)} className="bg-[#5227FF] hover:bg-[#5227FF]/90 font-bold px-6">Generate</Button>
+              <Button size="sm" onClick={() => setOpen(false)} className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold px-6">Apply</Button>
            </div>
         </div>
       </PopoverContent>

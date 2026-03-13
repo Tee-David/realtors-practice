@@ -436,11 +436,11 @@ function MatchesPanel({ searchId, searchName, onClose }: { searchId: string; sea
   const [matches, setMatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useState(() => {
+  useEffect(() => {
     savedSearchesApi.getMatches(searchId, { limit: 50 })
       .then(res => { setMatches(res.data.data || []); setLoading(false); })
       .catch(() => setLoading(false));
-  });
+  }, [searchId]);
 
   return (
     <div className="fixed inset-0 z-[1100] flex items-end md:items-start md:justify-end bg-black/60 md:p-4 backdrop-blur-sm" onClick={onClose}>
@@ -595,8 +595,8 @@ export default function SavedSearchesPage() {
   const [editItem, setEditItem] = useState<any>(null);
   const [matchesView, setMatchesView] = useState<{ id: string; name: string } | null>(null);
 
-  const handleCreate = (data: any) => createMutation.mutate(data, { onSuccess: () => setModalOpen(false) });
-  const handleUpdate = (data: any) => { if (!editItem) return; updateMutation.mutate({ id: editItem.id, data }, { onSuccess: () => setEditItem(null) }); };
+  const handleCreate = (data: any) => createMutation.mutate(data, { onSuccess: () => setModalOpen(false), onError: () => { /* toast handled by hook */ } });
+  const handleUpdate = (data: any) => { if (!editItem) return; updateMutation.mutate({ id: editItem.id, data }, { onSuccess: () => setEditItem(null), onError: () => { /* toast handled by hook */ } }); };
   const handleDelete = (id: string) => { if (confirm("Delete this saved search?")) deleteMutation.mutate(id); };
   const handleToggle = (item: any) => updateMutation.mutate({ id: item.id, data: { isActive: !item.isActive } });
 
@@ -612,10 +612,11 @@ export default function SavedSearchesPage() {
         </div>
         <button
           onClick={() => setModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-90"
+          className="flex items-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-90 shrink-0"
           style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
         >
-          <Plus className="w-4 h-4" /> New Search
+          <Plus className="w-4 h-4 shrink-0" />
+          <span className="hidden sm:inline whitespace-nowrap">New Search</span>
         </button>
       </div>
 

@@ -483,9 +483,100 @@ body.shepherd-active #app-sidebar {
   position: relative !important;
 }
 
+/* Rich Step Content */
+.rp-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rp-step-icon {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.rp-step-heading {
+  font-family: var(--font-display) !important;
+  font-weight: 700 !important;
+  font-size: 1.1rem !important;
+  color: #1a1a1a !important;
+  margin: 0 !important;
+}
+
+.dark .rp-step-heading {
+  color: #f1f5f9 !important;
+}
+
+.rp-step-text {
+  font-size: 0.9rem !important;
+  line-height: 1.6 !important;
+  color: #475569 !important;
+  margin: 0 !important;
+}
+
+.dark .rp-step-text {
+  color: #94a3b8 !important;
+}
+
+.rp-step-tip {
+  margin-top: 4px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(0, 1, 252, 0.06);
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #0001fc;
+  border: 1px solid rgba(0, 1, 252, 0.1);
+}
+
+.dark .rp-step-tip {
+  background: rgba(59, 130, 246, 0.1);
+  color: #93c5fd;
+  border-color: rgba(59, 130, 246, 0.2);
+}
+
+/* Mobile Tour Styles */
 @media (max-width: 768px) {
   .shepherd-element.rp-tour-step {
     width: 92vw !important;
     max-width: 92vw !important;
+    border-radius: 20px !important;
+  }
+
+  .shepherd-header {
+    padding: 1.25rem 1.25rem 0.5rem !important;
+  }
+
+  .shepherd-text {
+    padding: 0.25rem 1.25rem 1rem !important;
+    font-size: 0.9rem !important;
+  }
+
+  .shepherd-footer {
+    padding: 1rem 1.25rem !important;
+    gap: 8px !important;
+  }
+
+  .shepherd-button {
+    padding: 10px 16px !important;
+    font-size: 0.85rem !important;
+    border-radius: 12px !important;
+  }
+
+  .rp-step-icon {
+    font-size: 1.5rem;
+  }
+
+  .rp-step-heading {
+    font-size: 1rem !important;
+  }
+
+  .rp-step-text {
+    font-size: 0.85rem !important;
+  }
+
+  body .shepherd-enabled.shepherd-target {
+    box-shadow: 0 0 0 3px rgba(0, 1, 252, 0.25), 0 0 20px rgba(0, 1, 252, 0.15) !important;
+    border-radius: 8px !important;
   }
 }
