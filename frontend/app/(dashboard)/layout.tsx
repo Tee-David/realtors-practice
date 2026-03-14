@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { usePathname } from "next/navigation";
 import { AppSidebar, MobileSidebar } from "@/components/layout/app-sidebar";
 import { MobileBottomNav } from "@/components/layout/mobile-bottom-nav";
 import { TopBar } from "@/components/layout/top-bar";
+import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
+import { KeyboardShortcutsModal } from "@/components/ui/keyboard-shortcuts-modal";
 import dynamic from "next/dynamic";
 
 const TourProvider = dynamic(() => import("@/components/ui/tour-provider").then(m => ({ default: m.TourProvider })), { ssr: false });
@@ -15,7 +17,11 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const pathname = usePathname() || "";
+
+  const toggleShortcuts = useCallback(() => setShortcutsOpen((v) => !v), []);
+  useKeyboardShortcuts({ onToggleHelp: toggleShortcuts });
 
   let title = "Dashboard";
   if (pathname.startsWith("/properties")) title = "Properties";
@@ -51,6 +57,9 @@ export default function DashboardLayout({
         open={mobileSidebarOpen}
         onOpenChange={setMobileSidebarOpen}
       />
+
+      {/* Keyboard shortcuts help modal */}
+      <KeyboardShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
 
       {/* Mobile bottom navigation */}
       <MobileBottomNav 

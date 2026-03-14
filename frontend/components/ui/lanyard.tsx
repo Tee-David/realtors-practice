@@ -61,7 +61,7 @@ interface LanyardProps {
 export default function Lanyard({
   position = [0, 0, 30],
   gravity = [0, -40, 0],
-  fov = 20,
+  fov = 16,
   transparent = true,
   userName,
   userRole,
@@ -307,24 +307,27 @@ function Band({ maxSpeed = 50, minSpeed = 0, isMobile = false, userName, userRol
             <mesh geometry={nodes.clamp.geometry} material={materials.metal} />
             <Html
               transform
-              position={[0, -0.02, 0.02]}
-              scale={0.06}
+              position={[0, 0.335, 0.02]}
+              scale={0.038}
               occlude="blending"
               center
+              style={{ pointerEvents: 'none', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
             >
-              <ProfileCard
-                name={userName || "User"}
-                title={userRole || "Member"}
-                handle={userHandle || "user"}
-                status="Online"
-                contactText="Contact Me"
-                avatarUrl={userAvatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${userName || "User"}`}
-                showUserInfo={false}
-                enableTilt={false}
-                behindGlowColor="rgba(0, 1, 252, 0.3)"
-                innerGradient="linear-gradient(145deg, rgba(0, 1, 252, 0.1) 0%, rgba(0, 1, 252, 0.02) 100%)"
-                behindGlowEnabled={false}
-              />
+              <div style={{ width: '260px', fontSize: '13px' }}>
+                <ProfileCard
+                  name={userName || "User"}
+                  title={userRole || "Member"}
+                  handle={userHandle || "user"}
+                  status="Online"
+                  contactText="Contact Me"
+                  avatarUrl={userAvatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${userName || "User"}`}
+                  showUserInfo={false}
+                  enableTilt={false}
+                  behindGlowColor="rgba(0, 1, 252, 0.3)"
+                  innerGradient="linear-gradient(145deg, rgba(0, 1, 252, 0.1) 0%, rgba(0, 1, 252, 0.02) 100%)"
+                  behindGlowEnabled={false}
+                />
+              </div>
             </Html>
           </group>
         </RigidBody>

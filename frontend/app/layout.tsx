@@ -24,7 +24,17 @@ export const metadata: Metadata = {
   icons: {
     icon: "/favicon.png",
     shortcut: "/favicon.png",
-    apple: "/favicon.png",
+    apple: "/logo-icon-blue.png",
+  },
+  manifest: "/manifest.json",
+  themeColor: "#0001FC",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Realtors' Practice",
+  },
+  other: {
+    "apple-touch-icon": "/logo-icon-blue.png",
   },
 };
 
@@ -43,6 +53,17 @@ export default function RootLayout({
           {children}
         </Providers>
         <Toaster richColors position="top-right" duration={5000} />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                  navigator.serviceWorker.register('/sw.js').catch(() => {});
+                });
+              }
+            `,
+          }}
+        />
       </body>
     </html>
   );

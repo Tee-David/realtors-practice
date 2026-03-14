@@ -433,10 +433,10 @@ export default function AnalyticsPage() {
   const { data: charts, isLoading: chartsLoading } = useDashboardCharts();
   const isLoading = kpisLoading || chartsLoading;
 
-  // Live data
+  // Live data — no hardcoded fallbacks
   const total = kpis?.totalProperties || 0;
-  const forSale  = kpis?.forSale   || Math.round(total * 0.55);
-  const forRent  = kpis?.forRent   || Math.round(total * 0.30);
+  const forSale  = kpis?.forSale   || 0;
+  const forRent  = kpis?.forRent   || 0;
   const avgPrice = charts?.avgPrice || 0;
   const byCategory: any[] = charts?.byCategory || [];
   const topSites: any[] = charts?.topSites || [];
@@ -446,31 +446,19 @@ export default function AnalyticsPage() {
   const heatmapMax = useMemo(() => Math.max(...heatmapData.flatMap(r => r.hours.map(h => h.val))), [heatmapData]);
   const seriesData  = useMemo(() => genSeries(total, timeRange), [total, timeRange]);
 
-  // Top areas
+  // Top areas — real data only
   const topAreas = useMemo(() => {
-    const raw: any[] = charts?.topAreas || [
-      { name: "Lekki", count: Math.round(total * 0.18) },
-      { name: "Victoria Island", count: Math.round(total * 0.14) },
-      { name: "Ikoyi", count: Math.round(total * 0.12) },
-      { name: "Ajah", count: Math.round(total * 0.10) },
-      { name: "Ikeja", count: Math.round(total * 0.09) },
-    ];
+    const raw: any[] = charts?.topAreas || [];
     const t = raw.reduce((s: number, r: any) => s + (r.count || 0), 0) || 1;
     return raw.slice(0, 5).map((a: any) => ({ name: a.area || a.name, value: a.count || 0, pct: Math.round(((a.count || 0) / t) * 100), color: "#5227FF" }));
-  }, [charts, total]);
+  }, [charts]);
 
-  // Top sites
+  // Top sites — real data only
   const topSitesList = useMemo(() => {
-    const raw = topSites.length > 0 ? topSites : [
-      { name: "PropertyPro", count: Math.round(total * 0.30) },
-      { name: "NigeriaPropertyCentre", count: Math.round(total * 0.22) },
-      { name: "PrivateProperty", count: Math.round(total * 0.18) },
-      { name: "Jiji", count: Math.round(total * 0.15) },
-      { name: "Olx", count: Math.round(total * 0.10) },
-    ];
+    const raw = topSites;
     const t = raw.reduce((s: number, r: any) => s + (r.count || 0), 0) || 1;
-    return raw.slice(0, 5).map((s: any) => ({ name: s.name || s.site?.name, value: s.count || 0, pct: Math.round(((s.count || 0) / t) * 100), color: "#ea580c" }));
-  }, [topSites, total]);
+    return raw.slice(0, 5).map((s: any) => ({ name: s.name || s.source || s.site?.name, value: s.count || 0, pct: Math.round(((s.count || 0) / t) * 100), color: "#ea580c" }));
+  }, [topSites]);
 
   // Export CSV of recentProps
   const exportCsv = useCallback(() => {
@@ -508,8 +496,8 @@ export default function AnalyticsPage() {
           <div className="grid grid-cols-2 gap-4">
             <MiniKpi label="For Sale" value={forSale} trend={4} icon={Home} color="#2563eb" bg="rgba(37,99,235,0.08)" isLoading={isLoading} />
             <MiniKpi label="For Rent" value={forRent} trend={-2} icon={Tag} color="#ea580c" bg="rgba(234,88,12,0.08)" isLoading={isLoading} />
-            <MiniKpi label="Avg Price" value={avgPrice || 28_500_000} prefix="₦" trend={6} icon={DollarSign} color="#7c3aed" bg="rgba(124,58,237,0.08)" isLoading={isLoading} />
-            <MiniKpi label="Shortlets" value={Math.round(total * 0.05)} trend={12} icon={Activity} color="#0891b2" bg="rgba(8,145,178,0.08)" isLoading={isLoading} />
+            <MiniKpi label="Avg Price" value={avgPrice} prefix="₦" trend={6} icon={DollarSign} color="#7c3aed" bg="rgba(124,58,237,0.08)" isLoading={isLoading} />
+            <MiniKpi label="Active Sites" value={kpis?.totalSites || 0} icon={Globe} color="#0891b2" bg="rgba(8,145,178,0.08)" isLoading={isLoading} />
           </div>
         </div>
 
@@ -530,19 +518,7 @@ export default function AnalyticsPage() {
 
       {/* Row 3: Full property table */}
       <PropertyTable
-        data={recentProps.length > 0 ? recentProps : Array.from({ length: 30 }, (_, i) => ({
-          id: `demo-${i}`,
-          title: ["3 Bedroom Flat in Lekki","2 Bedroom Duplex in Ikoyi","Land in Ajah","Penthouse in VI","Studio in Yaba"][i % 5],
-          listingType: ["SALE","RENT","LEASE","SHORTLET","SALE"][i % 5],
-          category: ["RESIDENTIAL","RESIDENTIAL","LAND","RESIDENTIAL","COMMERCIAL"][i % 5],
-          bedrooms: [3, 2, null, 4, 1][i % 5],
-          price: [35_000_000, 1_800_000, 12_000_000, 150_000_000, 500_000][i % 5],
-          area: ["Lekki","Ikoyi","Ajah","Victoria Island","Yaba"][i % 5],
-          state: "Lagos",
-          status: ["ACTIVE","ACTIVE","SOLD","RENTED","PENDING"][i % 5],
-          sourceUrl: ["https://propertypro.ng","https://nigeriapropertycentre.com", "https://privateproperty.com.ng","https://jiji.ng","https://olx.com.ng"][i % 5],
-          createdAt: new Date(Date.now() - i * 3 * 24 * 60 * 60 * 1000).toISOString(),
-        }))}
+        data={recentProps}
         tab={tableTab}
         setTab={setTableTab}
         onExport={exportCsv}

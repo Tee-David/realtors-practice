@@ -25,14 +25,18 @@ export class AnalyticsController {
    */
   static async getCharts(req: Request, res: Response) {
     try {
-      const [byCategory, byStatus] = await Promise.all([
-        AnalyticsService.getPropertiesByCategory(),
+      const [chartData, byStatus] = await Promise.all([
+        AnalyticsService.getChartData(),
         AnalyticsService.getPropertiesByStatus(),
       ]);
 
       return sendSuccess(res, {
-        byCategory,
+        byCategory: chartData.byCategory,
         byStatus,
+        topAreas: chartData.topAreas,
+        topSites: chartData.topSites,
+        avgPrice: chartData.avgPrice,
+        recentProperties: chartData.recentProperties,
       }, "Chart data retrieved successfully");
     } catch (error: any) {
       Logger.error(`AnalyticsController.getCharts error: ${error.message}`);

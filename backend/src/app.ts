@@ -12,6 +12,7 @@ Sentry.init({
   profilesSampleRate: process.env.NODE_ENV === "production" ? 0.2 : 1.0,
 });
 
+import compression from "compression";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
@@ -19,6 +20,11 @@ import { config } from "./config/env";
 import { setupSwagger } from "./config/swagger";
 import routes from "./routes/index";
 import { errorHandler, notFoundHandler } from "./middlewares/error.middleware";
+import { csrfProtection } from "./middlewares/csrf.middleware";
+import {
+  extractUserIdForRateLimit,
+  perUserRateLimiter,
+} from "./middlewares/perUserRateLimit.middleware";
 
 const app: Application = express();
 
@@ -26,7 +32,21 @@ const app: Application = express();
 setupSwagger(app);
 
 // Security headers
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'none'"],
+        styleSrc: ["'none'"],
+        imgSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+        formAction: ["'self'"],
+      },
+    },
+    // X-Content-Type-Options: nosniff is enabled by default in helmet
+  })
+);
 
 // CORS
 app.use(
@@ -87,6 +107,16 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 // Data sanitization against NoSQL query injection / parameter pollution
 // Even with Prisma, it's good practice to strip out keys starting with '$' or '.'
 app.use(mongoSanitize());
+
+// Gzip compression for all responses
+app.use(compression());
+
+// Per-user rate limiting (extracts user ID from JWT, then applies per-user limits)
+app.use("/api/", extractUserIdForRateLimit);
+app.use("/api/", perUserRateLimiter);
+
+// CSRF protection – validates Origin/Referer on mutating requests
+app.use("/api/", csrfProtection);
 
 // Root health check
 app.get("/health", (_req, res) => {

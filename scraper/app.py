@@ -12,11 +12,13 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from typing import Any
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from config import config
+from bs4 import BeautifulSoup
 from engine.adaptive_fetcher import AdaptiveFetcher
 from extractors.universal_extractor import UniversalExtractor
 from extractors.universal_nlp import detect_listing_type
@@ -27,16 +29,23 @@ from pipeline.validator import validate_property
 from pipeline.deduplicator import Deduplicator
 from pipeline.normalizer import normalize_property
 from pipeline.enricher import enrich_property
-from utils.callback import report_progress, report_results, report_error, report_log
+from utils.callback import report_progress, report_results, report_error, report_log, report_property
 from utils.robots_checker import is_allowed as robots_allowed, get_crawl_delay
-from utils.url_normalizer import normalize_url, VisitedSet
+from utils.url_normalizer import normalize_url, VisitedSet, is_valid_property_url
 from utils.logger import get_logger
 
 import redis
 
 logger = get_logger("scraper")
 
-redis_client = redis.Redis.from_url(config.redis_url, decode_responses=True)
+# Redis is optional — scraper works without it (stop-job checks disabled)
+try:
+    redis_client = redis.Redis.from_url(config.redis_url, decode_responses=True)
+    redis_client.ping()
+    logger.info("Redis connected")
+except Exception as _redis_err:
+    logger.warning(f"Redis unavailable ({_redis_err}) — stop-job and selector cache disabled")
+    redis_client = None
 
 
 def _purge_old_snapshots():
@@ -90,6 +99,7 @@ class SiteConfig(BaseModel):
     id: str
     name: str
     baseUrl: str
+    listPaths: list[str] = Field(default_factory=list)
     listingSelector: str
     selectors: dict[str, Any]
     paginationType: str = "url_param"
@@ -106,6 +116,12 @@ class ScrapeJobRequest(BaseModel):
     maxListingsPerSite: int = 100
     callbackUrl: str | None = None
     parameters: dict[str, Any] = Field(default_factory=dict)
+
+    def get_api_base_url(self) -> str:
+        """Return the callback URL from payload, or fall back to config."""
+        if self.callbackUrl:
+            return self.callbackUrl.rstrip("/")
+        return config.api_base_url
 
 
 class JobStatus(BaseModel):
@@ -130,7 +146,7 @@ async def health():
     return {
         "status": "OK",
         "service": "scraper",
-        "redis_connected": redis_client.ping()
+        "redis_connected": redis_client.ping() if redis_client else False
     }
 
 
@@ -140,11 +156,10 @@ async def start_job(
     x_internal_key: str = Header(...),
 ):
     verify_internal_key(x_internal_key)
-    
-    # We no longer start jobs via API (Backend pushes directly to Celery/Redis)
-    # But we keep this for backwards compatibility
-    from tasks import process_job
-    process_job.delay(request.dict())
+
+    # Run the job in-process (no Celery worker required).
+    # This is the primary execution path when backend dispatches via HTTP.
+    asyncio.create_task(_run_scrape_job(request))
 
     return {"jobId": request.jobId, "status": "STARTED"}
 
@@ -154,20 +169,35 @@ async def get_job_status(job_id: str, x_internal_key: str = Header(...)):
     verify_internal_key(x_internal_key)
     
     # Check if job was stopped
-    is_stopped = redis_client.exists(f"job:stop:{job_id}")
+    is_stopped = (redis_client and redis_client.exists(f"job:stop:{job_id}")) if redis_client else False
     return JobStatus(jobId=job_id, status="STOPPING" if is_stopped else "UNKNOWN")
 
 
 @app.post("/api/jobs/{job_id}/stop")
 async def stop_job(job_id: str, x_internal_key: str = Header(...)):
     verify_internal_key(x_internal_key)
-    redis_client.setex(f"job:stop:{job_id}", 86400, "1") # Expire after 24h
+    if redis_client:
+        redis_client.setex(f"job:stop:{job_id}", 86400, "1")  # Expire after 24h
     return {"jobId": job_id, "status": "STOPPING"}
 
 
 # --- Scrape Pipeline ---
 
 async def _run_scrape_job(request: ScrapeJobRequest) -> None:
+    """Run a scrape job with a hard timeout of 30 minutes."""
+    try:
+        await asyncio.wait_for(
+            _run_scrape_job_inner(request),
+            timeout=1800,  # 30 minutes max
+        )
+    except asyncio.TimeoutError:
+        logger.error(f"Job {request.jobId} exceeded 30-minute timeout")
+        await report_error(request.jobId, "Job timed out after 30 minutes")
+    except Exception as e:
+        logger.exception(f"Job {request.jobId} wrapper error: {e}")
+
+
+async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
     job_id = request.jobId
     all_properties: list[dict[str, Any]] = []
     deduplicator = Deduplicator()
@@ -175,12 +205,18 @@ async def _run_scrape_job(request: ScrapeJobRequest) -> None:
     visited = VisitedSet()
     total_errors = 0
     block_count = 0
+    total_pages_fetched = 0
+
+    # Use callbackUrl from payload if provided (so production callbacks go to the right place)
+    if request.callbackUrl:
+        from utils.callback import set_api_base_url
+        set_api_base_url(request.callbackUrl)
 
     try:
         await report_log(job_id, "INFO", f"Starting scrape job with {len(request.sites)} site(s)")
 
         for site_idx, site in enumerate(request.sites):
-            if redis_client.exists(f"job:stop:{job_id}"):
+            if (redis_client and redis_client.exists(f"job:stop:{job_id}")):
                 await report_log(job_id, "WARN", "Job stopped by user")
                 break
 
@@ -198,128 +234,242 @@ async def _run_scrape_job(request: ScrapeJobRequest) -> None:
                 if crawl_delay:
                     await report_log(job_id, "INFO", f"robots.txt Crawl-Delay: {crawl_delay}s for {site.name}")
 
-                # Fetch listing pages
-                page_num = 0
-                while page_num < site.maxPages:
-                    if redis_client.exists(f"job:stop:{job_id}"):
+                # Build starting URLs from listPaths (fall back to baseUrl if none)
+                start_urls = []
+                if site.listPaths:
+                    for lp in site.listPaths:
+                        if lp.startswith("http"):
+                            start_urls.append(lp)
+                        else:
+                            start_urls.append(site.baseUrl.rstrip("/") + "/" + lp.lstrip("/"))
+                else:
+                    start_urls = [site.baseUrl]
+
+                await report_log(job_id, "INFO", f"Starting URLs for {site.name}: {start_urls}")
+
+                for start_url in start_urls:
+                    if len(site_properties) >= request.maxListingsPerSite:
+                        break
+                    if (redis_client and redis_client.exists(f"job:stop:{job_id}")):
                         break
 
-                    page_url = _build_page_url(site, page_num)
-                    await report_log(job_id, "DEBUG", f"Fetching page {page_num + 1}: {page_url}")
+                    await report_log(job_id, "INFO", f"Crawling path: {start_url}")
 
-                    html = await fetcher.fetch(page_url, requires_js=site.requiresJs)
-                    if not html:
-                        await report_log(job_id, "WARN", f"Empty response from {page_url}")
-                        break
-
-                    # Extract listing URLs from the page
-                    extractor = UniversalExtractor(site.selectors)
-                    raw_listing_urls = extractor.extract_listing_urls(html, site.baseUrl, site.listingSelector)
-
-                    # Normalize and deduplicate URLs via visited set
-                    listing_urls = []
-                    for u in raw_listing_urls:
-                        normalized = normalize_url(u)
-                        if visited.add(normalized):
-                            listing_urls.append(normalized)
-
-                    if not listing_urls:
-                        await report_log(job_id, "INFO", f"No more listings found on page {page_num + 1}")
-                        break
-
-                    skipped = len(raw_listing_urls) - len(listing_urls)
-                    if skipped:
-                        await report_log(job_id, "DEBUG", f"Skipped {skipped} already-visited URLs on page {page_num + 1}")
-                    await report_log(job_id, "INFO", f"Found {len(listing_urls)} new listings on page {page_num + 1}")
-
-                    # Process each listing
-                    for listing_url in listing_urls:
-                        if len(site_properties) >= request.maxListingsPerSite:
-                            break
-                        if redis_client.exists(f"job:stop:{job_id}"):
+                    # Fetch listing pages for this path
+                    page_num = 0
+                    while page_num < site.maxPages:
+                        if (redis_client and redis_client.exists(f"job:stop:{job_id}")):
                             break
 
+                        page_url = _build_page_url_for_start(site, start_url, page_num)
+                        await report_log(job_id, "DEBUG", f"[{site.name}] Fetching page {page_num + 1}: {page_url}")
+
+                        html = await fetcher.fetch(page_url, requires_js=site.requiresJs)
+                        if not html:
+                            await report_log(job_id, "WARN", f"Empty response from {page_url}")
+                            break
+                        total_pages_fetched += 1
+
+                        # Check for cached LLM-discovered selectors (self-healing)
+                        effective_selectors = dict(site.selectors)
                         try:
-                            listing_html = await fetcher.fetch(listing_url, requires_js=site.requiresJs)
-                            if not listing_html:
+                            from extractors.selector_cache import get_cached_selectors
+                            domain = urlparse(site.baseUrl).netloc
+                            cached = get_cached_selectors(domain)
+                            if cached:
+                                # Merge cached selectors (cached take priority for fields that exist)
+                                for field, sel in cached.items():
+                                    if field in effective_selectors:
+                                        # Prepend cached selector as higher-priority fallback
+                                        effective_selectors[field] = f"{sel} | {effective_selectors[field]}"
+                                    else:
+                                        effective_selectors[field] = sel
+                                await report_log(job_id, "DEBUG", f"Using {len(cached)} cached selectors for {domain}")
+                        except Exception:
+                            pass
+
+                        # Extract listing URLs from the page
+                        extractor = UniversalExtractor(effective_selectors)
+
+                        # First try JSON-LD for listing URLs
+                        json_ld_list = extractor.extract_json_ld(html)
+                        json_ld_properties = extractor.harvest_properties_from_json_ld(json_ld_list, page_url)
+                        json_ld_urls = [
+                            p["listingUrl"] for p in json_ld_properties
+                            if p.get("listingUrl") and p["listingUrl"] != page_url
+                        ]
+
+                        # Then try CSS selectors
+                        raw_listing_urls = extractor.extract_listing_urls(html, site.baseUrl, site.listingSelector)
+
+                        # Merge: JSON-LD URLs first (higher confidence), then CSS URLs
+                        all_raw_urls = json_ld_urls.copy()
+                        for u in raw_listing_urls:
+                            if u not in all_raw_urls:
+                                all_raw_urls.append(u)
+                        raw_listing_urls = all_raw_urls if all_raw_urls else raw_listing_urls
+
+                        # Filter invalid URLs, normalize, and deduplicate via visited set
+                        listing_urls = []
+                        for u in raw_listing_urls:
+                            if not is_valid_property_url(u):
+                                continue
+                            normalized = normalize_url(u)
+                            if visited.add(normalized):
+                                listing_urls.append(normalized)
+
+                        if not listing_urls:
+                            await report_log(job_id, "INFO", f"[{site.name}] No more listings found on page {page_num + 1}")
+                            break
+
+                        skipped = len(raw_listing_urls) - len(listing_urls)
+                        if skipped:
+                            await report_log(job_id, "DEBUG", f"Skipped {skipped} already-visited URLs on page {page_num + 1}")
+                        await report_log(job_id, "INFO", f"[{site.name}] Found {len(listing_urls)} new listings on page {page_num + 1}")
+
+                        # Process each listing
+                        for listing_url in listing_urls:
+                            if len(site_properties) >= request.maxListingsPerSite:
+                                break
+                            if (redis_client and redis_client.exists(f"job:stop:{job_id}")):
+                                break
+
+                            try:
+                                listing_html = await fetcher.fetch(listing_url, requires_js=site.requiresJs)
+                                if not listing_html:
+                                    total_errors += 1
+                                    if fetcher.last_block_reason:
+                                        block_count += 1
+                                        await report_log(job_id, "WARN", f"Blocked ({fetcher.last_block_reason}): {listing_url}")
+                                        if block_count >= 3:
+                                            await report_log(job_id, "WARN", f"Multiple blocks detected for {site.name} — slowing down")
+                                            await asyncio.sleep(random.uniform(10, 20))
+                                    continue
+
+                                # Extract raw data — JSON-LD first, CSS selectors as fallback
+                                raw_data = extractor.extract_property_with_json_ld(listing_html, listing_url)
+                                if not raw_data:
+                                    total_errors += 1
+                                    _save_snapshot(site.name, listing_url, listing_html)
+                                    await report_log(job_id, "WARN", f"No data extracted from {listing_url}, snapshot saved")
+                                    continue
+
+                                # LLM Fallback if crucial data is missing (Layer 3: Crawl4AI + Gemini)
+                                if not raw_data.get("price_text") or not raw_data.get("bedrooms") or not raw_data.get("location_text"):
+                                    await report_log(job_id, "DEBUG", f"Missing data for {listing_url}, attempting LLM fallback...")
+                                    try:
+                                        # Try Crawl4AI → Markdown → Gemini extraction first
+                                        markdown = await fetcher.fetch_as_markdown(listing_url)
+                                        if markdown:
+                                            from extractors.llm_schema_extractor import extract_property_from_markdown, discover_selectors
+                                            llm_data = extract_property_from_markdown(markdown, listing_url)
+                                            if llm_data:
+                                                # Merge LLM data into existing (fill gaps only)
+                                                for key, value in llm_data.items():
+                                                    if value is not None and not raw_data.get(key):
+                                                        raw_data[key] = value
+                                                await report_log(job_id, "INFO", f"LLM extraction filled gaps for {listing_url}")
+
+                                                # Self-healing: discover CSS selectors for next time
+                                                discovered = discover_selectors(listing_html, llm_data)
+                                                if discovered:
+                                                    from extractors.selector_cache import save_selectors
+                                                    domain = urlparse(site.baseUrl).netloc
+                                                    save_selectors(domain, discovered)
+                                                    await report_log(job_id, "INFO", f"Self-healed: cached {len(discovered)} selectors for {domain}")
+                                            else:
+                                                # Fall back to plain text extraction
+                                                from extractors.llm_schema_extractor import extract_with_llm
+                                                page_text = BeautifulSoup(listing_html, "lxml").get_text(separator=" ", strip=True)
+                                                raw_data = extract_with_llm(page_text, raw_data)
+                                        else:
+                                            # Crawl4AI unavailable, fall back to plain text
+                                            from extractors.llm_schema_extractor import extract_with_llm
+                                            page_text = BeautifulSoup(listing_html, "lxml").get_text(separator=" ", strip=True)
+                                            raw_data = extract_with_llm(page_text, raw_data)
+                                    except Exception as llm_err:
+                                        await report_log(job_id, "DEBUG", f"LLM fallback error: {str(llm_err)[:200]}")
+
+                                # NLP: detect listing type
+                                raw_data["listingType"] = detect_listing_type(
+                                    raw_data.get("title", ""),
+                                    raw_data.get("description", ""),
+                                    raw_data.get("price_text", ""),
+                                )
+
+                                # Parse price
+                                price_info = parse_price(raw_data.get("price_text", ""))
+                                raw_data.update(price_info)
+
+                                # Parse location
+                                location_info = parse_location(raw_data.get("location_text", ""))
+                                raw_data.update(location_info)
+
+                                # Extract features
+                                features = extract_features(
+                                    raw_data.get("description", ""),
+                                    raw_data.get("features_text", ""),
+                                )
+                                raw_data["features"] = features
+
+                                # LLM normalization for fields that regex parsers couldn't handle
+                                # Only calls LLM when key fields are still missing or raw text
+                                if (
+                                    not raw_data.get("price")
+                                    or not isinstance(raw_data.get("bedrooms"), int)
+                                    or not raw_data.get("state")
+                                    or not raw_data.get("area")
+                                    or (not raw_data.get("landSizeSqm") and not raw_data.get("buildingSizeSqm") and raw_data.get("area_size_text"))
+                                ):
+                                    try:
+                                        from extractors.llm_schema_extractor import normalize_with_llm
+                                        raw_data = normalize_with_llm(raw_data)
+                                    except Exception as norm_err:
+                                        await report_log(job_id, "DEBUG", f"LLM normalization error: {str(norm_err)[:200]}")
+
+                                # Normalize
+                                normalized = normalize_property(raw_data, site.name)
+
+                                # Validate + quality score
+                                validated = validate_property(normalized)
+
+                                # Dedup check
+                                if deduplicator.is_duplicate(validated):
+                                    await report_log(job_id, "DEBUG", f"Duplicate skipped: {validated.get('title', '')[:50]}")
+                                    continue
+
+                                site_properties.append(validated)
+
+                                # Report property to frontend for live feed
+                                await report_property(job_id, {
+                                    "title": validated.get("title"),
+                                    "price": validated.get("price"),
+                                    "location": validated.get("area") or validated.get("state"),
+                                    "bedrooms": validated.get("bedrooms"),
+                                    "bathrooms": validated.get("bathrooms"),
+                                    "image": (validated.get("images") or [None])[0],
+                                    "source": site.name,
+                                })
+
+                                # Update progress
+                                await report_progress(
+                                    job_id,
+                                    processed=len(all_properties) + len(site_properties),
+                                    total=request.maxListingsPerSite * len(request.sites),
+                                    current_site=site.name,
+                                    current_page=page_num + 1,
+                                    max_pages=site.maxPages,
+                                    pages_fetched=total_pages_fetched,
+                                    properties_found=len(all_properties) + len(site_properties),
+                                    duplicates=deduplicator.duplicate_count,
+                                    errors=total_errors,
+                                )
+
+                            except Exception as e:
                                 total_errors += 1
-                                # Track block detection
-                                if fetcher.last_block_reason:
-                                    block_count += 1
-                                    await report_log(job_id, "WARN", f"Blocked ({fetcher.last_block_reason}): {listing_url}")
-                                    if block_count >= 3:
-                                        await report_log(job_id, "WARN", f"Multiple blocks detected for {site.name} — slowing down")
-                                        await asyncio.sleep(random.uniform(10, 20))
-                                continue
+                                await report_log(job_id, "ERROR", f"[{site.name}] Error processing {listing_url}: {str(e)}")
 
-                            # Extract raw data
-                            raw_data = extractor.extract_property(listing_html, listing_url)
-                            if not raw_data:
-                                total_errors += 1
-                                _save_snapshot(site.name, listing_url, listing_html)
-                                await report_log(job_id, "WARN", f"No data extracted from {listing_url}, snapshot saved")
-                                continue
-                                
-                            # LLM Fallback if crucial data is missing (like price, bedrooms, or location)
-                            if not raw_data.get("price_text") or not raw_data.get("bedrooms") or not raw_data.get("location_text"):
-                                await report_log(job_id, "DEBUG", f"Missing data for {listing_url}, attempting LLM fallback...")
-                                from extractors.llm_extractor import extract_with_llm
-                                
-                                # Use description or raw HTML text for LLM (bs4 get_text to strip tags)
-                                from bs4 import BeautifulSoup
-                                soup = BeautifulSoup(listing_html, "lxml")
-                                page_text = soup.get_text(separator=" ", strip=True)
-                                
-                                raw_data = extract_with_llm(page_text, raw_data)
-
-                            # NLP: detect listing type
-                            raw_data["listingType"] = detect_listing_type(
-                                raw_data.get("title", ""),
-                                raw_data.get("description", ""),
-                                raw_data.get("price_text", ""),
-                            )
-
-                            # Parse price
-                            price_info = parse_price(raw_data.get("price_text", ""))
-                            raw_data.update(price_info)
-
-                            # Parse location
-                            location_info = parse_location(raw_data.get("location_text", ""))
-                            raw_data.update(location_info)
-
-                            # Extract features
-                            features = extract_features(
-                                raw_data.get("description", ""),
-                                raw_data.get("features_text", ""),
-                            )
-                            raw_data["features"] = features
-
-                            # Normalize
-                            normalized = normalize_property(raw_data, site.name)
-
-                            # Validate + quality score
-                            validated = validate_property(normalized)
-
-                            # Dedup check
-                            if deduplicator.is_duplicate(validated):
-                                await report_log(job_id, "DEBUG", f"Duplicate skipped: {validated.get('title', '')[:50]}")
-                                continue
-
-                            site_properties.append(validated)
-
-                            # Update progress
-                            await report_progress(
-                                job_id,
-                                processed=len(all_properties) + len(site_properties),
-                                total=request.maxListingsPerSite * len(request.sites),
-                                current_site=site.name,
-                            )
-
-                        except Exception as e:
-                            total_errors += 1
-                            await report_log(job_id, "ERROR", f"Error processing {listing_url}: {str(e)}")
-
-                    page_num += 1
+                        page_num += 1
 
             except Exception as e:
                 total_errors += 1
@@ -352,31 +502,30 @@ async def _run_scrape_job(request: ScrapeJobRequest) -> None:
         await fetcher.close()
 
 
-def _build_page_url(site: SiteConfig, page_num: int) -> str:
-    """Build paginated URL based on site's pagination type."""
-    base = site.baseUrl
+def _build_page_url_for_start(site: SiteConfig, start_url: str, page_num: int) -> str:
+    """Build paginated URL from a specific start URL based on site's pagination type."""
     pc = site.paginationConfig
 
     if page_num == 0:
-        return base
+        return start_url
 
     if site.paginationType == "url_param":
         param = pc.get("param", "page")
-        separator = "&" if "?" in base else "?"
+        separator = "&" if "?" in start_url else "?"
         offset = pc.get("startFrom", 1)
-        return f"{base}{separator}{param}={page_num + offset}"
+        return f"{start_url}{separator}{param}={page_num + offset}"
 
     elif site.paginationType == "path_segment":
         suffix = pc.get("suffix", "/page/{page}")
-        return base.rstrip("/") + suffix.replace("{page}", str(page_num + 1))
+        return start_url.rstrip("/") + suffix.replace("{page}", str(page_num + 1))
 
     elif site.paginationType == "offset":
         param = pc.get("param", "offset")
         per_page = pc.get("perPage", 20)
-        separator = "&" if "?" in base else "?"
-        return f"{base}{separator}{param}={page_num * per_page}"
+        separator = "&" if "?" in start_url else "?"
+        return f"{start_url}{separator}{param}={page_num * per_page}"
 
-    return base
+    return start_url
 
 
 if __name__ == "__main__":

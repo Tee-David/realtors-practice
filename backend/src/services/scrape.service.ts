@@ -9,6 +9,7 @@ import {
   broadcastScrapeProgress,
   broadcastScrapeComplete,
   broadcastScrapeError,
+  broadcastScrapeProperty,
 } from "../socketServer";
 
 interface StartJobInput {
@@ -53,23 +54,40 @@ export class ScrapeService {
     });
 
     // Build payload for the Python scraper
+    const callbackUrl = config.env === "production"
+      ? `${process.env.API_BASE_URL || "https://realtors-practice-new-api.onrender.com/api"}`
+      : `http://localhost:${config.port}/api`;
+
     const scraperPayload = {
       jobId: job.id,
-      sites: sites.map((site) => ({
-        id: site.id,
-        name: site.name,
-        baseUrl: site.baseUrl,
-        listingSelector: (site.selectors as any)?.listing_link || "a.property-link",
-        selectors: site.selectors || {},
-        paginationType: site.paginationType,
-        paginationConfig: {},
-        requiresJs: site.requiresBrowser,
-        maxPages: site.maxPages,
-      })),
+      sites: sites.map((site) => {
+        const selectors = (site.selectors || {}) as Record<string, any>;
+        const detailSelectors = (site.detailSelectors || selectors) as Record<string, any>;
+
+        // listingSelector is the CSS selector for listing cards/containers on the index page
+        // It's separate from the detail page field selectors
+        const listingSelector = selectors.listingSelector
+          || selectors.listing_container
+          || selectors.listing_link
+          || "a[href]";
+
+        return {
+          id: site.id,
+          name: site.name,
+          baseUrl: site.baseUrl,
+          listPaths: (site as any).listPaths || [],
+          listingSelector,
+          selectors: detailSelectors,
+          paginationType: site.paginationType,
+          paginationConfig: selectors.paginationConfig || {},
+          requiresJs: site.requiresBrowser,
+          maxPages: site.maxPages,
+          delayMin: selectors.delayMin || undefined,
+          delayMax: selectors.delayMax || undefined,
+        };
+      }),
       maxListingsPerSite,
-      callbackUrl: config.env === "production"
-        ? `${process.env.API_BASE_URL || "https://realtors-practice-new-api.onrender.com/api"}/internal`
-        : `http://localhost:${config.port}/api/internal`,
+      callbackUrl,
       parameters: parameters || {},
     };
 
@@ -82,35 +100,69 @@ export class ScrapeService {
     };
     const taskPriority = priorityMap[type] ?? 5;
 
-    // Dispatch to Python scraper — try Redis/Celery first, fall back to direct HTTP
+    // Dispatch to Python scraper — try direct HTTP first (works both locally and
+    // in production since the scraper runs jobs in-process). Fall back to
+    // Redis/Celery only if direct HTTP fails and a Celery worker is available.
     let dispatched = false;
 
-    // Method 1: Redis/Celery queue (production)
-    if (config.redis.url) {
+    // Method 1: Direct HTTP to Python scraper (primary — works everywhere)
+    try {
+      const response = await fetch(`${config.scraper.url}/api/jobs`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Internal-Key": config.scraper.internalKey,
+        },
+        body: JSON.stringify(scraperPayload),
+        signal: AbortSignal.timeout(10000),
+      });
+
+      if (!response.ok) {
+        const body = await response.text();
+        throw new Error(`Scraper responded ${response.status}: ${body}`);
+      }
+
+      dispatched = true;
+      Logger.info(`Scrape job ${job.id} dispatched directly to scraper via HTTP (${sites.length} sites)`);
+    } catch (err: any) {
+      Logger.warn(`Direct HTTP dispatch failed, trying Redis/Celery: ${err.message}`);
+    }
+
+    // Method 2: Redis/Celery queue (fallback — requires a Celery worker)
+    if (!dispatched && config.redis.url) {
       try {
         const Redis = require("ioredis");
         const redis = new Redis(config.redis.url, { connectTimeout: 5000, maxRetriesPerRequest: 1 });
 
-        const celeryTask = {
-          id: `job-${job.id}`,
-          task: "tasks.process_job",
-          args: [scraperPayload],
-          kwargs: {},
-        };
+        const taskId = `job-${job.id}`;
+
+        // Celery wire protocol v2: body is [args, kwargs, embed]
+        const celeryBody = [
+          [scraperPayload],  // args
+          {},                // kwargs
+          { callbacks: null, errbacks: null, chain: null, chord: null },  // embed
+        ];
 
         const payload = {
-          body: Buffer.from(JSON.stringify(celeryTask)).toString("base64"),
+          body: Buffer.from(JSON.stringify(celeryBody)).toString("base64"),
           "content-encoding": "utf-8",
           "content-type": "application/json",
-          headers: {},
+          headers: {
+            lang: "py",
+            task: "tasks.process_job",
+            id: taskId,
+            root_id: taskId,
+            parent_id: null,
+            group: null,
+          },
           properties: {
-            correlation_id: celeryTask.id,
-            reply_to: celeryTask.id,
+            correlation_id: taskId,
+            reply_to: "",
             delivery_mode: 2,
             delivery_info: { exchange: "", routing_key: "celery" },
             priority: taskPriority,
             body_encoding: "base64",
-            delivery_tag: celeryTask.id,
+            delivery_tag: taskId,
           },
         };
 
@@ -119,32 +171,7 @@ export class ScrapeService {
         dispatched = true;
         Logger.info(`Scrape job ${job.id} dispatched to Celery Redis queue (${sites.length} sites)`);
       } catch (err: any) {
-        Logger.warn(`Redis dispatch failed, falling back to direct HTTP: ${err.message}`);
-      }
-    }
-
-    // Method 2: Direct HTTP to Python scraper (development fallback)
-    if (!dispatched) {
-      try {
-        const response = await fetch(`${config.scraper.url}/api/jobs`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Internal-Key": config.scraper.internalKey,
-          },
-          body: JSON.stringify(scraperPayload),
-          signal: AbortSignal.timeout(10000),
-        });
-
-        if (!response.ok) {
-          const body = await response.text();
-          throw new Error(`Scraper responded ${response.status}: ${body}`);
-        }
-
-        dispatched = true;
-        Logger.info(`Scrape job ${job.id} dispatched directly to scraper via HTTP (${sites.length} sites)`);
-      } catch (err: any) {
-        Logger.error(`Direct HTTP dispatch also failed: ${err.message}`);
+        Logger.error(`Redis/Celery dispatch also failed: ${err.message}`);
       }
     }
 
@@ -389,11 +416,32 @@ export class ScrapeService {
   }
 
   /**
+   * Handle a single scraped property — broadcast for live feed.
+   */
+  static async handleProperty(
+    jobId: string,
+    property: Record<string, unknown>
+  ) {
+    broadcastScrapeProperty(jobId, property);
+  }
+
+  /**
    * Handle progress update from scraper.
    */
   static async handleProgress(
     jobId: string,
-    data: { processed: number; total: number; currentSite?: string; message?: string }
+    data: {
+      processed: number;
+      total: number;
+      currentSite?: string;
+      message?: string;
+      currentPage?: number;
+      maxPages?: number;
+      pagesFetched?: number;
+      propertiesFound?: number;
+      duplicates?: number;
+      errors?: number;
+    }
   ) {
     broadcastScrapeProgress(jobId, data);
   }

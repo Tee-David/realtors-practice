@@ -25,7 +25,9 @@ class Config:
     browser_timeout: int = int(os.getenv("BROWSER_TIMEOUT", "30000"))
 
     # Proxy (Brightdata/Smartproxy compatible)
-    proxy_urls_raw: str = os.getenv("PROXY_URLS", "")
+    # Supports both PROXY_LIST and PROXY_URLS env vars (comma-separated URLs)
+    # Format: http://user:pass@host:port
+    proxy_urls_raw: str = os.getenv("PROXY_LIST", os.getenv("PROXY_URLS", ""))
     proxy_urls: list[str] = field(default_factory=list)
 
     def __post_init__(self):

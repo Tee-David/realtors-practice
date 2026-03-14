@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { PropertyService } from "../services/property.service";
 import { VersionService } from "../services/version.service";
 import { sendSuccess, sendError, sendPaginated } from "../utils/apiResponse.util";
+import { logAudit, getClientInfo } from "../middlewares/auditLog.middleware";
 
 export class PropertyController {
   static async list(req: Request, res: Response) {
@@ -29,6 +30,14 @@ export class PropertyController {
       if (result.duplicate) {
         return sendError(res, "Duplicate property", 409, `Existing property: ${result.existingId}`);
       }
+      void logAudit({
+        userId: (req as any).user?.id,
+        action: "CREATE_PROPERTY",
+        entity: "Property",
+        entityId: result.property?.id,
+        details: { source: "MANUAL_EDIT" },
+        ...getClientInfo(req),
+      });
       return sendSuccess(res, result.property, "Property created", 201);
     } catch (err) {
       return sendError(res, "Failed to create property");
@@ -39,6 +48,14 @@ export class PropertyController {
     try {
       const property = await PropertyService.update(req.params.id, req.body, "MANUAL_EDIT", req.user?.id);
       if (!property) return sendError(res, "Property not found", 404);
+      void logAudit({
+        userId: (req as any).user?.id,
+        action: "UPDATE_PROPERTY",
+        entity: "Property",
+        entityId: req.params.id,
+        details: { updatedFields: Object.keys(req.body) },
+        ...getClientInfo(req),
+      });
       return sendSuccess(res, property, "Property updated");
     } catch (err) {
       return sendError(res, "Failed to update property");
@@ -49,6 +66,13 @@ export class PropertyController {
     try {
       const property = await PropertyService.softDelete(req.params.id);
       if (!property) return sendError(res, "Property not found", 404);
+      void logAudit({
+        userId: (req as any).user?.id,
+        action: "DELETE_PROPERTY",
+        entity: "Property",
+        entityId: req.params.id,
+        ...getClientInfo(req),
+      });
       return sendSuccess(res, null, "Property deleted");
     } catch (err) {
       return sendError(res, "Failed to delete property");
@@ -89,6 +113,13 @@ export class PropertyController {
     try {
       const { ids, action } = req.body;
       const result = await PropertyService.bulkAction(ids, action, req.user?.id);
+      void logAudit({
+        userId: (req as any).user?.id,
+        action: "BULK_ACTION",
+        entity: "Property",
+        details: { bulkAction: action, ids, affected: result.count },
+        ...getClientInfo(req),
+      });
       return sendSuccess(res, { affected: result.count }, `Bulk ${action} completed`);
     } catch (err) {
       return sendError(res, "Failed to perform bulk action");

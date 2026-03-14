@@ -10,6 +10,7 @@ import {
   CheckSquare, ChevronDown, MapPin, DollarSign,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import ModernLoader from "@/components/ui/modern-loader";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -622,11 +623,7 @@ export default function SavedSearchesPage() {
 
       {/* Grid */}
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="h-52 rounded-2xl animate-pulse" style={{ backgroundColor: "var(--secondary)" }} />
-          ))}
-        </div>
+        <ModernLoader words={['Loading saved searches...', 'Checking for new matches...', 'Preparing your alerts...']} />
       ) : searches.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 rounded-2xl border" style={{ borderColor: "var(--border)" }}>
           <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ backgroundColor: "rgba(0,1,252,0.08)" }}>

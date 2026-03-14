@@ -10,6 +10,7 @@ import {
   Trash2, Edit, Plus, Eye, Upload, Key, BookMarked, Power,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import ModernLoader from "@/components/ui/modern-loader";
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
@@ -442,17 +443,7 @@ export default function AuditLogPage() {
       {/* Timeline */}
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
         {isLoading ? (
-          <div className="p-4 space-y-3">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl animate-pulse" style={{ backgroundColor: "var(--secondary)" }} />
-                <div className="flex-1 space-y-2">
-                  <div className="h-4 w-3/4 rounded animate-pulse" style={{ backgroundColor: "var(--secondary)" }} />
-                  <div className="h-3 w-1/2 rounded animate-pulse" style={{ backgroundColor: "var(--secondary)" }} />
-                </div>
-              </div>
-            ))}
-          </div>
+          <ModernLoader words={['Loading audit trail...', 'Fetching system events...', 'Tracing activity logs...', 'Compiling event history...']} />
         ) : filteredLogs.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20">
             <Activity className="w-12 h-12 mb-4" style={{ color: "var(--muted-foreground)", opacity: 0.3 }} />

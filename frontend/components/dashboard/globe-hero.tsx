@@ -8,8 +8,8 @@ import { useDashboardKPIs, useDashboardCharts } from "@/hooks/use-analytics";
 import { TrendingUp, Users, Clock, CheckCircle2, DollarSign, Activity, FileText, Share2, BarChart2, Calendar } from "lucide-react";
 import TextType from "@/components/ui/TextType";
 
-// Dynamically import react-globe.gl to prevent SSR issues
-const Globe = dynamic(() => import("react-globe.gl").then((mod) => mod.default), {
+// Lighter cobe-based globe (replaces heavy react-globe.gl + three.js)
+const Globe = dynamic(() => import("@/components/ui/globe"), {
   ssr: false,
   loading: () => (
     <div className="w-full h-full flex flex-col items-center justify-center opacity-50">
@@ -112,8 +112,6 @@ function RadialProgress({ percent, label, value, color }: { percent: number, lab
 // --- Main Hero Component --- //
 
 export function GlobeHero() {
-  const globeRef = useRef<any>(null);
-  const [hexData, setHexData] = useState<any>(null);
   const { data: kpis } = useDashboardKPIs();
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
@@ -131,7 +129,7 @@ export function GlobeHero() {
     year: 2024,
     isMounted: false
   });
-  
+
   // Format numbers visually
   const totalStr = (kpis?.totalProperties || 18650).toLocaleString();
   const newStr = (kpis?.newPropertiesToday || 120).toLocaleString();
@@ -143,7 +141,7 @@ export function GlobeHero() {
     const hour = new Date().getHours();
     const currentGreeting = hour < 12 ? "Good Morning" : hour < 18 ? "Good Afternoon" : "Good Evening";
     const dateOptions: Intl.DateTimeFormatOptions = { weekday: "long", year: "numeric", month: "long", day: "numeric" };
-    
+
     setClientData({
       reqRate: (1200 + Math.random() * 50).toFixed(0),
       greeting: currentGreeting,
@@ -151,31 +149,6 @@ export function GlobeHero() {
       year: new Date().getFullYear(),
       isMounted: true
     });
-
-    // Fetch geojson footprint for the glowing hex globe
-    fetch("https://raw.githubusercontent.com/vasturiano/globe.gl/master/example/datasets/ne_110m_admin_0_countries.geojson")
-      .then(res => res.json())
-      .then(data => setHexData(data))
-      .catch(err => {
-        console.warn("Could not load globe geojson:", err);
-        setHexData({ features: [] }); // Fallback to empty globe instead of crashing
-      });
-      
-    const initGlobe = setInterval(() => {
-      if (globeRef.current) {
-        try {
-          globeRef.current.controls().autoRotate = true;
-          globeRef.current.controls().autoRotateSpeed = 0.8;
-          globeRef.current.controls().enableZoom = false;
-          globeRef.current.pointOfView({ lat: 15, lng: 10, altitude: 2 });
-          clearInterval(initGlobe);
-        } catch (e) {
-          // Ignore if controls not ready yet
-        }
-      }
-    }, 500);
-
-    return () => clearInterval(initGlobe);
   }, []);
 
   // Framer Motion variants for sleek staggered entry
@@ -260,38 +233,52 @@ export function GlobeHero() {
          initial={{ opacity: 0, x: -50 }}
          animate={{ opacity: 1, x: 0 }}
          transition={{ duration: 2, ease: "easeOut" }}
-         className="hidden lg:block absolute -bottom-[35%] -left-[45%] w-[60%] h-[120%] pointer-events-auto z-0"
+         className="hidden lg:block absolute -bottom-[35%] -left-[45%] w-[60%] h-[120%] pointer-events-none z-0"
          style={{ mixBlendMode: isDark ? 'screen' : 'normal' }}
        >
-         {/* Dark backdrop for globe visibility in light mode */}
-         {!isDark && (
-           <div
-             className="absolute inset-0 scale-[0.6] translate-x-[35%] translate-y-[15%]"
-             style={{ background: "radial-gradient(circle, #0a0520 0%, rgba(10,5,32,0.8) 50%, transparent 70%)", borderRadius: "50%" }}
-           />
-         )}
+         {/* Soft backdrop for globe visibility */}
+         <div
+           className={`absolute inset-0 translate-x-[35%] translate-y-[15%] ${isDark ? 'scale-[0.6]' : 'scale-[0.7]'}`}
+           style={{
+             background: isDark
+               ? "radial-gradient(circle, #0a0520 0%, rgba(10,5,32,0.8) 50%, transparent 70%)"
+               : "radial-gradient(circle, rgba(10,15,60,0.85) 0%, rgba(20,25,80,0.6) 40%, rgba(100,110,180,0.2) 65%, transparent 80%)",
+             borderRadius: "50%"
+           }}
+         />
          {/* Premium scanner sliding line across globe */}
          <motion.div
            initial={{ left: "-30%", opacity: 0 }}
-           animate={{ left: "130%", opacity: [0, 0.8, 0.8, 0] }}
+           animate={{ left: "130%", opacity: isDark ? [0, 0.8, 0.8, 0] : [0, 0.6, 0.6, 0] }}
            transition={{ duration: 3.5, ease: "linear", delay: 1.5 }}
-           className="absolute top-[-25%] w-1.5 h-[150%] bg-[#5227FF] rotate-[30deg] z-10 drop-shadow-[0_0_20px_rgba(82,39,255,1)]"
-           style={{ mixBlendMode: isDark ? 'screen' : 'normal' }}
+           className="absolute top-[-25%] w-1.5 h-[150%] rotate-[30deg] z-10"
+           style={{
+             background: isDark ? '#5227FF' : '#0001FC',
+             mixBlendMode: isDark ? 'screen' : 'normal',
+             filter: isDark ? 'drop-shadow(0 0 20px rgba(82,39,255,1))' : 'drop-shadow(0 0 12px rgba(0,1,252,0.6))',
+           }}
          />
-         
-         <Globe
-            ref={globeRef}
-            backgroundColor="rgba(0,0,0,0)"
-            hexPolygonsData={hexData ? hexData.features : []}
-            hexPolygonResolution={3}
-            hexPolygonMargin={0.5}
-            hexPolygonColor={() => `rgba(82,39,255, ${Math.random() * 0.5 + 0.1})`}
-            showGlobe={true}
-            globeImageUrl="//unpkg.com/three-globe/example/img/earth-water.png"
-            bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
-            atmosphereColor="#5227FF"
-            atmosphereAltitude={0.25}
-          />
+
+         <div className="absolute inset-0 flex items-center justify-center translate-x-[35%] translate-y-[10%]">
+           <Globe
+             rotateCities={["lagos", "london", "dubai", "new york"]}
+             rotationSpeed={3000}
+             markers={[
+               { location: [6.5244, 3.3792], size: 0.12 },   // Lagos
+               { location: [9.0579, 7.4951], size: 0.08 },   // Abuja
+               { location: [51.5074, -0.1278], size: 0.06 },  // London
+               { location: [25.2048, 55.2708], size: 0.06 },  // Dubai
+               { location: [40.7128, -74.006], size: 0.06 },  // New York
+             ]}
+             dark={isDark ? 1 : 0}
+             diffuse={isDark ? 1.2 : 2}
+             mapBrightness={isDark ? 6 : 8}
+             baseColor={isDark ? [0.15, 0.08, 0.35] : [0.2, 0.2, 0.6]}
+             glowColor={isDark ? [0.32, 0.15, 1] : [0.1, 0.1, 0.4]}
+             markerColor={isDark ? [0.32, 0.15, 1] : [0, 0.004, 0.99]}
+             className="w-full max-w-[600px]"
+           />
+         </div>
        </motion.div>
 
        <div className="hidden sm:flex absolute bottom-6 left-6 z-10 items-center gap-2 pointer-events-none drop-shadow-[0_2px_4px_rgba(0,0,0,0.15)]">
@@ -399,9 +386,9 @@ export function GlobeHero() {
               <h3 className="text-foreground/80 dark:text-white/80 text-[11px] font-bold tracking-widest uppercase">Discovery Timeline</h3>
               <div className="ml-auto flex gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#4ade80]" />
-                <span className="w-1.5 h-1.5 rounded-full bg-white/20" />
-                <span className="w-1.5 h-1.5 rounded-full bg-white/20" />
-                <span className="w-1.5 h-1.5 rounded-full bg-white/20" />
+                <span className="w-1.5 h-1.5 rounded-full bg-foreground/20 dark:bg-white/20" />
+                <span className="w-1.5 h-1.5 rounded-full bg-foreground/20 dark:bg-white/20" />
+                <span className="w-1.5 h-1.5 rounded-full bg-foreground/20 dark:bg-white/20" />
               </div>
             </div>
             <p className="text-[9px] text-foreground/40 dark:text-white/40 uppercase tracking-wider">Fulfillment duration (days)</p>

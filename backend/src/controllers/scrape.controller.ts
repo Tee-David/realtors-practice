@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { ScrapeService } from "../services/scrape.service";
 import { sendSuccess, sendError, sendPaginated } from "../utils/apiResponse.util";
+import { logAudit, getClientInfo } from "../middlewares/auditLog.middleware";
 
 export class ScrapeController {
   static async startJob(req: Request, res: Response) {
@@ -16,6 +17,14 @@ export class ScrapeController {
         req.user?.id
       );
 
+      void logAudit({
+        userId: (req as any).user?.id,
+        action: "START_SCRAPE",
+        entity: "ScrapeJob",
+        entityId: job.id,
+        details: { siteIds, type, maxListingsPerSite },
+        ...getClientInfo(req),
+      });
       return sendSuccess(res, job, "Scrape job started", 201);
     } catch (err: any) {
       return sendError(res, err.message || "Failed to start scrape job", 500);
@@ -79,6 +88,13 @@ export class ScrapeController {
     try {
       const job = await ScrapeService.stopJob(req.params.id);
       if (!job) return sendError(res, "Job not found", 404);
+      void logAudit({
+        userId: (req as any).user?.id,
+        action: "STOP_SCRAPE",
+        entity: "ScrapeJob",
+        entityId: req.params.id,
+        ...getClientInfo(req),
+      });
       return sendSuccess(res, job, "Job stopped");
     } catch (err: any) {
       return sendError(res, err.message || "Failed to stop job");

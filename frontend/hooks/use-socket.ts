@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import io from "socket.io-client";
+import { supabase } from "@/lib/supabase";
 type SocketInstance = ReturnType<typeof io>;
 
 interface UseSocketOptions {
@@ -18,30 +19,42 @@ export function useSocket({ namespace = "", autoConnect = true }: UseSocketOptio
   useEffect(() => {
     if (!autoConnect) return;
 
-    const url = SOCKET_URL;
-    const token = localStorage.getItem("rp_session");
+    let cancelled = false;
 
-    const socket = io(`${url}${namespace}`, {
-      auth: { token },
-      path: "/ws",
-      autoConnect: true,
-      reconnection: true,
-    });
+    const connect = async () => {
+      // Get Supabase JWT for socket auth (same token the API uses)
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token ?? null;
 
-    socket.on("connect", () => {
-      console.log(`Socket connected to ${namespace}`);
-      setIsConnected(true);
-    });
+      if (cancelled) return;
 
-    socket.on("disconnect", () => {
-      console.log(`Socket disconnected from ${namespace}`);
-      setIsConnected(false);
-    });
+      const socket = io(`${SOCKET_URL}${namespace}`, {
+        auth: { token },
+        path: "/ws",
+        autoConnect: true,
+        reconnection: true,
+      });
 
-    socketRef.current = socket;
+      socket.on("connect", () => {
+        console.log(`Socket connected to ${namespace}`);
+        setIsConnected(true);
+      });
+
+      socket.on("disconnect", () => {
+        console.log(`Socket disconnected from ${namespace}`);
+        setIsConnected(false);
+      });
+
+      socketRef.current = socket;
+    };
+
+    connect();
 
     return () => {
-      socket.disconnect();
+      cancelled = true;
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
     };
   }, [namespace, autoConnect]);
 

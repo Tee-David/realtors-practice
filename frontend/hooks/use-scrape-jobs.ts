@@ -41,6 +41,31 @@ export function useScrapeJob(id: string) {
   });
 }
 
+export interface LiveProgress {
+  jobId: string;
+  processed: number;
+  total: number;
+  currentSite?: string;
+  currentPage?: number;
+  maxPages?: number;
+  pagesFetched?: number;
+  propertiesFound?: number;
+  duplicates?: number;
+  errors?: number;
+  timestamp: string;
+}
+
+export interface LiveProperty {
+  title?: string;
+  price?: number;
+  location?: string;
+  bedrooms?: number;
+  bathrooms?: number;
+  image?: string;
+  source?: string;
+  timestamp: string;
+}
+
 export interface StartScrapeParams {
   type: string;
   siteIds?: string[];

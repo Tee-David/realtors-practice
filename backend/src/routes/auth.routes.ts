@@ -7,6 +7,7 @@ import prisma from "../prismaClient";
 import { sendSuccess, sendError } from "../utils/apiResponse.util";
 import { EmailService } from "../services/email.service";
 import { z } from "zod";
+import { logAudit, getClientInfo } from "../middlewares/auditLog.middleware";
 
 const router = Router();
 
@@ -97,6 +98,14 @@ router.post(
         },
       });
 
+      void logAudit({
+        userId: (req as any).user?.id,
+        action: "REGISTER",
+        entity: "User",
+        entityId: user.id,
+        details: { email: body.email, role: finalRole },
+        ...getClientInfo(req),
+      });
       return sendSuccess(res, user, "User registered successfully", 201);
     } catch (err: any) {
       return sendError(res, err.message, 400);
@@ -258,6 +267,13 @@ router.post("/register-with-code", async (req: Request, res: Response) => {
       data: { usedAt: new Date() },
     });
 
+    void logAudit({
+      action: "REGISTER",
+      entity: "User",
+      entityId: user.id,
+      details: { email: body.email, role: invitation.role, viaInvite: true },
+      ...getClientInfo(req),
+    });
     return sendSuccess(res, {
       id: user.id,
       email: user.email,
@@ -335,6 +351,13 @@ router.get("/me", authenticate, async (req: Request, res: Response) => {
       data: { lastLoginAt: new Date(), loginCount: { increment: 1 } },
     });
 
+    void logAudit({
+      userId: req.user!.id,
+      action: "LOGIN",
+      entity: "User",
+      entityId: req.user!.id,
+      ...getClientInfo(req),
+    });
     return sendSuccess(res, user);
   } catch (err: any) {
     return sendError(res, err.message);
@@ -381,6 +404,14 @@ router.patch("/me", authenticate, async (req: Request, res: Response) => {
       },
     });
 
+    void logAudit({
+      userId: req.user!.id,
+      action: "UPDATE_USER",
+      entity: "User",
+      entityId: req.user!.id,
+      details: { updatedFields: Object.keys(body) },
+      ...getClientInfo(req),
+    });
     return sendSuccess(res, updated, "Profile updated successfully");
   } catch (err: any) {
     return sendError(res, err.message, 400);

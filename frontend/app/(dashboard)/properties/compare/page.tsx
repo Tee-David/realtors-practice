@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { Property } from "@/types/property";
+import ModernLoader from "@/components/ui/modern-loader";
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -653,12 +654,7 @@ export default function ComparePropertiesPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex items-center justify-center py-20">
-          <div
-            className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin"
-            style={{ borderColor: "var(--primary)", borderTopColor: "transparent" }}
-          />
-        </div>
+        <ModernLoader words={['Loading comparison tool...', 'Fetching property details...', 'Preparing side-by-side view...']} />
       }
     >
       <ComparePropertiesContent />

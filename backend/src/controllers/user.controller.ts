@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import prisma from "../prismaClient";
 import { sendSuccess, sendError } from "../utils/apiResponse.util";
 import { z } from "zod";
+import { logAudit, getClientInfo } from "../middlewares/auditLog.middleware";
 
 const roleSchema = z.object({
   role: z.enum(["ADMIN", "EDITOR", "VIEWER", "API_USER"]),
@@ -75,6 +76,14 @@ export class UserController {
         }
       });
 
+      void logAudit({
+        userId: (req as any).user?.id,
+        action: "ROLE_CHANGE",
+        entity: "User",
+        entityId: id,
+        details: { newRole: role, previousRole: targetUser.role },
+        ...getClientInfo(req),
+      });
       return sendSuccess(res, updatedUser, "User role updated successfully");
     } catch (error: any) {
       return sendError(res, error.message || "Failed to update user role");
@@ -110,6 +119,14 @@ export class UserController {
         },
       });
 
+      void logAudit({
+        userId: (req as any).user?.id,
+        action: "DEACTIVATE_USER",
+        entity: "User",
+        entityId: id,
+        details: { isActive: updatedUser.isActive },
+        ...getClientInfo(req),
+      });
       return sendSuccess(
         res,
         updatedUser,
@@ -145,6 +162,14 @@ export class UserController {
         },
       });
 
+      void logAudit({
+        userId: (req as any).user?.id,
+        action: "UPDATE_USER",
+        entity: "User",
+        entityId: userId,
+        details: { updatedFields: Object.keys(data) },
+        ...getClientInfo(req),
+      });
       return sendSuccess(res, updatedUser, "Profile updated successfully");
     } catch (error: any) {
       return sendError(res, error.message || "Failed to update profile");

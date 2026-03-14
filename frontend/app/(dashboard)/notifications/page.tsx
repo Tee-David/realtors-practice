@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useNotifications, useMarkRead, useMarkAllRead } from "@/hooks/use-notifications";
 import { Bell, CheckCheck, ChevronLeft, ChevronRight } from "lucide-react";
+import ModernLoader from "@/components/ui/modern-loader";
 
 type Tab = "all" | "unread";
 
@@ -93,15 +94,7 @@ export default function NotificationsPage() {
       {/* List */}
       <div className="space-y-2">
         {isLoading ? (
-          Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="flex items-start gap-4 p-4 rounded-xl">
-              <div className="w-12 h-12 rounded-full animate-pulse" style={{ backgroundColor: "var(--secondary)" }} />
-              <div className="flex-1 space-y-2">
-                <div className="h-4 w-3/4 rounded animate-pulse" style={{ backgroundColor: "var(--secondary)" }} />
-                <div className="h-3 w-1/2 rounded animate-pulse" style={{ backgroundColor: "var(--secondary)" }} />
-              </div>
-            </div>
-          ))
+          <ModernLoader words={['Fetching notifications...', 'Checking for updates...', 'Loading your alerts...']} />
         ) : notifications.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 rounded-xl border" style={{ borderColor: "var(--border)" }}>
             <Bell className="w-14 h-14 mb-4" style={{ color: "var(--muted-foreground)", opacity: 0.25 }} />

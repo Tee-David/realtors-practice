@@ -113,8 +113,8 @@ export const sites = {
 };
 
 export const search = {
-  search: (params?: Record<string, unknown>) => api.get("/search", { params }),
-  suggestions: (params?: Record<string, unknown>) => api.get("/search/suggestions", { params }),
+  search: (params?: Record<string, unknown>) => api.get("/search", { params, timeout: 30000 }),
+  suggestions: (params?: Record<string, unknown>) => api.get("/search/suggestions", { params, timeout: 15000 }),
 };
 
 export const savedSearches = {
@@ -149,6 +149,8 @@ export const auditLogs = {
 export const exports = {
   csv: (propertyIds?: string[]) => api.post("/export/csv", { propertyIds }, { responseType: "blob" }),
   csvFiltered: (filters: Record<string, unknown>) => api.post("/export/csv/filtered", filters, { responseType: "blob" }),
+  xlsx: (propertyIds?: string[]) => api.get("/export/xlsx", { params: { propertyIds: propertyIds?.join(",") }, responseType: "blob" }),
+  pdf: (propertyIds?: string[]) => api.get("/export/pdf", { params: { propertyIds: propertyIds?.join(",") }, responseType: "blob" }),
 };
 
 export default api;

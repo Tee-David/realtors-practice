@@ -13,6 +13,8 @@ import notificationRoutes from "./notification.routes";
 import exportRoutes from "./export.routes";
 import auditLogRoutes from "./auditLog.routes";
 import geoRoutes from "./geo.routes";
+import backupRoutes from "./backup.routes";
+import systemSettingsRoutes from "./systemSettings.routes";
 
 const router = Router();
 
@@ -30,5 +32,7 @@ router.use("/saved-searches", savedSearchRoutes);
 router.use("/notifications", notificationRoutes);
 router.use("/export", exportRoutes);
 router.use("/audit-logs", auditLogRoutes);
+router.use("/backups", backupRoutes);
+router.use("/settings", systemSettingsRoutes);
 
 export default router;

@@ -1,0 +1,14 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /properties/
+Disallow: /search/
+Disallow: /scraper/
+Disallow: /settings/
+Disallow: /analytics/
+Disallow: /audit-log/
+Disallow: /data-explorer/
+Disallow: /notifications/
+Disallow: /saved-searches/
+
+Sitemap: https://realtors-practice-new.vercel.app/sitemap.xml

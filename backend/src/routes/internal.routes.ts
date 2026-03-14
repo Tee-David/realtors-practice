@@ -38,12 +38,33 @@ router.post("/scrape-results", async (req: Request, res: Response) => {
  */
 router.post("/scrape-progress", async (req: Request, res: Response) => {
   try {
-    const { jobId, processed, total, currentSite, message } = req.body;
+    const { jobId, processed, total, currentSite, message, currentPage, maxPages, pagesFetched, propertiesFound, duplicates, errors } = req.body;
     if (!jobId) {
       return res.status(400).json({ error: "jobId required" });
     }
 
-    await ScrapeService.handleProgress(jobId, { processed, total, currentSite, message });
+    await ScrapeService.handleProgress(jobId, {
+      processed, total, currentSite, message,
+      currentPage, maxPages, pagesFetched, propertiesFound, duplicates, errors,
+    });
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: "Internal error" });
+  }
+});
+
+/**
+ * POST /internal/scrape-property
+ * Receive a single scraped property for live feed display.
+ */
+router.post("/scrape-property", async (req: Request, res: Response) => {
+  try {
+    const { jobId, property } = req.body;
+    if (!jobId || !property) {
+      return res.status(400).json({ error: "jobId and property required" });
+    }
+
+    await ScrapeService.handleProperty(jobId, property);
     return res.json({ success: true });
   } catch (err: any) {
     return res.status(500).json({ error: "Internal error" });

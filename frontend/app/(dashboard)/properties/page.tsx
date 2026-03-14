@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { formatDistanceToNowStrict } from "date-fns";
 import { PropertyGrid } from "@/components/property/property-grid";
 import { PropertyListCard } from "@/components/property/property-list-card";
 import { CategoryPills } from "@/components/property/category-pills";
@@ -21,12 +22,15 @@ import {
   ChevronDown,
   X,
   Building2,
+  Clock,
+  RefreshCw,
 } from "lucide-react";
 import {
   SideSheet,
   SideSheetContent,
 } from "@/components/ui/side-sheet";
 import type { PropertyFilters, Property } from "@/types/property";
+import ModernLoader from "@/components/ui/modern-loader";
 
 const DEFAULT_FILTERS: PropertyFilters = {
   page: 1,
@@ -86,7 +90,17 @@ export default function PropertiesPage() {
     return () => document.removeEventListener("toggle-mobile-filters", handleToggleFilters);
   }, []);
 
-  const { data, isLoading } = useProperties(filters);
+  const { data, isLoading, dataUpdatedAt, isFetching, refetch } = useProperties(filters);
+
+  // Re-render every 30s so the "Updated X ago" text stays fresh
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => setTick((t) => t + 1), 30_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+  const isStale = dataUpdatedAt > 0 && Date.now() - dataUpdatedAt > STALE_THRESHOLD_MS;
 
   const apiProperties = data?.data || [];
   const useMock = process.env.NODE_ENV === "development" && apiProperties.length === 0;
@@ -130,6 +144,25 @@ export default function PropertiesPage() {
         value={filters.category}
         onChange={(category) => handleFilterChange({ ...filters, category, page: 1 })}
       />
+
+      {/* Stale data indicator */}
+      {dataUpdatedAt > 0 && (
+        <div className="flex items-center gap-2 text-xs" style={{ color: isStale ? "var(--accent)" : "var(--muted-foreground)" }}>
+          <Clock size={12} />
+          <span>
+            Updated {formatDistanceToNowStrict(new Date(dataUpdatedAt), { addSuffix: true })}
+          </span>
+          <button
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="inline-flex items-center justify-center rounded-md p-1 transition-colors hover:opacity-70 disabled:opacity-40"
+            style={{ color: isStale ? "var(--accent)" : "var(--muted-foreground)" }}
+            title="Refresh data"
+          >
+            <RefreshCw size={12} className={isFetching ? "animate-spin" : ""} />
+          </button>
+        </div>
+      )}
 
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row gap-3 w-full">
@@ -400,12 +433,7 @@ export default function PropertiesPage() {
           ) : (
             <div className="space-y-3">
               {isLoading ? (
-                <div className="flex items-center justify-center py-20">
-                  <div
-                    className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin"
-                    style={{ borderColor: "var(--primary)", borderTopColor: "transparent" }}
-                  />
-                </div>
+                <ModernLoader words={['Loading property listings...', 'Fetching latest data...', 'Preparing your results...', 'Almost there...']} />
               ) : properties.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 gap-3">
                   <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>

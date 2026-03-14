@@ -14,6 +14,9 @@ interface GlobeProps {
   glowColor?: [number, number, number];
   markers?: Marker[];
   scale?: number;
+  dark?: number;
+  diffuse?: number;
+  mapBrightness?: number;
   className?: string;
   rotateToLocation?: string | [number, number];
   autoRotate?: boolean;
@@ -50,6 +53,9 @@ export default function Globe({
     { location: [40.7128, -74.006], size: 0.1 },
   ],
   scale = 1,
+  dark = 1,
+  diffuse = 1.2,
+  mapBrightness = 6,
   className = 'aspect-square w-full max-w-150',
   rotateToLocation,
   autoRotate = true,
@@ -169,10 +175,10 @@ export default function Globe({
         height: width * 2,
         phi: 0,
         theta: 0,
-        dark: 1,
-        diffuse: 1.2,
+        dark: dark,
+        diffuse: diffuse,
         mapSamples: 16000,
-        mapBrightness: 6,
+        mapBrightness: mapBrightness,
         baseColor: baseColor || [0.3, 0.3, 0.3],
         markerColor: markerColor || [0.1, 0.8, 1],
         glowColor: glowColor || [1, 1, 1],
@@ -231,6 +237,9 @@ export default function Globe({
     glowColor,
     markers,
     scale,
+    dark,
+    diffuse,
+    mapBrightness,
     r,
     autoRotate,
     isVisible,

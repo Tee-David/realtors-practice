@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { format } from "date-fns";
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { Calendar as CalendarIcon, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -98,29 +98,29 @@ export function DateTimePicker({ value, onChange, placeholder = "Pick a date", c
           )}
         </div>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0 z-[1000] border-border shadow-xl rounded-xl overflow-hidden" align="start">
-        <div className="flex bg-card">
+      <PopoverContent className="w-auto max-w-[320px] p-0 z-[1000] border-border shadow-xl rounded-xl overflow-hidden" align="start" sideOffset={4}>
+        <div className="flex flex-col bg-card">
           {/* Calendar Section */}
-          <div className="p-3 border-r border-border/50">
+          <div className="p-3">
             <Calendar
               mode="single"
               selected={date}
               onSelect={setDate}
               className="p-0 border-none"
               classNames={{
-                  months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
-                  month: "space-y-4 w-full",
-                  caption: "flex justify-center pt-1 relative items-center mb-4 text-primary",
-                  caption_label: "text-sm font-bold tracking-wide", 
+                  months: "flex flex-col space-y-3",
+                  month: "space-y-3 w-full",
+                  caption: "flex justify-center pt-1 relative items-center mb-2 text-primary",
+                  caption_label: "text-sm font-bold tracking-wide",
                   nav: "space-x-1 flex items-center absolute right-0 left-0 justify-between px-1",
                   nav_button: "h-7 w-7 bg-secondary/50 rounded-md p-0 opacity-80 hover:opacity-100 flex items-center justify-center text-muted-foreground hover:bg-secondary transition-colors",
-                  table: "w-full border-collapse space-y-1",
-                  head_row: "flex w-full mb-2",
-                  head_cell: "text-muted-foreground rounded-md w-9 font-medium text-[10px] uppercase tracking-wider text-center",
-                  row: "flex w-full mt-2 gap-1",
+                  table: "w-full border-collapse",
+                  head_row: "flex w-full mb-1",
+                  head_cell: "text-muted-foreground rounded-md w-8 font-medium text-[10px] uppercase tracking-wider text-center",
+                  row: "flex w-full mt-1 gap-0.5",
                   cell: "text-center text-sm p-0 relative [&:has([aria-selected])]:bg-transparent",
                   day: cn(
-                    "h-9 w-9 p-0 font-medium aria-selected:opacity-100 rounded-md hover:bg-secondary transition-colors"
+                    "h-8 w-8 p-0 text-xs font-medium aria-selected:opacity-100 rounded-md hover:bg-secondary transition-colors"
                   ),
                   day_selected:
                     "bg-primary font-bold text-primary-foreground hover:bg-primary shadow-sm hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
@@ -131,69 +131,52 @@ export function DateTimePicker({ value, onChange, placeholder = "Pick a date", c
               }}
             />
           </div>
-          
-          {/* Time Picker Section */}
-          <div className="flex flex-col min-w-[120px] bg-secondary/10">
-            <div className="px-3 py-2 border-b border-border/50 bg-secondary/30 shrink-0">
-               <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Time</span>
-            </div>
-            
-            <div className="flex flex-1 overflow-hidden h-[280px]">
-               {/* Hours */}
-               <div className="flex-1 border-r border-border/50 overflow-y-auto scroller px-1 py-1">
-                  {hourOptions.map((h) => (
-                    <button
-                      key={h}
-                      onClick={() => handleHourSelect(h)}
-                      className={cn(
-                        "w-full py-1.5 px-2 text-sm text-center rounded-md mb-0.5 transition-colors",
-                        hours === h 
-                          ? "bg-primary text-primary-foreground font-bold shadow-sm"
-                          : "text-foreground hover:bg-secondary hover:text-foreground font-medium"
-                      )}
-                    >
-                      {h}
-                    </button>
-                  ))}
-               </div>
-               
-               {/* Minutes */}
-               <div className="flex-1 overflow-y-auto scroller px-1 py-1">
-                  {minuteOptions.map((m) => (
-                    <button
-                      key={m}
-                      onClick={() => handleMinuteSelect(m)}
-                      className={cn(
-                        "w-full py-1.5 px-2 text-sm text-center rounded-md mb-0.5 transition-colors",
-                        minutes === m 
-                          ? "bg-primary/20 text-primary font-bold"
-                          : "text-foreground hover:bg-secondary hover:text-foreground font-medium"
-                      )}
-                    >
-                      {m}
-                    </button>
-                  ))}
-               </div>
+
+          {/* Compact Time Picker — inline below calendar */}
+          <div className="px-3 pb-2 border-t border-border/50 pt-2">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 block">Time</span>
+            <div className="flex items-center gap-2">
+              {/* Hours dropdown */}
+              <select
+                value={hours}
+                onChange={(e) => handleHourSelect(e.target.value)}
+                className="flex-1 h-8 rounded-md border border-border/50 bg-secondary/20 px-2 text-sm font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 appearance-none text-center"
+              >
+                {hourOptions.map((h) => (
+                  <option key={h} value={h}>{h}</option>
+                ))}
+              </select>
+              <span className="text-sm font-bold text-muted-foreground">:</span>
+              {/* Minutes dropdown */}
+              <select
+                value={minutes}
+                onChange={(e) => handleMinuteSelect(e.target.value)}
+                className="flex-1 h-8 rounded-md border border-border/50 bg-secondary/20 px-2 text-sm font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 appearance-none text-center"
+              >
+                {minuteOptions.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
             </div>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="p-3 bg-secondary/30 border-t border-border/50 flex items-center justify-between shrink-0">
-           <div className="text-sm font-medium text-muted-foreground">
+        <div className="px-3 py-2 bg-secondary/30 border-t border-border/50 flex items-center justify-between shrink-0">
+           <div className="text-xs font-medium text-muted-foreground">
              {date ? (
                <span className="text-foreground">
-                 {format(date, "MMM dd, yyyy")} at {time}
+                 {format(date, "MMM dd")} at {time}
                </span>
              ) : (
                "No date selected"
              )}
            </div>
-           <Button 
-             size="sm" 
-             onClick={handleApply} 
+           <Button
+             size="sm"
+             onClick={handleApply}
              disabled={!date}
-             className="bg-primary hover:bg-primary/90 font-bold px-6 shadow-sm"
+             className="bg-primary hover:bg-primary/90 font-bold px-4 h-7 text-xs shadow-sm"
            >
              Apply
            </Button>

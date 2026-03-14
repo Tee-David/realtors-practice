@@ -126,12 +126,30 @@ export function broadcastScrapeProgress(
     total: number;
     currentSite?: string;
     message?: string;
+    currentPage?: number;
+    maxPages?: number;
+    pagesFetched?: number;
+    propertiesFound?: number;
+    duplicates?: number;
+    errors?: number;
   }
 ): void {
   if (!scrapeNamespace) return;
   scrapeNamespace.to(`job:${jobId}`).emit("job:progress", {
     jobId,
     ...data,
+    timestamp: new Date().toISOString(),
+  });
+}
+
+export function broadcastScrapeProperty(
+  jobId: string,
+  property: Record<string, unknown>
+): void {
+  if (!scrapeNamespace) return;
+  scrapeNamespace.to(`job:${jobId}`).emit("job:property", {
+    jobId,
+    property,
     timestamp: new Date().toISOString(),
   });
 }

@@ -7,6 +7,7 @@ equivalent URLs map to the same canonical form.
 
 import re
 from urllib.parse import urlparse, urlunparse, urlencode, parse_qs, unquote
+from typing import Optional
 
 from utils.logger import get_logger
 
@@ -83,3 +84,78 @@ class VisitedSet:
 
     def clear(self):
         self._seen.clear()
+
+
+# --- URL Validation ---
+
+# Domains / prefixes that are never property URLs
+_SOCIAL_SHARE_PATTERNS = re.compile(
+    r"(?:"
+    r"facebook\.com/sharer"
+    r"|twitter\.com/intent"
+    r"|x\.com/intent"
+    r"|linkedin\.com/sharing"
+    r"|pinterest\.com/pin/create"
+    r"|reddit\.com/submit"
+    r"|t\.me/share"
+    r"|tumblr\.com/widgets/share"
+    r")",
+    re.IGNORECASE,
+)
+
+_WHATSAPP_DOMAINS = {"wa.me", "api.whatsapp.com", "web.whatsapp.com"}
+
+
+def is_valid_property_url(url: str) -> bool:
+    """Return True if *url* could plausibly be a property listing page.
+
+    Filters out:
+    - WhatsApp links (wa.me, api.whatsapp.com)
+    - mailto: / tel: / javascript: pseudo-protocols
+    - Social-media share/intent links
+    - Fragment-only anchors (#, #section)
+    - Data URIs (data:...)
+    - Empty or whitespace-only strings
+    """
+    if not url or not url.strip():
+        return False
+
+    stripped = url.strip()
+
+    # Fragment-only links
+    if stripped.startswith("#"):
+        return False
+
+    # Pseudo-protocol links
+    lower = stripped.lower()
+    if lower.startswith(("mailto:", "tel:", "javascript:", "data:")):
+        return False
+
+    # Parse what remains
+    try:
+        parsed = urlparse(stripped)
+    except Exception:
+        return False
+
+    # Must have a network location (host) for http(s)
+    if parsed.scheme in ("http", "https"):
+        if not parsed.netloc:
+            return False
+
+        host = parsed.netloc.lower().split(":")[0]  # strip port
+
+        # WhatsApp domains
+        if host in _WHATSAPP_DOMAINS:
+            return False
+
+        # Social share links
+        full = f"{host}{parsed.path}"
+        if _SOCIAL_SHARE_PATTERNS.search(full):
+            return False
+
+    # Reject schemeless URLs that are clearly not pages (edge case safety)
+    elif not parsed.scheme:
+        # Relative URLs are OK — they will be resolved later
+        pass
+
+    return True

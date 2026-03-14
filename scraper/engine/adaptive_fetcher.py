@@ -1,16 +1,24 @@
-"""Adaptive fetcher with fallback chain: requests -> Playwright -> proxy.
+"""Adaptive fetcher with 4-layer cognitive loop fallback chain.
 
-Tries the simplest method first, escalates when blocked or JS-rendered content needed.
-Detects 403/captcha blocks and reports them.
+The cognitive loop architecture ("try fast, fall back smart, learn forever"):
+
+Layer 1: JSON-LD / Structured Data (handled by UniversalExtractor, not here)
+Layer 2: Scrapling StealthyFetcher (anti-bot bypass + adaptive self-healing selectors)
+Layer 3: Crawl4AI + Gemini Flash (page → Markdown → LLM structured extraction)
+Layer 4: Playwright + stealth (full browser fingerprint spoofing for hardest sites)
+
+Each layer is progressively more capable (and slower). When Layer 3 succeeds but
+Layer 2 failed, the self-healing loop discovers new CSS selectors and caches them
+so future scrapes use fast Layer 2 instead of expensive Layer 3.
 """
 
 import asyncio
 import random
 import re
+import threading
+from http.cookiejar import CookieJar
 from typing import Optional
-
-import httpx
-from playwright.async_api import async_playwright, Browser, BrowserContext
+from urllib.parse import urlparse
 
 from config import config
 from utils.logger import get_logger
@@ -22,8 +30,9 @@ logger = get_logger(__name__)
 # Patterns that indicate a captcha / block page
 BLOCK_PATTERNS = [
     re.compile(r"captcha", re.IGNORECASE),
-    re.compile(r"cf-challenge", re.IGNORECASE),          # Cloudflare
-    re.compile(r"challenge-platform", re.IGNORECASE),     # Cloudflare
+    re.compile(r"cf-challenge", re.IGNORECASE),
+    re.compile(r"challenge-platform", re.IGNORECASE),
+    re.compile(r"cf-turnstile", re.IGNORECASE),
     re.compile(r"recaptcha", re.IGNORECASE),
     re.compile(r"hCaptcha", re.IGNORECASE),
     re.compile(r"Access\s+Denied", re.IGNORECASE),
@@ -33,27 +42,219 @@ BLOCK_PATTERNS = [
     re.compile(r"verify\s+you\s+are\s+human", re.IGNORECASE),
     re.compile(r"bot\s+detection", re.IGNORECASE),
     re.compile(r"please\s+complete\s+the\s+security\s+check", re.IGNORECASE),
+    re.compile(r"just\s+a\s+moment", re.IGNORECASE),
+    re.compile(r"checking\s+your\s+browser", re.IGNORECASE),
+]
+
+# Comprehensive stealth script for Playwright
+STEALTH_SCRIPT = """
+Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+delete navigator.__proto__.webdriver;
+window.chrome = {
+    runtime: {
+        onMessage: { addListener: function() {}, removeListener: function() {} },
+        sendMessage: function() {},
+        connect: function() { return { onMessage: { addListener: function() {} }, postMessage: function() {} }; }
+    },
+    loadTimes: function() { return {}; },
+    csi: function() { return {}; },
+    app: { isInstalled: false, getDetails: function() {}, getIsInstalled: function() { return false; }, installState: function() { return 'disabled'; } }
+};
+Object.defineProperty(navigator, 'plugins', {
+    get: () => {
+        const plugins = [
+            { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
+            { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' },
+            { name: 'Native Client', filename: 'internal-nacl-plugin', description: '' },
+        ];
+        plugins.length = 3;
+        return plugins;
+    }
+});
+Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en', 'en-NG'] });
+Object.defineProperty(navigator, 'language', { get: () => 'en-US' });
+Object.defineProperty(navigator, 'platform', { get: () => 'Win32' });
+Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 });
+Object.defineProperty(navigator, 'deviceMemory', { get: () => 8 });
+if (navigator.connection) {
+    Object.defineProperty(navigator.connection, 'rtt', { get: () => 50 });
+}
+if (navigator.permissions) {
+    const originalPermQuery = navigator.permissions.query;
+    navigator.permissions.query = (parameters) => (
+        parameters.name === 'notifications'
+            ? Promise.resolve({ state: 'default', onchange: null })
+            : originalPermQuery(parameters)
+    );
+}
+const getParameter = WebGLRenderingContext.prototype.getParameter;
+WebGLRenderingContext.prototype.getParameter = function(parameter) {
+    if (parameter === 37445) return 'Intel Inc.';
+    if (parameter === 37446) return 'Intel Iris OpenGL Engine';
+    return getParameter.call(this, parameter);
+};
+try {
+    Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
+        get: function() { return window; }
+    });
+} catch(e) {}
+const nativeToString = Function.prototype.toString;
+const customFunctions = new Set();
+Function.prototype.toString = function() {
+    if (customFunctions.has(this)) {
+        return 'function ' + this.name + '() { [native code] }';
+    }
+    return nativeToString.call(this);
+};
+"""
+
+
+# Accept-Language header variants for fingerprint randomization
+_ACCEPT_LANG_VARIANTS = [
+    "en-US,en;q=0.9",
+    "en-US,en;q=0.9,en-NG;q=0.8",
+    "en-GB,en;q=0.9",
+    "en-GB,en-US;q=0.9,en;q=0.8",
+    "en-NG,en;q=0.9,en-US;q=0.8",
+    "en-US,en-GB;q=0.9,en;q=0.8",
+    "en-NG,en-GB;q=0.9,en-US;q=0.8,en;q=0.7",
+]
+
+# Sec-Ch-Ua header variants (different Chrome version numbers)
+_SEC_CH_UA_VARIANTS = [
+    '"Not_A Brand";v="8", "Chromium";v="131", "Google Chrome";v="131"',
+    '"Not_A Brand";v="8", "Chromium";v="130", "Google Chrome";v="130"',
+    '"Not_A Brand";v="8", "Chromium";v="129", "Google Chrome";v="129"',
+    '"Not_A Brand";v="8", "Chromium";v="128", "Google Chrome";v="128"',
+    '"Not_A Brand";v="24", "Chromium";v="131", "Google Chrome";v="131"',
+    '"Chromium";v="131", "Not_A Brand";v="24", "Google Chrome";v="131"',
+    '"Google Chrome";v="130", "Chromium";v="130", "Not_A Brand";v="24"',
 ]
 
 
+def _random_viewport() -> dict:
+    """Generate a random but realistic viewport size."""
+    width = random.randint(1280, 1920)
+    # Round to common increments (multiples of 20)
+    width = (width // 20) * 20
+    height = random.randint(720, 1080)
+    height = (height // 20) * 20
+    return {"width": width, "height": height}
+
+
 class AdaptiveFetcher:
-    """Fetches web pages with automatic fallback on failure."""
+    """Fetches web pages with automatic multi-layer fallback.
+
+    Cognitive loop fallback chain:
+    1. curl_cffi (Chrome TLS fingerprint — fastest, handles basic Cloudflare)
+    2. Scrapling StealthyFetcher (anti-bot bypass, adaptive selectors)
+    3. Crawl4AI (page → clean Markdown for LLM extraction)
+    4. Playwright + stealth (full browser for JS-rendered content)
+    """
 
     def __init__(self):
-        self._http_client = httpx.AsyncClient(
-            timeout=20.0,
-            follow_redirects=True,
-            limits=httpx.Limits(max_connections=10),
-        )
-        self._browser: Optional[Browser] = None
-        self._browser_context: Optional[BrowserContext] = None
+        self._curl_session = None
+        self._scrapling_fetcher = None
+        self._crawl4ai_fetcher = None
+        self._browser = None
+        self._browser_context = None
         self._playwright = None
         self.last_block_reason: Optional[str] = None
+        self._consecutive_blocks = 0
+        self._last_successful_layer: Optional[str] = None
+        # Proxy round-robin state
+        self._proxy_index = 0
+        self._proxy_lock = threading.Lock()
+        # Session cookie persistence keyed by domain
+        self._session_cookies: dict[str, dict[str, str]] = {}
 
-    async def _get_browser(self) -> BrowserContext:
-        """Lazy-init Playwright browser with stealth settings."""
+    @property
+    def last_successful_layer(self) -> Optional[str]:
+        """Which layer last succeeded (for per-site tracking)."""
+        return self._last_successful_layer
+
+    # ── Proxy rotation ──
+
+    def _next_proxy(self) -> str | None:
+        """Round-robin through configured proxy URLs."""
+        if not config.proxy_urls:
+            return None
+        with self._proxy_lock:
+            proxy = config.proxy_urls[self._proxy_index % len(config.proxy_urls)]
+            self._proxy_index += 1
+            return proxy
+
+    def _get_domain_cookies(self, url: str) -> dict[str, str]:
+        """Return persisted session cookies for a domain."""
+        domain = urlparse(url).netloc
+        return self._session_cookies.get(domain, {})
+
+    def _save_domain_cookies(self, url: str, cookies: dict[str, str]) -> None:
+        """Merge new cookies into per-domain session storage."""
+        domain = urlparse(url).netloc
+        existing = self._session_cookies.setdefault(domain, {})
+        existing.update(cookies)
+
+    def _randomized_headers(self) -> dict[str, str]:
+        """Build headers with randomized fingerprint values."""
+        headers = get_random_headers()
+        headers["Accept-Language"] = random.choice(_ACCEPT_LANG_VARIANTS)
+        headers["Sec-Ch-Ua"] = random.choice(_SEC_CH_UA_VARIANTS)
+        headers["Sec-Ch-Ua-Mobile"] = "?0"
+        headers["Sec-Ch-Ua-Platform"] = '"Windows"'
+        return headers
+
+    # ── Layer helpers ──
+
+    def _get_curl_session(self):
+        """Lazy-init curl_cffi session."""
+        if self._curl_session is not None:
+            return self._curl_session
+        try:
+            from curl_cffi.requests import AsyncSession
+            proxy = self._next_proxy()
+            self._curl_session = AsyncSession(
+                impersonate="chrome",
+                timeout=25,
+                allow_redirects=True,
+                max_redirects=5,
+                proxies={"http": proxy, "https": proxy} if proxy else None,
+            )
+            return self._curl_session
+        except ImportError:
+            logger.debug("curl_cffi not installed")
+            return None
+
+    def _get_scrapling(self):
+        """Lazy-init Scrapling fetcher."""
+        if self._scrapling_fetcher is not None:
+            return self._scrapling_fetcher
+        try:
+            from engine.scrapling_fetcher import ScraplingFetcher
+            self._scrapling_fetcher = ScraplingFetcher()
+            return self._scrapling_fetcher
+        except ImportError:
+            logger.debug("scrapling not available")
+            return None
+
+    def _get_crawl4ai(self):
+        """Lazy-init Crawl4AI fetcher."""
+        if self._crawl4ai_fetcher is not None:
+            return self._crawl4ai_fetcher
+        try:
+            from engine.crawl4ai_fetcher import Crawl4AIFetcher
+            self._crawl4ai_fetcher = Crawl4AIFetcher()
+            return self._crawl4ai_fetcher
+        except ImportError:
+            logger.debug("crawl4ai not available")
+            return None
+
+    async def _get_browser(self):
+        """Lazy-init Playwright browser with stealth."""
         if self._browser_context:
             return self._browser_context
+
+        from playwright.async_api import async_playwright
 
         self._playwright = await async_playwright().start()
 
@@ -65,119 +266,232 @@ class AdaptiveFetcher:
             "--disable-infobars",
             "--disable-extensions",
             "--disable-gpu",
+            "--disable-background-timer-throttling",
+            "--disable-backgrounding-occluded-windows",
+            "--disable-renderer-backgrounding",
+            "--disable-features=IsolateOrigins,site-per-process",
+            "--window-size=1920,1080",
         ]
 
-        proxy_settings = None
-        if config.proxy_url:
-            proxy_settings = {"server": config.proxy_url}
+        proxy = self._next_proxy()
+        proxy_settings = {"server": proxy} if proxy else None
 
         self._browser = await self._playwright.chromium.launch(
             headless=config.headless,
             args=launch_args,
         )
 
+        ua = get_random_ua()
+        viewport = _random_viewport()
+        accept_lang = random.choice(_ACCEPT_LANG_VARIANTS)
+        sec_ch_ua = random.choice(_SEC_CH_UA_VARIANTS)
         self._browser_context = await self._browser.new_context(
-            user_agent=get_random_ua(),
-            viewport={"width": 1920, "height": 1080},
+            user_agent=ua,
+            viewport=viewport,
+            screen=viewport,
             locale="en-NG",
             timezone_id="Africa/Lagos",
             proxy=proxy_settings,
             java_script_enabled=True,
+            has_touch=False,
+            is_mobile=False,
+            color_scheme="light",
+            extra_http_headers={
+                "Accept-Language": accept_lang,
+                "Accept-Encoding": "gzip, deflate, br",
+                "Sec-Ch-Ua": sec_ch_ua,
+                "Sec-Ch-Ua-Mobile": "?0",
+                "Sec-Ch-Ua-Platform": '"Windows"',
+            },
         )
 
-        # Stealth: override navigator.webdriver
-        await self._browser_context.add_init_script("""
-            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-            Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
-            Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en', 'en-NG'] });
-            window.chrome = { runtime: {} };
-        """)
-
+        await self._browser_context.add_init_script(STEALTH_SCRIPT)
         return self._browser_context
 
-    async def fetch(self, url: str, requires_js: bool = False) -> Optional[str]:
-        """Fetch a URL with adaptive fallback.
+    # ── Main fetch method ──
 
-        1. If not JS-required, try plain HTTP first
-        2. Fall back to Playwright if HTTP fails or JS is required
+    async def fetch(self, url: str, requires_js: bool = False) -> Optional[str]:
+        """Fetch a URL with adaptive multi-layer fallback.
+
+        Layer order:
+        1. curl_cffi (if not JS-required) — fastest
+        2. Scrapling StealthyFetcher — anti-bot bypass
+        3. Playwright + stealth — full browser fallback
+
+        Note: Crawl4AI (Layer 3 for extraction) is NOT used here for fetching.
+        It's used in fetch_as_markdown() for LLM extraction pipeline.
         """
         await rate_limiter.wait(url)
 
-        if not requires_js:
-            html = await self._fetch_http(url)
-            if html and len(html) > 500:
-                return html
-            logger.debug(f"HTTP fetch insufficient for {url}, falling back to Playwright")
+        # Back off if getting blocked repeatedly
+        if self._consecutive_blocks >= 3:
+            backoff = min(self._consecutive_blocks * 5, 30)
+            logger.info(f"Backing off {backoff}s due to {self._consecutive_blocks} consecutive blocks")
+            await asyncio.sleep(backoff)
 
-        return await self._fetch_playwright(url)
+        # Layer 1: curl_cffi (fast HTTP with Chrome TLS fingerprint)
+        if not requires_js:
+            html = await self._fetch_curl(url)
+            if html and len(html) > 500:
+                self._consecutive_blocks = 0
+                self._last_successful_layer = "curl_cffi"
+                return html
+            logger.debug(f"curl_cffi insufficient for {url}, trying Scrapling")
+
+        # Layer 2: Scrapling StealthyFetcher (anti-bot bypass)
+        scrapling = self._get_scrapling()
+        if scrapling:
+            html = await scrapling.fetch(url)
+            if html and len(html) > 500:
+                block_reason = self._is_blocked(html)
+                if not block_reason:
+                    self._consecutive_blocks = 0
+                    self._last_successful_layer = "scrapling"
+                    return html
+                logger.debug(f"Scrapling blocked ({block_reason}) for {url}")
+            logger.debug(f"Scrapling insufficient for {url}, trying Playwright")
+
+        # Layer 3: Playwright + stealth (full browser)
+        html = await self._fetch_playwright(url)
+        if html:
+            self._consecutive_blocks = 0
+            self._last_successful_layer = "playwright"
+        return html
+
+    async def fetch_as_markdown(self, url: str) -> Optional[str]:
+        """Fetch a URL and return clean Markdown via Crawl4AI.
+
+        Used for the LLM extraction pipeline (Layer 3 of the cognitive loop).
+        When CSS selectors fail, this converts the page to Markdown and passes
+        it to Gemini Flash for structured extraction.
+        """
+        crawl4ai = self._get_crawl4ai()
+        if crawl4ai is None:
+            return None
+        return await crawl4ai.fetch_as_markdown(url)
+
+    # ── Layer implementations ──
 
     @staticmethod
-    def _is_blocked(html: str) -> bool:
-        """Detect if the response is a captcha/block page rather than real content."""
+    def _is_blocked(html: str) -> Optional[str]:
+        """Detect if the response is a captcha/block page."""
         if not html or len(html) < 100:
-            return False
-        # Only check the first 5KB for efficiency
-        snippet = html[:5000]
+            return None
+        snippet = html[:10000]
         for pattern in BLOCK_PATTERNS:
-            if pattern.search(snippet):
-                return True
-        return False
+            match = pattern.search(snippet)
+            if match:
+                return match.group(0)
+        if len(html) < 5000 and "<title>Just a moment...</title>" in html:
+            return "Cloudflare challenge page"
+        return None
 
-    async def _fetch_http(self, url: str) -> Optional[str]:
-        """Simple HTTP GET with rotating headers."""
+    async def _fetch_curl(self, url: str) -> Optional[str]:
+        """HTTP GET using curl_cffi with Chrome TLS fingerprint."""
+        session = self._get_curl_session()
+        if session is None:
+            return await self._fetch_httpx(url)
+
         try:
-            headers = get_random_headers()
-            resp = await self._http_client.get(url, headers=headers)
+            headers = self._randomized_headers()
+            domain = urlparse(url).netloc
+            headers["Referer"] = f"https://{domain}/"
 
-            if resp.status_code == 403:
-                logger.warning(f"HTTP 403 Forbidden for {url} — likely blocked")
-                self.last_block_reason = "403 Forbidden"
+            # Attach persisted session cookies for this domain
+            domain_cookies = self._get_domain_cookies(url)
+            if domain_cookies:
+                headers["Cookie"] = "; ".join(f"{k}={v}" for k, v in domain_cookies.items())
+
+            resp = await session.get(url, headers=headers)
+
+            if resp.status_code in (403, 401):
+                logger.warning(f"curl_cffi {resp.status_code} for {url}")
+                self.last_block_reason = f"{resp.status_code} Forbidden"
+                self._consecutive_blocks += 1
                 return None
             if resp.status_code == 429:
-                logger.warning(f"HTTP 429 Too Many Requests for {url}")
+                logger.warning(f"curl_cffi 429 Rate Limited for {url}")
                 self.last_block_reason = "429 Rate Limited"
+                self._consecutive_blocks += 1
                 return None
             if resp.status_code == 200:
-                if self._is_blocked(resp.text):
-                    logger.warning(f"Captcha/block page detected for {url}")
-                    self.last_block_reason = "Captcha/Block page"
+                text = resp.text
+                block_reason = self._is_blocked(text)
+                if block_reason:
+                    logger.warning(f"Block detected ({block_reason}) for {url}")
+                    self.last_block_reason = block_reason
+                    self._consecutive_blocks += 1
                     return None
                 self.last_block_reason = None
-                return resp.text
+                # Persist cookies from response
+                if hasattr(resp, 'cookies') and resp.cookies:
+                    self._save_domain_cookies(url, dict(resp.cookies))
+                return text
 
-            logger.debug(f"HTTP {resp.status_code} for {url}")
+            logger.debug(f"curl_cffi {resp.status_code} for {url}")
             return None
         except Exception as e:
-            logger.debug(f"HTTP fetch error for {url}: {e}")
+            logger.debug(f"curl_cffi fetch error for {url}: {e}")
+            return None
+
+    async def _fetch_httpx(self, url: str) -> Optional[str]:
+        """Fallback HTTP GET with httpx."""
+        import httpx
+        try:
+            proxy = self._next_proxy()
+            async with httpx.AsyncClient(
+                timeout=20.0,
+                follow_redirects=True,
+                proxy=proxy,
+            ) as client:
+                headers = self._randomized_headers()
+                resp = await client.get(url, headers=headers)
+                if resp.status_code == 200:
+                    block_reason = self._is_blocked(resp.text)
+                    if block_reason:
+                        self.last_block_reason = block_reason
+                        self._consecutive_blocks += 1
+                        return None
+                    self.last_block_reason = None
+                    return resp.text
+                return None
+        except Exception as e:
+            logger.debug(f"httpx fetch error for {url}: {e}")
             return None
 
     async def _fetch_playwright(self, url: str) -> Optional[str]:
-        """Fetch with Playwright (headless Chrome) for JS-rendered content."""
+        """Fetch with Playwright + stealth for JS-rendered content."""
         try:
             context = await self._get_browser()
             page = await context.new_page()
 
             try:
-                # Random delay before navigation (human-like)
-                await asyncio.sleep(random.uniform(0.5, 1.5))
+                await asyncio.sleep(random.uniform(1.0, 2.5))
 
-                await page.goto(url, wait_until="domcontentloaded", timeout=config.browser_timeout)
+                response = await page.goto(
+                    url,
+                    wait_until="domcontentloaded",
+                    timeout=config.browser_timeout,
+                )
 
-                # Dismiss cookie/consent banners
+                if response and response.status in (403, 401, 429):
+                    logger.warning(f"Playwright HTTP {response.status} for {url}")
+                    self.last_block_reason = f"Playwright HTTP {response.status}"
+                    self._consecutive_blocks += 1
+                    return None
+
+                await self._wait_for_cloudflare(page)
                 await self._dismiss_overlays(page)
-
-                # Wait for content to load
-                await page.wait_for_timeout(random.randint(1500, 3000))
-
-                # Scroll down slightly (human-like)
-                await page.evaluate("window.scrollBy(0, window.innerHeight * 0.3)")
-                await page.wait_for_timeout(random.randint(500, 1000))
+                await self._wait_for_content(page)
+                await self._human_scroll(page)
 
                 html = await page.content()
 
-                if self._is_blocked(html):
-                    logger.warning(f"Captcha/block page detected (Playwright) for {url}")
-                    self.last_block_reason = "Captcha/Block page (Playwright)"
+                block_reason = self._is_blocked(html)
+                if block_reason:
+                    logger.warning(f"Block after Playwright ({block_reason}) for {url}")
+                    self.last_block_reason = f"Playwright: {block_reason}"
+                    self._consecutive_blocks += 1
                     return None
 
                 self.last_block_reason = None
@@ -190,24 +504,72 @@ class AdaptiveFetcher:
             logger.warning(f"Playwright fetch error for {url}: {e}")
             return None
 
+    async def _wait_for_cloudflare(self, page) -> None:
+        """Wait for Cloudflare challenge to resolve (up to 15s)."""
+        try:
+            title = await page.title()
+            if "just a moment" in title.lower() or "checking" in title.lower():
+                logger.info("Cloudflare challenge detected, waiting...")
+                for _ in range(15):
+                    await page.wait_for_timeout(1000)
+                    title = await page.title()
+                    if "just a moment" not in title.lower() and "checking" not in title.lower():
+                        logger.info("Cloudflare challenge resolved")
+                        await page.wait_for_timeout(1000)
+                        return
+                logger.warning("Cloudflare challenge did not resolve in 15s")
+        except Exception:
+            pass
+
+    async def _wait_for_content(self, page) -> None:
+        """Wait for content to appear."""
+        content_selectors = [
+            "article", ".property", ".listing", ".card",
+            "[class*='property']", "[class*='listing']",
+            "main", "#content", ".content", "h1", "h2",
+        ]
+        for selector in content_selectors:
+            try:
+                await page.wait_for_selector(selector, timeout=3000)
+                return
+            except Exception:
+                continue
+        await page.wait_for_timeout(random.randint(2000, 4000))
+
+    async def _human_scroll(self, page) -> None:
+        """Simulate human-like scrolling."""
+        try:
+            for _ in range(random.randint(1, 3)):
+                scroll_amount = random.randint(200, 500)
+                await page.evaluate(f"window.scrollBy(0, {scroll_amount})")
+                await page.wait_for_timeout(random.randint(300, 800))
+            if random.random() > 0.7:
+                await page.evaluate(f"window.scrollBy(0, -{random.randint(50, 150)})")
+                await page.wait_for_timeout(random.randint(200, 500))
+        except Exception:
+            pass
+
     async def _dismiss_overlays(self, page) -> None:
         """Try to dismiss common cookie/consent/popup overlays."""
         dismiss_selectors = [
-            # Cookie consent buttons
             "button:has-text('Accept')",
             "button:has-text('Accept All')",
             "button:has-text('I Agree')",
             "button:has-text('Got it')",
             "button:has-text('OK')",
+            "button:has-text('Allow')",
+            "button:has-text('Close')",
             "[id*='cookie'] button",
             "[class*='cookie'] button",
             "[id*='consent'] button",
             "[class*='consent'] button",
-            # Close buttons on modals
+            "[class*='gdpr'] button",
             ".modal .close",
             "[class*='modal'] [class*='close']",
             "[aria-label='Close']",
             "button[class*='dismiss']",
+            "[class*='popup'] button",
+            "[class*='banner'] button",
         ]
 
         for selector in dismiss_selectors:
@@ -221,7 +583,7 @@ class AdaptiveFetcher:
                 continue
 
     async def close(self) -> None:
-        """Clean up browser and HTTP client."""
+        """Clean up all resources."""
         try:
             if self._browser_context:
                 await self._browser_context.close()
@@ -229,6 +591,11 @@ class AdaptiveFetcher:
                 await self._browser.close()
             if self._playwright:
                 await self._playwright.stop()
-            await self._http_client.aclose()
+            if self._curl_session:
+                await self._curl_session.close()
+            if self._scrapling_fetcher:
+                await self._scrapling_fetcher.close()
+            if self._crawl4ai_fetcher:
+                await self._crawl4ai_fetcher.close()
         except Exception as e:
             logger.debug(f"Cleanup error: {e}")

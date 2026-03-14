@@ -305,8 +305,8 @@
 - [ ] Testing: Vitest setup for frontend component tests
 - [ ] Testing: Core backend service tests (property CRUD, versioning, dedup)
 - [ ] Testing: API endpoint integration tests
-- [ ] PWA: manifest.json + service worker for offline/mobile
-- [ ] PWA: App install prompt for mobile users
+- [x] PWA: manifest.json + service worker for offline/mobile
+- [x] PWA: App install prompt for mobile users
 - [ ] Backup: Automated pg_dump cron for local PostgreSQL
 - [ ] Backup: CockroachDB backup verification
 - [ ] Monitoring: UptimeRobot for API health monitoring
@@ -316,6 +316,20 @@
 - [ ] Legal: Data retention policy + auto-purge cron for old data
 - [ ] Fraud: Basic fraud detection signals (abnormally low price, duplicate images)
 - [ ] Fraud: "Flag as suspicious" user action on property cards
+- [x] Security: CSRF protection for Express backend
+- [x] Security: Content Security Policy (CSP) headers
+- [x] Security: Per-user API rate limiting (not just global)
+- [x] Backend: API response gzip compression for large payloads
+- [ ] Backend: Scrape job max-duration timeout (kill stuck jobs)
+- [ ] Backend: Webhook/callback retry with dead-letter queue (scraper → backend)
+- [ ] Backend: Database connection pooling tuning for CockroachDB
+- [x] Frontend: Error boundary per page (crash isolation)
+- [x] Frontend: Stale data indicator on properties page (last refresh time)
+- [x] Frontend: Keyboard shortcuts (Cmd+K search, Cmd+/ help)
+- [ ] Frontend: Better empty states with CTAs across all pages
+- [ ] Frontend: Data explorer table column resize/reorder
+- [ ] Scraper: Scrape result preview before DB insert
+- [ ] Scraper: Selector test playground on Sites page (paste URL, test selectors live)
 - [ ] Final production deployment verification
 - [ ] Domain configuration (if applicable)
 
@@ -457,7 +471,7 @@
 ## Phase 11: Dashboard Hero Redesign
 
 ### Globe Hero Component
-- [x] Create `GlobeHero` component with `react-globe.gl` and dark hex/polygon map
+- [x] Create `GlobeHero` component with lightweight cobe-based `@scrollxui/globe` (replaced react-globe.gl)
 - [x] Add 4 Framer Motion animated KPI stat cards (Index Volume, Asset Velocity, etc.) matching dark neon reference
 - [x] Globe drops in, eases in, and rotates for a futuristic feel
 - [x] Mobile responsive: hide globe on small screens, stack cards, relative positioning for meta/greeting
@@ -501,13 +515,13 @@
 
 ### Data & Mock Removal
 - [ ] Remove all mock data from production URL
-- [ ] Analytics page: replace mock data generation with real API data
+- [x] Analytics page: replace mock data generation with real API data
 - [ ] Active sessions: replace mock session data with real Supabase sessions
 - [ ] Backup section: connect to real backup endpoints (not just toasts)
 
 ### Export System
-- [ ] Add XLSX export support
-- [ ] Add PDF export support
+- [x] Add XLSX export support
+- [x] Add PDF export support
 - [ ] Add logo watermark to all export formats (CSV, XLSX, PDF)
 
 ### Mobile Fixes
@@ -540,8 +554,8 @@
 - [ ] Add timezone settings for the app (affects scrape schedules, logs, backups)
 
 ### Globe Hero (Light Mode)
-- [ ] Fix globe not rendering/visible in light mode (dark globe imagery invisible on white bg)
-- [ ] Adjust globe or add light-mode alternative globe texture
+- [x] Fix globe not rendering/visible in light mode (dark globe imagery invisible on white bg)
+- [x] Adjust globe or add light-mode alternative globe texture
 
 ### Search Page
 - [ ] Fix search page AxiosError (Network Error) — backend connection issue on localhost/prod
@@ -572,7 +586,7 @@
 - [x] Change single-select dropdowns to multi-select where appropriate (location, property type, features)
 
 ### Lanyard & Profile Card
-- [ ] Center profile card on lanyard (currently offset)
+- [x] Center profile card on lanyard (currently offset)
 - [x] Show real user full name on lanyard (not hardcoded "Tee David")
 - [x] Show real user role under name on lanyard
 - [x] Show real user profile picture on lanyard
@@ -604,8 +618,8 @@
 - [ ] Test invite for all roles: ADMIN, EDITOR, VIEWER
 
 ### UI Polish
-- [ ] Install ModernLoader component (`npx shadcn@latest add @scrollxui/modern-loader`)
-- [ ] Replace all page loading spinners/skeletons with `<ModernLoader>` using contextual word arrays
+- [x] Install ModernLoader component (`npx shadcn@latest add @scrollxui/modern-loader`)
+- [x] Replace all page loading spinners/skeletons with `<ModernLoader>` using contextual word arrays
 - [ ] Use contextual loading messages per page (search: "Scanning listings...", scraper: "Writing magic...", etc.)
 
 ### Page Load Performance
@@ -616,10 +630,80 @@
 - [x] Check if large client-side bundles are being shipped unnecessarily
 
 ### Scraper Reliability
-- [ ] Detailed scraper dispatch → execution → callback → result pipeline verification
+- [x] Detailed scraper dispatch → execution → callback → result pipeline verification
 - [x] Add scraper health check endpoint
 - [x] Ensure scraper logs show meaningful error messages when dispatch fails
 - [ ] GitHub Actions cron trigger tested and verified working
+
+---
+
+## Phase 3.5: Scraper Engine Overhaul — "Penetration-Grade" Upgrade
+
+> Replaces the current fetcher/extractor with a multi-layer fallback system
+> that can scrape ANY Nigerian property site regardless of anti-bot protection.
+> See `new-ideas-for-scraper-tech.md` for the original vision.
+
+### Architecture Fixes (✅ Done)
+- [x] Fix `listingSelector` mapping bug in scrape.service.ts (was sending wrong selector type)
+- [x] Rewrite `adaptive_fetcher.py` with `curl_cffi` (Chrome TLS fingerprint bypass)
+- [x] Add comprehensive Playwright stealth script (WebGL, canvas, plugins, navigator)
+- [x] Add Cloudflare challenge auto-wait (detects "Just a moment..." and waits)
+- [x] Add consecutive block detection with smart backoff
+- [x] Port JSON-LD extraction from v2.0 (extracts structured data from `<script type="application/ld+json">`)
+- [x] Add pipe-separated fallback selectors (e.g., "h1.title | h1 | .name")
+- [x] Add auto-detection fallbacks (title from `<title>`/`<h1>`, price from `[class*='price']`, images from `og:image`)
+- [x] Seed 9 Nigerian property sites with verified selectors from v2.0 config.yaml
+- [x] Update `requirements.txt` with `curl_cffi`
+- [x] Update Dockerfile for new dependencies
+
+### Scrapling Integration (Anti-Bot + Self-Healing — ✅ Done)
+- [x] Install `scrapling` library in scraper requirements
+- [x] Create `engine/scrapling_fetcher.py` — StealthyFetcher with anti-bot bypass + adaptive parser
+- [x] Integrate Scrapling as Layer 2 in `adaptive_fetcher.py` (after curl_cffi, before Playwright)
+- [x] Add adaptive self-healing element matching (element fingerprints + similarity matching)
+- [x] Rewrite `adaptive_fetcher.py` with 4-layer cognitive loop architecture
+
+### Crawl4AI Integration (LLM-Assisted Scraping)
+- [x] Install `crawl4ai` library in scraper
+- [x] Create `engine/crawl4ai_fetcher.py` — Crawl4AI renders page to clean Markdown
+- [x] Create `extractors/llm_schema_extractor.py` — Gemini Flash extracts structured property data from Markdown
+- [x] Define Pydantic schema for property extraction (price, bedrooms, location, etc.)
+- [x] Integrate into `adaptive_fetcher.py` as Layer 3 fallback (after Scrapling, before Playwright)
+- [x] Add auto-selector discovery — Gemini analyzes a page and returns CSS selectors for new sites
+- [x] Cache discovered selectors per-site in Redis (avoid re-discovering on every page)
+- [x] Add LLM-based data normalization (e.g., "3 Baths" → 3, "₦5 Million" → 5000000)
+
+### Anti-Detection Hardening
+- [x] Add residential proxy rotation support (BrightData/Smartproxy compatible)
+- [x] Add session/cookie persistence across pages for same domain
+- [x] Add request fingerprint randomization (TLS, headers, viewport)
+- [ ] Integrate ScraperAPI as Layer 4 fallback (paid, handles all anti-bot)
+- [ ] Add `SCRAPERAPI_KEY` env var support
+
+### Pipeline Improvements (Ported from v2.0)
+- [ ] Port category page detection (skip index/directory pages)
+- [x] Port URL validation (filter WhatsApp, mailto, tel, javascript links)
+- [ ] Port incremental scraping (track seen URLs, stop after N consecutive known)
+- [ ] Port relevance scoring heuristics (multi-signal element scoring)
+- [ ] Port 3-strategy pagination (next button click → numeric page links → URL param fallback)
+- [x] Add detail page enrichment (two-level scraping: list page + detail page)
+
+### Image Intelligence (Gemini Vision)
+- [ ] Pass property images to Gemini Flash Vision for description
+- [ ] Extract: renovation status, kitchen quality, interior style, outdoor features
+- [ ] Store image analysis as property metadata
+- [ ] Use image data for fraud detection (stock photos, mismatched descriptions)
+
+### Testing & Verification
+- [ ] Test: Scraper successfully fetches page from PropertyPro.ng
+- [ ] Test: Scraper successfully fetches page from Nigeria Property Centre
+- [ ] Test: Scraper successfully fetches page from Jiji.ng
+- [ ] Test: JSON-LD extraction returns structured data
+- [ ] Test: Crawl4AI + Gemini extracts property data from unknown site
+- [ ] Test: Fallback chain works (JSON-LD → Crawl4AI → CSS → ScraperAPI)
+- [ ] Test: Scraped properties appear in database with quality scores
+- [ ] Test: Deduplication prevents duplicate inserts
+- [ ] Test: Full scrape job dispatched from UI completes successfully
 
 ---
 
@@ -694,15 +778,16 @@
 - **Phase 2:** 30 tasks (30 done ✅)
 - **Phase 2.5:** 11 tasks (11 done ✅)
 - **Phase 3:** 40 tasks (30 done, 10 pending — testing/verification)
+- **Phase 3.5:** ~47 tasks (23 done — architecture + Scrapling + Crawl4AI complete, anti-detection + pipeline pending)
 - **Phase 4:** 21 tasks (19 done, 2 pending — deploy + tests)
 - **Phase 4.5:** 3 tasks (3 done ✅)
 - **Phase 5:** 16 tasks (7 done, 9 pending)
 - **Phase 6:** 22 tasks (19 done, 6 tests pending)
-- **Phase 7:** 38 tasks (15 done)
+- **Phase 7:** 38 tasks (17 done — PWA + exports added)
 - **Phase 8:** 15 tasks (0 done)
 - **Phase 9:** 47 tasks (46 done, 1 pending — `data-tour` attributes)
 - **Phase 10:** 22 tasks (17 done, 5 pending — mapbox, search-map-view, search-result-card, virtualized list)
 - **Phase 11:** 3 tasks (3 done ✅)
 - **Phase 12:** ~75 tasks (~30 done — email, OAuth, profile, perf, saved search, site CRUD, scraper fixes)
 - **Phase 13:** 39 tasks (0 done — ⚠️ blocked until Phases 1–12 are stable)
-- **TOTAL:** ~384 tasks (~179 done, ~205 remaining)
+- **TOTAL:** ~431 tasks (~206 done, ~225 remaining)

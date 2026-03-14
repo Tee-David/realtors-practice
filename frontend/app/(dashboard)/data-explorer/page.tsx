@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { properties as propertiesApi, exports as exportsApi } from "@/lib/api";
-import { Database, CheckCircle, AlertTriangle, Shield, Download, Search, ChevronDown, Eye, X, ArrowUpDown, RefreshCcw } from "lucide-react";
+import { Database, CheckCircle, AlertTriangle, Shield, Download, Search, ChevronDown, Eye, X, ArrowUpDown, RefreshCcw, FileSpreadsheet, FileText } from "lucide-react";
+import ModernLoader from "@/components/ui/modern-loader";
 
 type Tab = "all" | "raw" | "enriched" | "flagged";
 
@@ -94,15 +95,39 @@ export default function DataExplorerPage() {
     }
   };
 
-  const handleExport = async () => {
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+
+  const handleExport = async (format: "csv" | "xlsx" | "pdf" = "csv") => {
     try {
+      setExportMenuOpen(false);
       const ids = selectedIds.size > 0 ? Array.from(selectedIds) : undefined;
-      const res = await exportsApi.csv(ids);
-      const blob = new Blob([res.data], { type: "text/csv" });
+
+      let res;
+      let mimeType: string;
+      let ext: string;
+
+      switch (format) {
+        case "xlsx":
+          res = await exportsApi.xlsx(ids);
+          mimeType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+          ext = "xlsx";
+          break;
+        case "pdf":
+          res = await exportsApi.pdf(ids);
+          mimeType = "application/pdf";
+          ext = "pdf";
+          break;
+        default:
+          res = await exportsApi.csv(ids);
+          mimeType = "text/csv";
+          ext = "csv";
+      }
+
+      const blob = new Blob([res.data], { type: mimeType });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `properties-${Date.now()}.csv`;
+      a.download = `properties-${Date.now()}.${ext}`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
@@ -135,10 +160,57 @@ export default function DataExplorerPage() {
             Inspect, verify, and manage scraped property data
           </p>
         </div>
-        <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-90" style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}>
-          <Download className="w-4 h-4" />
-          Export {selectedIds.size > 0 ? `(${selectedIds.size})` : "All"} CSV
-        </button>
+        <div className="relative">
+          <button
+            onClick={() => setExportMenuOpen(!exportMenuOpen)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-90"
+            style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
+          >
+            <Download className="w-4 h-4" />
+            Export {selectedIds.size > 0 ? `(${selectedIds.size})` : "All"}
+            <ChevronDown className="w-3.5 h-3.5" />
+          </button>
+          {exportMenuOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setExportMenuOpen(false)} />
+              <div
+                className="absolute right-0 top-full mt-1 z-50 w-44 rounded-xl border shadow-lg overflow-hidden"
+                style={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }}
+              >
+                <button
+                  onClick={() => handleExport("csv")}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium hover:opacity-80 transition-colors text-left"
+                  style={{ color: "var(--foreground)" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--secondary)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                >
+                  <Download className="w-4 h-4" style={{ color: "var(--muted-foreground)" }} />
+                  CSV
+                </button>
+                <button
+                  onClick={() => handleExport("xlsx")}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium hover:opacity-80 transition-colors text-left"
+                  style={{ color: "var(--foreground)" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--secondary)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                >
+                  <FileSpreadsheet className="w-4 h-4" style={{ color: "#16a34a" }} />
+                  Excel (.xlsx)
+                </button>
+                <button
+                  onClick={() => handleExport("pdf")}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium hover:opacity-80 transition-colors text-left"
+                  style={{ color: "var(--foreground)" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--secondary)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                >
+                  <FileText className="w-4 h-4" style={{ color: "#dc2626" }} />
+                  PDF
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Tabs */}
@@ -216,9 +288,7 @@ export default function DataExplorerPage() {
             </thead>
             <tbody>
               {isLoading ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <tr key={i}><td colSpan={COLUMNS.length + 2} className="px-3 py-4"><div className="h-4 rounded animate-pulse" style={{ backgroundColor: "var(--secondary)" }} /></td></tr>
-                ))
+                <tr><td colSpan={COLUMNS.length + 2}><ModernLoader words={['Querying property database...', 'Enriching data fields...', 'Validating records...', 'Preparing data view...']} /></td></tr>
               ) : items.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length + 2} className="text-center py-12 text-sm" style={{ color: "var(--muted-foreground)" }}>No properties found</td></tr>
               ) : (

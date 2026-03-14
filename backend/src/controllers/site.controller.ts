@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { SiteService } from "../services/site.service";
 import { sendSuccess, sendError, sendPaginated } from "../utils/apiResponse.util";
 import prisma from "../prismaClient";
+import { logAudit, getClientInfo } from "../middlewares/auditLog.middleware";
 
 export class SiteController {
   static async list(req: Request, res: Response) {
@@ -44,10 +45,26 @@ export class SiteController {
               enabled: req.body.enabled ?? true,
             },
           });
+          void logAudit({
+            userId: (req as any).user?.id,
+            action: "CREATE_SITE",
+            entity: "Site",
+            entityId: restored.id,
+            details: { restored: true },
+            ...getClientInfo(req),
+          });
           return sendSuccess(res, restored, "Site restored", 201);
         }
       }
       const site = await SiteService.create(req.body);
+      void logAudit({
+        userId: (req as any).user?.id,
+        action: "CREATE_SITE",
+        entity: "Site",
+        entityId: site.id,
+        details: { name: site.name },
+        ...getClientInfo(req),
+      });
       return sendSuccess(res, site, "Site created", 201);
     } catch (err: any) {
       if (err?.code === "P2002") {
@@ -61,6 +78,14 @@ export class SiteController {
   static async update(req: Request, res: Response) {
     try {
       const site = await SiteService.update(req.params.id, req.body);
+      void logAudit({
+        userId: (req as any).user?.id,
+        action: "UPDATE_SITE",
+        entity: "Site",
+        entityId: req.params.id,
+        details: { updatedFields: Object.keys(req.body) },
+        ...getClientInfo(req),
+      });
       return sendSuccess(res, site, "Site updated");
     } catch (err) {
       return sendError(res, "Failed to update site");
@@ -73,10 +98,26 @@ export class SiteController {
       if (req.body && typeof req.body.enabled === "boolean") {
         const site = await SiteService.setEnabled(req.params.id, req.body.enabled);
         if (!site) return sendError(res, "Site not found", 404);
+        void logAudit({
+          userId: (req as any).user?.id,
+          action: "TOGGLE_SITE",
+          entity: "Site",
+          entityId: req.params.id,
+          details: { enabled: site.enabled },
+          ...getClientInfo(req),
+        });
         return sendSuccess(res, site, `Site ${site.enabled ? "enabled" : "disabled"}`);
       }
       const site = await SiteService.toggleEnabled(req.params.id);
       if (!site) return sendError(res, "Site not found", 404);
+      void logAudit({
+        userId: (req as any).user?.id,
+        action: "TOGGLE_SITE",
+        entity: "Site",
+        entityId: req.params.id,
+        details: { enabled: site.enabled },
+        ...getClientInfo(req),
+      });
       return sendSuccess(res, site, `Site ${site.enabled ? "enabled" : "disabled"}`);
     } catch (err) {
       return sendError(res, "Failed to toggle site");
@@ -86,6 +127,13 @@ export class SiteController {
   static async delete(req: Request, res: Response) {
     try {
       await SiteService.softDelete(req.params.id);
+      void logAudit({
+        userId: (req as any).user?.id,
+        action: "DELETE_SITE",
+        entity: "Site",
+        entityId: req.params.id,
+        ...getClientInfo(req),
+      });
       return sendSuccess(res, null, "Site deleted");
     } catch (err) {
       return sendError(res, "Failed to delete site");

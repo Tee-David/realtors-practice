@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { SavedSearchService } from "../services/savedSearch.service";
 import { sendSuccess, sendError, sendPaginated } from "../utils/apiResponse.util";
 import { z } from "zod";
+import { logAudit, getClientInfo } from "../middlewares/auditLog.middleware";
 
 const createSchema = z.object({
   name: z.string().min(1).max(100),
@@ -57,6 +58,14 @@ export class SavedSearchController {
         userId: req.user!.id,
         ...data,
       });
+      void logAudit({
+        userId: (req as any).user?.id,
+        action: "CREATE_SAVED_SEARCH",
+        entity: "SavedSearch",
+        entityId: search.id,
+        details: { name: data.name },
+        ...getClientInfo(req),
+      });
       return sendSuccess(res, search, "Saved search created", 201);
     } catch (err: any) {
       if (err.name === "ZodError") {
@@ -71,6 +80,14 @@ export class SavedSearchController {
       const data = updateSchema.parse(req.body);
       const search = await SavedSearchService.update(req.params.id, req.user!.id, data);
       if (!search) return sendError(res, "Saved search not found", 404);
+      void logAudit({
+        userId: (req as any).user?.id,
+        action: "UPDATE_SAVED_SEARCH",
+        entity: "SavedSearch",
+        entityId: req.params.id,
+        details: { updatedFields: Object.keys(data) },
+        ...getClientInfo(req),
+      });
       return sendSuccess(res, search, "Saved search updated");
     } catch (err: any) {
       if (err.name === "ZodError") {
@@ -84,6 +101,13 @@ export class SavedSearchController {
     try {
       const result = await SavedSearchService.delete(req.params.id, req.user!.id);
       if (!result) return sendError(res, "Saved search not found", 404);
+      void logAudit({
+        userId: (req as any).user?.id,
+        action: "DELETE_SAVED_SEARCH",
+        entity: "SavedSearch",
+        entityId: req.params.id,
+        ...getClientInfo(req),
+      });
       return sendSuccess(res, null, "Saved search deleted");
     } catch (err: any) {
       return sendError(res, err.message || "Failed to delete saved search");
