@@ -372,7 +372,7 @@ const updateProfileSchema = z.object({
   phone: z.string().max(20).optional(),
   bio: z.string().max(500).optional(),
   company: z.string().max(100).optional(),
-  avatarUrl: z.string().max(200000).optional().nullable(),
+  avatarUrl: z.string().max(500000).optional().nullable(),
 });
 
 router.patch("/me", authenticate, async (req: Request, res: Response) => {

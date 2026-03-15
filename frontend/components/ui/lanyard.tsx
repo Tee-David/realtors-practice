@@ -1,7 +1,7 @@
 /* eslint-disable react/no-unknown-property */
 'use client';
-import { Component, useEffect, useRef, useState, Suspense, type ReactNode, type ErrorInfo } from 'react';
-import { Canvas, extend, useFrame } from '@react-three/fiber';
+import { Component, useEffect, useRef, useState, useMemo, Suspense, type ReactNode, type ErrorInfo } from 'react';
+import { Canvas, extend, useFrame, useLoader } from '@react-three/fiber';
 import { useGLTF, useTexture, Environment, Lightformer } from '@react-three/drei';
 import {
   BallCollider,
@@ -16,7 +16,7 @@ import { MeshLineGeometry, MeshLineMaterial } from 'meshline';
 import * as THREE from 'three';
 
 const cardGLB = '/card.glb';
-const lanyard = '/lanyard.png';
+const lanyardTex = '/lanyard.png';
 
 extend({ MeshLineGeometry, MeshLineMaterial });
 
@@ -49,6 +49,8 @@ interface LanyardProps {
   gravity?: [number, number, number];
   fov?: number;
   transparent?: boolean;
+  userAvatarUrl?: string;
+  logoUrl?: string;
 }
 
 export default function Lanyard({
@@ -56,6 +58,8 @@ export default function Lanyard({
   gravity = [0, -40, 0],
   fov = 16,
   transparent = true,
+  userAvatarUrl,
+  logoUrl,
 }: LanyardProps) {
   const [isMobile, setIsMobile] = useState<boolean>(() => typeof window !== 'undefined' && window.innerWidth < 768);
   const [glbValid, setGlbValid] = useState<boolean | null>(null);
@@ -116,7 +120,7 @@ export default function Lanyard({
         <Suspense fallback={null}>
           <ambientLight intensity={Math.PI} />
           <Physics gravity={gravity} timeStep={isMobile ? 1 / 30 : 1 / 60}>
-            <Band isMobile={isMobile} />
+            <Band isMobile={isMobile} userAvatarUrl={userAvatarUrl} logoUrl={logoUrl} />
           </Physics>
           <Environment blur={0.75}>
             <Lightformer
@@ -155,13 +159,40 @@ export default function Lanyard({
   );
 }
 
+// Helper: load a texture from a URL (data: or http) using TextureLoader
+function useExternalTexture(url: string | undefined): THREE.Texture | null {
+  const [tex, setTex] = useState<THREE.Texture | null>(null);
+  useEffect(() => {
+    if (!url) { setTex(null); return; }
+    const loader = new THREE.TextureLoader();
+    loader.crossOrigin = 'anonymous';
+    loader.load(
+      url,
+      (loaded) => {
+        loaded.flipY = false;
+        loaded.colorSpace = THREE.SRGBColorSpace;
+        setTex(loaded);
+      },
+      undefined,
+      () => setTex(null),
+    );
+    return () => {
+      if (tex) tex.dispose();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [url]);
+  return tex;
+}
+
 interface BandProps {
   maxSpeed?: number;
   minSpeed?: number;
   isMobile?: boolean;
+  userAvatarUrl?: string;
+  logoUrl?: string;
 }
 
-function Band({ maxSpeed = 50, minSpeed = 0, isMobile = false }: BandProps) {
+function Band({ maxSpeed = 50, minSpeed = 0, isMobile = false, userAvatarUrl, logoUrl }: BandProps) {
   // Using "any" for refs since the exact types depend on Rapier's internals
   const band = useRef<any>(null);
   const fixed = useRef<any>(null);
@@ -184,7 +215,14 @@ function Band({ maxSpeed = 50, minSpeed = 0, isMobile = false }: BandProps) {
   };
 
   const { nodes, materials } = useGLTF(cardGLB) as any;
-  const texture = useTexture(lanyard);
+  const texture = useTexture(lanyardTex);
+
+  // Load avatar texture for front face
+  const avatarTex = useExternalTexture(userAvatarUrl);
+
+  // Load logo texture for back face
+  const logoTex = useExternalTexture(logoUrl);
+
   const [curve] = useState(
     () =>
       new THREE.CatmullRomCurve3([new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()])
@@ -244,6 +282,16 @@ function Band({ maxSpeed = 50, minSpeed = 0, isMobile = false }: BandProps) {
   curve.curveType = 'chordal';
   texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
 
+  // Card dimensions (from CuboidCollider: 0.8 x 1.125)
+  // The group scale is 2.25, so the plane needs to be sized relative to the card geometry
+  const cardGeom = nodes.card.geometry;
+  const bbox = useMemo(() => {
+    cardGeom.computeBoundingBox();
+    return cardGeom.boundingBox!;
+  }, [cardGeom]);
+  const cardW = bbox.max.x - bbox.min.x;
+  const cardH = bbox.max.y - bbox.min.y;
+
   return (
     <>
       <group position={[0, 5, 0]}>
@@ -278,6 +326,7 @@ function Band({ maxSpeed = 50, minSpeed = 0, isMobile = false }: BandProps) {
               drag(new THREE.Vector3().copy(e.point).sub(vec.copy(card.current.translation())));
             }}
           >
+            {/* Base card mesh */}
             <mesh geometry={nodes.card.geometry}>
               <meshPhysicalMaterial
                 map={materials.base.map}
@@ -288,6 +337,31 @@ function Band({ maxSpeed = 50, minSpeed = 0, isMobile = false }: BandProps) {
                 metalness={0.8}
               />
             </mesh>
+
+            {/* Front face overlay: avatar photo */}
+            {avatarTex && (
+              <mesh position={[0, (bbox.min.y + bbox.max.y) / 2, 0.008]}>
+                <planeGeometry args={[cardW * 0.85, cardH * 0.85]} />
+                <meshBasicMaterial
+                  map={avatarTex}
+                  transparent
+                  toneMapped={false}
+                />
+              </mesh>
+            )}
+
+            {/* Back face overlay: logo */}
+            {logoTex && (
+              <mesh position={[0, (bbox.min.y + bbox.max.y) / 2, -0.008]} rotation={[0, Math.PI, 0]}>
+                <planeGeometry args={[cardW * 0.6, cardW * 0.6]} />
+                <meshBasicMaterial
+                  map={logoTex}
+                  transparent
+                  toneMapped={false}
+                />
+              </mesh>
+            )}
+
             <mesh geometry={nodes.clip.geometry} material={materials.metal} material-roughness={0.3} />
             <mesh geometry={nodes.clamp.geometry} material={materials.metal} />
           </group>

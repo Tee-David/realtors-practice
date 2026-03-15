@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { EmailTemplateBuilder } from "@/components/dashboard/email-template-builder";
 import { useThemeConfig } from "@/components/theme-config-provider";
+import { useTheme } from "next-themes";
 import dynamic from "next/dynamic";
 const Lanyard = dynamic(() => import("@/components/ui/lanyard"), {
   ssr: false,
@@ -1193,6 +1194,7 @@ export default function SettingsPage() {
   const [active, setActive] = useState<SettingsSection>("profile");
   const [mobileOpen, setMobileOpen] = useState(false);
   const { data: meData } = useQuery({ queryKey: ["auth-me"], queryFn: async () => (await auth.me()).data.data });
+  const { resolvedTheme } = useTheme();
 
   const activeItem = NAV.find(n => n.key === active)!;
 
@@ -1230,6 +1232,31 @@ export default function SettingsPage() {
         {/* ── Mobile: list → section ── */}
         <div className="flex md:hidden flex-col w-full">
           {!mobileOpen ? (
+            <>
+              {/* Mobile Profile Header */}
+              <div className="rounded-2xl border p-5 mb-4 flex flex-col items-center text-center" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+                {meData?.avatarUrl ? (
+                  <img src={meData.avatarUrl} alt="Avatar" className="w-20 h-20 rounded-full object-cover mb-3 border-2" style={{ borderColor: "var(--border)" }} />
+                ) : (
+                  <div className="w-20 h-20 rounded-full flex items-center justify-center text-2xl font-bold mb-3" style={{ backgroundColor: "rgba(0,1,252,0.1)", color: "var(--primary)" }}>
+                    {(meData?.firstName?.[0] || meData?.email?.[0] || "U").toUpperCase()}
+                  </div>
+                )}
+                <p className="text-base font-bold" style={{ color: "var(--foreground)" }}>
+                  {meData?.firstName ? `${meData.firstName} ${meData.lastName || ""}`.trim() : meData?.email || "User"}
+                </p>
+                <p className="text-xs mt-0.5" style={{ color: "var(--muted-foreground)" }}>
+                  {meData?.role ? meData.role.charAt(0) + meData.role.slice(1).toLowerCase() : "Member"}
+                </p>
+                <button
+                  onClick={() => { setActive("profile"); setMobileOpen(true); }}
+                  className="mt-3 px-5 py-2 rounded-xl text-sm font-semibold border transition-colors hover:bg-[var(--secondary)]"
+                  style={{ borderColor: "var(--foreground)", color: "var(--foreground)" }}
+                >
+                  Edit Profile
+                </button>
+              </div>
+
             <div className="rounded-2xl border overflow-hidden" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
               {NAV.map(item => {
                 const Icon = item.icon;
@@ -1252,6 +1279,7 @@ export default function SettingsPage() {
                 );
               })}
             </div>
+            </>
           ) : (
             <div>
               <button onClick={() => setMobileOpen(false)} className="flex items-center gap-2 text-sm font-medium mb-4" style={{ color: "var(--primary)" }}>
@@ -1284,10 +1312,8 @@ export default function SettingsPage() {
             position={[0, 0, 20]}
             gravity={[0, -40, 0]}
             transparent={true}
-            userName={meData?.firstName ? `${meData.firstName} ${meData.lastName || ""}`.trim() : undefined}
-            userRole={meData?.role || undefined}
-            userHandle={meData?.email?.split("@")[0] || undefined}
             userAvatarUrl={meData?.avatarUrl || undefined}
+            logoUrl={resolvedTheme === "dark" ? "/logo-icon-white.png" : "/logo-icon-blue.png"}
           />
         </div>
       </div>

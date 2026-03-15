@@ -1210,10 +1210,10 @@ export default function ScraperPage() {
         </div>
 
         {/* ── RIGHT COLUMN ─────────────────────────────────────────────── */}
-        <div className="lg:col-span-8 flex flex-col gap-5">
+        <div className="lg:col-span-8 flex flex-col">
 
           {/* Live Terminal */}
-          <Card data-tour="scraper-terminal" className="bg-white dark:bg-[#0A0A0B] border border-border dark:border-white/10 shadow-xl relative overflow-hidden flex flex-col rounded-2xl min-h-[340px] flex-1">
+          <Card data-tour="scraper-terminal" className="bg-white dark:bg-[#0A0A0B] border border-border dark:border-white/10 shadow-xl relative overflow-hidden flex flex-col rounded-2xl min-h-[340px] h-full">
             {/* Terminal header */}
             <CardHeader className="pb-2 border-b border-border dark:border-white/10 bg-slate-50/80 dark:bg-[#0A0A0B]/80 backdrop-blur-xl z-10 flex-shrink-0">
               <div className="flex items-center justify-between">
@@ -1283,98 +1283,99 @@ export default function ScraperPage() {
             <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-white dark:from-[#0A0A0B] to-transparent pointer-events-none z-10" />
           </Card>
 
-          {/* Incoming Properties Feed */}
-          {(pageState === "running" || pageState === "complete") && (
-            <Card data-tour="scraper-feed" className="border shadow-sm overflow-hidden">
-              <CardHeader className="pb-3 border-b border-border/50">
-                <CardTitle className="text-sm font-semibold flex items-center justify-between">
-                  <span className="flex items-center gap-2">
-                    <Home className="w-4 h-4 text-muted-foreground" />
-                    Incoming Properties
-                    {liveProperties.length > 0 && (
-                      <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-primary/10 tabular-nums" style={{ color: "var(--primary)" }}>
-                        {liveProperties.length}
-                      </span>
-                    )}
-                  </span>
-                  {pageState === "running" && (
-                    <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                      <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                      Live
-                    </span>
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                {liveProperties.length === 0 ? (
-                  <div className="py-10 flex flex-col items-center justify-center text-muted-foreground">
-                    <Home className="w-8 h-8 mb-2 opacity-20" />
-                    <p className="text-xs italic">Properties will appear here as they are discovered...</p>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-border/40 max-h-80 overflow-y-auto">
-                    {liveProperties.map((prop, idx) => (
-                      <div key={`${prop.timestamp}-${idx}`} className="flex items-center gap-3 p-3 hover:bg-secondary/20 transition-colors animate-in fade-in slide-in-from-top-1 duration-300">
-                        {prop.image ? (
-                          <img
-                            src={prop.image}
-                            alt=""
-                            className="w-12 h-12 rounded-lg object-cover shrink-0 bg-secondary border border-border"
-                            onError={e => {
-                              (e.target as HTMLImageElement).style.display = "none";
-                            }}
-                          />
-                        ) : (
-                          <div className="w-12 h-12 rounded-lg bg-secondary flex items-center justify-center shrink-0 border border-border">
-                            <Home className="w-5 h-5 text-muted-foreground/30" />
-                          </div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">
-                            {prop.title || "Untitled Listing"}
-                          </p>
-                          <div className="flex flex-wrap items-center gap-2 mt-0.5">
-                            {prop.price !== undefined && prop.price > 0 && (
-                              <span className="text-xs font-bold" style={{ color: "var(--accent)" }}>
-                                {formatPrice(prop.price)}
-                              </span>
-                            )}
-                            {prop.location && (
-                              <span className="text-xs text-muted-foreground truncate">{prop.location}</span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted-foreground">
-                            {prop.bedrooms !== undefined && (
-                              <span>{prop.bedrooms} bed</span>
-                            )}
-                            {prop.bathrooms !== undefined && (
-                              <span>{prop.bathrooms} bath</span>
-                            )}
-                            {prop.source && (
-                              <span className="ml-auto truncate">{prop.source}</span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {pageState === "complete" && liveProperties.length > 0 && (
-                  <div className="p-3 border-t border-border/40 bg-secondary/10">
-                    <Link
-                      href="/properties"
-                      className="flex items-center justify-center gap-1.5 text-xs font-semibold hover:underline"
-                      style={{ color: "var(--primary)" }}
-                    >
-                      View All in Properties <ChevronRight className="w-3.5 h-3.5" />
-                    </Link>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
         </div>
       </div>
+
+      {/* ── Incoming Properties Feed (full-width, before logs) ─────────── */}
+      {(pageState === "running" || pageState === "complete") && (
+        <Card data-tour="scraper-feed" className="border shadow-sm overflow-hidden">
+          <CardHeader className="pb-3 border-b border-border/50">
+            <CardTitle className="text-sm font-semibold flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <Home className="w-4 h-4 text-muted-foreground" />
+                Incoming Properties
+                {liveProperties.length > 0 && (
+                  <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-primary/10 tabular-nums" style={{ color: "var(--primary)" }}>
+                    {liveProperties.length}
+                  </span>
+                )}
+              </span>
+              {pageState === "running" && (
+                <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                  Live
+                </span>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {liveProperties.length === 0 ? (
+              <div className="py-10 flex flex-col items-center justify-center text-muted-foreground">
+                <Home className="w-8 h-8 mb-2 opacity-20" />
+                <p className="text-xs italic">Properties will appear here as they are discovered...</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-border/40 max-h-80 overflow-y-auto">
+                {liveProperties.map((prop, idx) => (
+                  <div key={`${prop.timestamp}-${idx}`} className="flex items-center gap-3 p-3 hover:bg-secondary/20 transition-colors animate-in fade-in slide-in-from-top-1 duration-300">
+                    {prop.image ? (
+                      <img
+                        src={prop.image}
+                        alt=""
+                        className="w-12 h-12 rounded-lg object-cover shrink-0 bg-secondary border border-border"
+                        onError={e => {
+                          (e.target as HTMLImageElement).style.display = "none";
+                        }}
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-lg bg-secondary flex items-center justify-center shrink-0 border border-border">
+                        <Home className="w-5 h-5 text-muted-foreground/30" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">
+                        {prop.title || "Untitled Listing"}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                        {prop.price !== undefined && prop.price > 0 && (
+                          <span className="text-xs font-bold" style={{ color: "var(--accent)" }}>
+                            {formatPrice(prop.price)}
+                          </span>
+                        )}
+                        {prop.location && (
+                          <span className="text-xs text-muted-foreground truncate">{prop.location}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted-foreground">
+                        {prop.bedrooms !== undefined && (
+                          <span>{prop.bedrooms} bed</span>
+                        )}
+                        {prop.bathrooms !== undefined && (
+                          <span>{prop.bathrooms} bath</span>
+                        )}
+                        {prop.source && (
+                          <span className="ml-auto truncate">{prop.source}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {pageState === "complete" && liveProperties.length > 0 && (
+              <div className="p-3 border-t border-border/40 bg-secondary/10">
+                <Link
+                  href="/properties"
+                  className="flex items-center justify-center gap-1.5 text-xs font-semibold hover:underline"
+                  style={{ color: "var(--primary)" }}
+                >
+                  View All in Properties <ChevronRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* ── ScrapeLogsSection ───────────────────────────────────────────── */}
       <div ref={logsSectionRef}>
