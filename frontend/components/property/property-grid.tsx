@@ -119,8 +119,8 @@ export function PropertyGrid({ properties, isLoading, emptyMessage, selectedId, 
       initial="hidden"
       animate="visible"
     >
-      {properties.map((property) => (
-        <motion.div key={property.id} variants={itemVariants} data-property-id={property.id}>
+      {properties.map((property, index) => (
+        <motion.div key={property.id} variants={itemVariants} data-property-id={property.id} {...(index === 0 ? { "data-tour": "property-card" } : {})}>
           <PropertyCard
             property={property}
             isActive={selectedId === property.id}

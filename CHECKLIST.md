@@ -55,8 +55,8 @@
 - [x] Run shadcn init + add components (user terminal)
 - [x] Verify backend health check works
 - [x] Verify frontend dev server runs
-- [ ] Deploy backend to Render
-- [ ] Deploy frontend to Vercel
+- [x] Deploy backend to Render
+- [x] Deploy frontend to Vercel
 
 ## Phase 2: Properties Core
 - [x] Backend: Property service (CRUD with versioning logic)
@@ -418,7 +418,8 @@
 - [x] data-tour attributes added to every major UI element across all pages
 - [x] Tour config: modular steps file, easy to add/update per page
 - [x] Tour button CSS: three distinct brand colors (blue primary, orange skip, green back/exit)
-- [x] Tour button layout: 2-row flex layout (first two buttons share row, third full-width)
+- [x] Tour button layout: CSS grid layout (first two buttons share row, third full-width)
+- [x] Tour navigation delay increased for reliable Next.js page transitions
 
 ---
 
@@ -491,12 +492,12 @@
 - [x] Ensure all dashboard components respect light/dark CSS variables
 
 ### Tour System
-- [ ] Make tour responsive on both mobile and desktop
-- [ ] Tour must highlight the exact element being explained (overlay + highlight)
-- [ ] Tour must be interactive — click sidebar to navigate pages during tour
-- [x] Tour modal button layout: 2 rows — first row has 2 buttons (50/50 width), second row has 1 button (full width)
+- [x] Make tour responsive on both mobile and desktop
+- [x] Tour must highlight the exact element being explained (overlay + highlight)
+- [x] Tour must be interactive — click sidebar to navigate pages during tour
+- [x] Tour modal button layout: CSS grid — first row has 2 buttons (50/50 width), third full-width
 - [ ] Fix confetti animation at tour end (not popping/animating properly)
-- [ ] Tour should cover every part of the app with specific steps per scenario
+- [x] Tour should cover every part of the app with specific steps per scenario
 
 ### Email & Communications
 - [x] Fix email template editor responsiveness (cutoff on desktop and mobile)
@@ -528,7 +529,8 @@
 - [x] Sites page: move options/bulk-action bar above sites list (covered by mobile bottom nav)
 - [x] Saved searches: make "New Search" button responsive (text wrapping issue)
 - [x] Sidebar: fix mobile scroll — admin/logout buttons unreachable on Chrome mobile
-- [x] Notification modal: make responsive on mobile (page is fine, modal isn't)
+- [x] Notification modal: make responsive on mobile (fixed positioning, full-width on mobile)
+- [x] Notification toggle outline clipping fixed on desktop (overflow-visible + outline-offset)
 
 ### Profile & Avatar
 - [x] Profile avatar click in top bar should navigate to profile settings
@@ -556,6 +558,8 @@
 ### Globe Hero (Light Mode)
 - [x] Fix globe not rendering/visible in light mode (dark globe imagery invisible on white bg)
 - [x] Adjust globe or add light-mode alternative globe texture
+- [x] Remove purple radial-gradient background from globe hero
+- [x] Make globe bigger (55% width, 120% height)
 
 ### Search Page
 - [ ] Fix search page AxiosError (Network Error) — backend connection issue on localhost/prod
@@ -589,7 +593,7 @@
 - [x] Center profile card on lanyard (currently offset)
 - [x] Show real user full name on lanyard (not hardcoded "Tee David")
 - [x] Show real user role under name on lanyard
-- [x] Show real user profile picture on lanyard
+- [x] Show real user profile picture on lanyard (front face avatar, back face theme-aware logo)
 - [ ] Make lanyard card text responsive
 
 ### Profile Image Upload
@@ -774,7 +778,7 @@
 ---
 
 ## Running Totals
-- **Phase 1:** 42 tasks (40 done, 2 deployment pending)
+- **Phase 1:** 42 tasks (42 done ✅)
 - **Phase 2:** 30 tasks (30 done ✅)
 - **Phase 2.5:** 11 tasks (11 done ✅)
 - **Phase 3:** 40 tasks (30 done, 10 pending — testing/verification)
@@ -785,9 +789,9 @@
 - **Phase 6:** 22 tasks (19 done, 6 tests pending)
 - **Phase 7:** 38 tasks (17 done — PWA + exports added)
 - **Phase 8:** 15 tasks (0 done)
-- **Phase 9:** 47 tasks (46 done, 1 pending — `data-tour` attributes)
+- **Phase 9:** 48 tasks (48 done ✅)
 - **Phase 10:** 22 tasks (17 done, 5 pending — mapbox, search-map-view, search-result-card, virtualized list)
 - **Phase 11:** 3 tasks (3 done ✅)
-- **Phase 12:** ~75 tasks (~30 done — email, OAuth, profile, perf, saved search, site CRUD, scraper fixes)
+- **Phase 12:** ~75 tasks (~38 done — tour, email, OAuth, profile, globe, notifications, perf, saved search, site CRUD, scraper fixes)
 - **Phase 13:** 39 tasks (0 done — ⚠️ blocked until Phases 1–12 are stable)
 - **TOTAL:** ~431 tasks (~206 done, ~225 remaining)

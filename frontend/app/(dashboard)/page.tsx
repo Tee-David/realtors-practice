@@ -684,7 +684,7 @@ export default function DashboardPage() {
       {/* ============================================================ */}
       {/*  BENTO GRID LAYOUT                                           */}
       {/* ============================================================ */}
-      <BentoGrid className="grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 auto-rows-[minmax(140px,auto)] gap-3 mt-6">
+      <BentoGrid data-tour="kpi-cards" className="grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 auto-rows-[minmax(140px,auto)] gap-3 mt-6">
         {/* Top Section: Revenue Analytics + Categories + Status Analysis */}
         <motion.div
           className="sm:col-span-2 lg:col-span-4"
@@ -695,7 +695,7 @@ export default function DashboardPage() {
           <BentoGridItem className="min-h-[420px] p-0 overflow-hidden" rowSpan={2}>
             <div className="flex flex-col lg:flex-row h-full">
               {/* Left Side: Revenue Analytics (65%) */}
-              <div className="lg:w-[65%] p-5 border-b lg:border-b-0 lg:border-r" style={{ borderColor: 'var(--border)' }}>
+              <div data-tour="revenue-chart" className="lg:w-[65%] p-5 border-b lg:border-b-0 lg:border-r" style={{ borderColor: 'var(--border)' }}>
                 <RevenueAnalyticsChart
                   saleValue={saleValue}
                   rentValue={rentValue}
@@ -708,7 +708,7 @@ export default function DashboardPage() {
               </div>
 
               {/* Right Side: Categories & Status (35%) */}
-              <div className="lg:w-[35%] flex flex-col bg-[var(--secondary)]/10">
+              <div data-tour="category-chart" className="lg:w-[35%] flex flex-col bg-[var(--secondary)]/10">
                 {/* Categories */}
                 <div className="p-5 flex-1 border-b" style={{ borderColor: 'var(--border)' }}>
                   <div className="flex items-center justify-between mb-4">

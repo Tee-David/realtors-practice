@@ -276,7 +276,7 @@ function TrendChart({ data, timeRange, onTimeRange }: { data: ReturnType<typeof 
             </span>
           </div>
         </div>
-        <div className="flex gap-1 p-0.5 rounded-lg" style={{ backgroundColor: "var(--secondary)" }}>
+        <div data-tour="time-range" className="flex gap-1 p-0.5 rounded-lg" style={{ backgroundColor: "var(--secondary)" }}>
           {(["7d", "30d", "90d", "1y"] as TimeRange[]).map(r => (
             <TimeBtn key={r} value={r} active={timeRange === r} onChange={() => onTimeRange(r)} />
           ))}

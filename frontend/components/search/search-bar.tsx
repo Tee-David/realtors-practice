@@ -246,7 +246,7 @@ export function SearchBar({
   const showRecent = showDropdown && !hasQuery && recentSearches.length > 0;
 
   return (
-    <div ref={containerRef} className="relative w-full">
+    <div ref={containerRef} className="relative w-full" data-tour="search-bar">
       <form onSubmit={handleSubmit}>
         <div
           className="flex items-center rounded-2xl transition-shadow"
@@ -366,6 +366,7 @@ export function SearchBar({
           {/* Mic button */}
           {isSupported && (
             <button
+              data-tour="voice-btn"
               type="button"
               onClick={toggleMic}
               className="p-2 mr-1 rounded-full transition-all relative"

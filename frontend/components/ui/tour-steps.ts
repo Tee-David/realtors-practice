@@ -435,7 +435,7 @@ export const fullAppTour = (router: { push: (path: string) => void }) => [
     text: richText("🏠", "Your Full Inventory", "Next, let's look at the Properties page where you manage all your listings."),
     buttons: [
       btn.back("tour"),
-      { classes: "rp-btn-primary", text: "Go to Properties →", action: function(this: ShepherdTour) { router.push("/properties"); setTimeout(() => this.next(), 700); } },
+      { classes: "rp-btn-primary", text: "Go to Properties →", action: function(this: ShepherdTour) { router.push("/properties"); setTimeout(() => this.next(), 1200); } },
       btn.skip(),
     ],
   },
@@ -450,7 +450,7 @@ export const fullAppTour = (router: { push: (path: string) => void }) => [
     text: richText("🔍", "Powerful Search", "Let's explore the AI-powered search experience."),
     buttons: [
       btn.back("tour"),
-      { classes: "rp-btn-primary", text: "Go to Search →", action: function(this: ShepherdTour) { router.push("/search"); setTimeout(() => this.next(), 700); } },
+      { classes: "rp-btn-primary", text: "Go to Search →", action: function(this: ShepherdTour) { router.push("/search"); setTimeout(() => this.next(), 1200); } },
       btn.skip(),
     ],
   },
@@ -465,7 +465,7 @@ export const fullAppTour = (router: { push: (path: string) => void }) => [
     text: richText("⚙️", "The Scraper", "Now let's see how you collect new property data."),
     buttons: [
       btn.back("tour"),
-      { classes: "rp-btn-primary", text: "Go to Scraper →", action: function(this: ShepherdTour) { router.push("/scraper"); setTimeout(() => this.next(), 700); } },
+      { classes: "rp-btn-primary", text: "Go to Scraper →", action: function(this: ShepherdTour) { router.push("/scraper"); setTimeout(() => this.next(), 1200); } },
       btn.skip(),
     ],
   },
@@ -480,7 +480,7 @@ export const fullAppTour = (router: { push: (path: string) => void }) => [
     text: richText("🔖", "Your Watchlists", "Set up alerts for properties that match your criteria."),
     buttons: [
       btn.back("tour"),
-      { classes: "rp-btn-primary", text: "Go to Saved Searches →", action: function(this: ShepherdTour) { router.push("/saved-searches"); setTimeout(() => this.next(), 700); } },
+      { classes: "rp-btn-primary", text: "Go to Saved Searches →", action: function(this: ShepherdTour) { router.push("/saved-searches"); setTimeout(() => this.next(), 1200); } },
       btn.skip(),
     ],
   },
@@ -495,7 +495,7 @@ export const fullAppTour = (router: { push: (path: string) => void }) => [
     text: richText("🗂️", "Deep Data Access", "Inspect, filter, and manage your raw and enriched property data."),
     buttons: [
       btn.back("tour"),
-      { classes: "rp-btn-primary", text: "Go to Data Explorer →", action: function(this: ShepherdTour) { router.push("/data-explorer"); setTimeout(() => this.next(), 700); } },
+      { classes: "rp-btn-primary", text: "Go to Data Explorer →", action: function(this: ShepherdTour) { router.push("/data-explorer"); setTimeout(() => this.next(), 1200); } },
       btn.skip(),
     ],
   },
@@ -510,7 +510,7 @@ export const fullAppTour = (router: { push: (path: string) => void }) => [
     text: richText("📊", "Portfolio Insights", "Let's check out your analytics dashboard."),
     buttons: [
       btn.back("tour"),
-      { classes: "rp-btn-primary", text: "Go to Analytics →", action: function(this: ShepherdTour) { router.push("/analytics"); setTimeout(() => this.next(), 700); } },
+      { classes: "rp-btn-primary", text: "Go to Analytics →", action: function(this: ShepherdTour) { router.push("/analytics"); setTimeout(() => this.next(), 1200); } },
       btn.skip(),
     ],
   },
@@ -525,7 +525,7 @@ export const fullAppTour = (router: { push: (path: string) => void }) => [
     text: richText("📋", "Activity Trail", "See every action taken in the system."),
     buttons: [
       btn.back("tour"),
-      { classes: "rp-btn-primary", text: "Go to Audit Log →", action: function(this: ShepherdTour) { router.push("/audit-log"); setTimeout(() => this.next(), 700); } },
+      { classes: "rp-btn-primary", text: "Go to Audit Log →", action: function(this: ShepherdTour) { router.push("/audit-log"); setTimeout(() => this.next(), 1200); } },
       btn.skip(),
     ],
   },
@@ -540,7 +540,7 @@ export const fullAppTour = (router: { push: (path: string) => void }) => [
     text: richText("⚙️", "Customise Your Experience", "Finally, let's walk through Settings."),
     buttons: [
       btn.back("tour"),
-      { classes: "rp-btn-primary", text: "Go to Settings →", action: function(this: ShepherdTour) { router.push("/settings"); setTimeout(() => this.next(), 700); } },
+      { classes: "rp-btn-primary", text: "Go to Settings →", action: function(this: ShepherdTour) { router.push("/settings"); setTimeout(() => this.next(), 1200); } },
       btn.skip(),
     ],
   },

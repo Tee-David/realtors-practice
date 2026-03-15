@@ -299,6 +299,7 @@ export default function AuditLogPage() {
         </div>
         <div className="flex items-center gap-2">
           <button
+            data-tour="export-csv-btn"
             onClick={exportCsv}
             className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium border transition-colors"
             style={{ borderColor: "var(--border)", color: "var(--foreground)", backgroundColor: "var(--card)" }}
@@ -313,6 +314,7 @@ export default function AuditLogPage() {
             <RefreshCw className="w-4 h-4" />
           </button>
           <button
+            data-tour="audit-filters"
             onClick={() => setShowFilters(!showFilters)}
             className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-colors"
             style={{ borderColor: showFilters ? "var(--primary)" : "var(--border)", color: showFilters ? "var(--primary)" : "var(--foreground)", backgroundColor: showFilters ? "rgba(0,1,252,0.06)" : "var(--card)" }}

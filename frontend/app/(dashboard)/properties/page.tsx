@@ -169,6 +169,7 @@ export default function PropertiesPage() {
         {/* Top/Left Row: Filter and Search */}
         <div className="flex items-center gap-2 flex-1 w-full">
           <button
+            data-tour="filter-panel"
             onClick={() => setFilterSheetOpen(true)}
             className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium border transition-colors shrink-0"
             style={{
@@ -193,6 +194,7 @@ export default function PropertiesPage() {
           </button>
 
           <div
+            data-tour="search-bar"
             className="flex items-center gap-2 px-3 py-2 rounded-xl flex-1 min-w-[180px] relative"
             style={{ backgroundColor: "var(--card)", border: "1px solid var(--border)" }}
           >
@@ -279,6 +281,7 @@ export default function PropertiesPage() {
           </button>
 
           <div
+            data-tour="view-toggle"
             className="flex rounded-xl overflow-hidden border shrink-0"
             style={{ borderColor: "var(--border)" }}
           >

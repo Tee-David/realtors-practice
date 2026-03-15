@@ -612,6 +612,7 @@ export default function SavedSearchesPage() {
           </p>
         </div>
         <button
+          data-tour="new-search-btn"
           onClick={() => setModalOpen(true)}
           className="flex items-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-90 shrink-0"
           style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
@@ -620,6 +621,7 @@ export default function SavedSearchesPage() {
           <span className="hidden sm:inline whitespace-nowrap">New Search</span>
         </button>
       </div>
+
 
       {/* Grid */}
       {isLoading ? (

@@ -302,7 +302,7 @@ export default function SearchPage() {
                     Search using natural language, explore the map, or dive straight into one of our quick suggestions below.
                  </p>
 
-                 <div className="flex flex-wrap justify-center gap-2.5 w-full">
+                 <div data-tour="search-chips" className="flex flex-wrap justify-center gap-2.5 w-full">
                     {dynamicPills.map((suggestion) => (
                       <button
                         key={suggestion}
