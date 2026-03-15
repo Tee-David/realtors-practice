@@ -494,7 +494,7 @@
 - [ ] Make tour responsive on both mobile and desktop
 - [ ] Tour must highlight the exact element being explained (overlay + highlight)
 - [ ] Tour must be interactive — click sidebar to navigate pages during tour
-- [ ] Tour modal button layout: 2 rows — first row has 2 buttons (50/50 width), second row has 1 button (full width)
+- [x] Tour modal button layout: 2 rows — first row has 2 buttons (50/50 width), second row has 1 button (full width)
 - [ ] Fix confetti animation at tour end (not popping/animating properly)
 - [ ] Tour should cover every part of the app with specific steps per scenario
 

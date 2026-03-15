@@ -90,12 +90,12 @@ function SaveBtn({ isLoading, onClick, className = "mt-4" }: { isLoading?: boole
 
 function Toggle({ checked, onChange, label, sub }: { checked: boolean; onChange: () => void; label: string; sub?: string }) {
   return (
-    <div className="flex items-center justify-between py-2.5">
+    <div className="flex items-center justify-between py-2.5 px-1">
       <div>
         <p className="text-sm font-medium" style={{ color: "var(--foreground)" }}>{label}</p>
         {sub && <p className="text-xs mt-0.5" style={{ color: "var(--muted-foreground)" }}>{sub}</p>}
       </div>
-      <button onClick={onChange} className="transition-colors shrink-0 ml-4" style={{ color: checked ? "#16a34a" : "var(--muted-foreground)" }}>
+      <button onClick={onChange} className="transition-colors shrink-0 ml-4 outline-offset-2" style={{ color: checked ? "#16a34a" : "var(--muted-foreground)" }}>
         {checked ? <ToggleRight className="w-7 h-7" /> : <ToggleLeft className="w-7 h-7" />}
       </button>
     </div>
@@ -490,14 +490,15 @@ function NotificationsSection() {
     <div className="space-y-4 max-w-2xl">
       <Card>
         <CardHeader icon={Mail} title="Email Notifications" />
-        <AnimatedList 
-          showGradients={false} 
+        <AnimatedList
+          showGradients={false}
           displayScrollbar={false}
+          className="overflow-visible"
           items={[
             <Toggle key="1" checked={emailMatch}     onChange={() => setEmailMatch(v => !v)}     label="New saved search matches" sub="Alerts when matching properties appear" />,
             <Toggle key="2" checked={emailPriceDrop} onChange={() => setEmailPriceDrop(v => !v)} label="Price drops" sub="Properties you've viewed drop in price" />,
             <Toggle key="3" checked={emailScrape}    onChange={() => setEmailScrape(v => !v)}    label="Scrape job completed" />
-          ]} 
+          ]}
         />
         <div className="mt-4">
           <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Digest Frequency</label>
@@ -512,15 +513,16 @@ function NotificationsSection() {
 
       <Card>
         <CardHeader icon={Bell} title="In-App Notifications" />
-        <AnimatedList 
-          showGradients={false} 
+        <AnimatedList
+          showGradients={false}
           displayScrollbar={false}
+          className="overflow-visible"
           items={[
             <Toggle key="1" checked={inAppMatch}     onChange={() => setInAppMatch(v => !v)}     label="New property matches" />,
             <Toggle key="2" checked={inAppPriceDrop} onChange={() => setInAppPriceDrop(v => !v)} label="Price drops on watched properties" />,
             <Toggle key="3" checked={inAppScrape}    onChange={() => setInAppScrape(v => !v)}    label="Scrape completion alerts" />,
             <Toggle key="4" checked={quietHours}     onChange={() => setQuietHours(v => !v)}     label="Quiet hours (11pm–7am)" sub="Pause all notifications overnight" />
-          ]} 
+          ]}
         />
       </Card>
 
