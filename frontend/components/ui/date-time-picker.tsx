@@ -98,7 +98,7 @@ export function DateTimePicker({ value, onChange, placeholder = "Pick a date", c
           )}
         </div>
       </PopoverTrigger>
-      <PopoverContent className="w-auto max-w-[320px] p-0 z-[1000] border-border shadow-xl rounded-xl overflow-hidden" align="start" sideOffset={4}>
+      <PopoverContent className="w-auto max-w-[320px] p-0 z-[1100] pointer-events-auto border-border shadow-xl rounded-xl overflow-hidden" align="start" sideOffset={4}>
         <div className="flex flex-col bg-card">
           {/* Calendar Section */}
           <div className="p-3">

@@ -57,5 +57,47 @@ export class AnalyticsController {
       return sendError(res, "Failed to retrieve site quality rankings", 500, error.message);
     }
   }
+
+  /**
+   * GET /api/analytics/price-trends
+   * Average price by month over the last 6 months, grouped by listing type.
+   */
+  static async getPriceTrends(req: Request, res: Response) {
+    try {
+      const trends = await AnalyticsService.getPriceTrends();
+      return sendSuccess(res, trends, "Price trends retrieved successfully");
+    } catch (error: any) {
+      Logger.error(`AnalyticsController.getPriceTrends error: ${error.message}`);
+      return sendError(res, "Failed to retrieve price trends", 500, error.message);
+    }
+  }
+
+  /**
+   * GET /api/analytics/quality-distribution
+   * Distribution of quality scores across properties.
+   */
+  static async getQualityDistribution(req: Request, res: Response) {
+    try {
+      const distribution = await AnalyticsService.getQualityDistribution();
+      return sendSuccess(res, distribution, "Quality distribution retrieved successfully");
+    } catch (error: any) {
+      Logger.error(`AnalyticsController.getQualityDistribution error: ${error.message}`);
+      return sendError(res, "Failed to retrieve quality distribution", 500, error.message);
+    }
+  }
+
+  /**
+   * GET /api/analytics/listing-velocity
+   * New listings per day over the past 30 days.
+   */
+  static async getListingVelocity(req: Request, res: Response) {
+    try {
+      const velocity = await AnalyticsService.getListingVelocity();
+      return sendSuccess(res, velocity, "Listing velocity retrieved successfully");
+    } catch (error: any) {
+      Logger.error(`AnalyticsController.getListingVelocity error: ${error.message}`);
+      return sendError(res, "Failed to retrieve listing velocity", 500, error.message);
+    }
+  }
 }
 

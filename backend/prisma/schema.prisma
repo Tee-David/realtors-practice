@@ -491,3 +491,18 @@ model SystemSetting {
 
   @@index([category])
 }
+
+// ==================== MARKET INTELLIGENCE ====================
+
+model SearchQuery {
+  id          String    @id @default(cuid())
+  query       String
+  userId      String?
+  resultCount Int
+  filters     Json?
+  createdAt   DateTime  @default(now())
+
+  @@index([resultCount])
+  @@index([createdAt])
+  @@index([query])
+}

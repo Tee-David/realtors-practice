@@ -167,7 +167,7 @@ export default function SitesPage() {
       if (lines.length === 0) { toast.error("Enter at least one source."); return; }
       const toastId = toast.loading(`Adding ${lines.length} sources...`);
       let successCount = 0;
-      let lastError = "";
+      const errors: string[] = [];
       for (const line of lines) {
         try {
           let nameStr = "", urlStr = "";
@@ -176,17 +176,23 @@ export default function SitesPage() {
           else { urlStr = line; }
           if (!urlStr.startsWith('http')) { if (nameStr?.startsWith('http')) { [urlStr, nameStr] = [nameStr, urlStr]; } }
           if (!urlStr.startsWith('http')) urlStr = 'https://' + urlStr;
-          try { new URL(urlStr); } catch { continue; }
-          const hostname = new URL(urlStr).hostname.replace('www.', '');
+          try { new URL(urlStr); } catch { errors.push(`Invalid URL: ${line}`); continue; }
+          const hostname = new URL(urlStr).hostname.replace(/^www\./, '');
           await addSite.mutateAsync({ name: nameStr || hostname, baseUrl: urlStr, key: generateKey(urlStr), enabled: true, selectors: {} });
           successCount++;
         } catch (err: any) {
-          lastError = err.response?.data?.message || err.response?.data?.error || err.message || "";
+          const msg = err.response?.data?.message || err.response?.data?.error || err.message || "Unknown error";
+          errors.push(`${line.substring(0, 40)}: ${msg}`);
         }
       }
       toast.dismiss(toastId);
-      if (successCount > 0) { toast.success(`Added ${successCount} of ${lines.length} sources!`); setIsAddModalOpen(false); setBulkUrls(""); }
-      else { toast.error(lastError || "No valid sources could be added. Check URLs and try again."); }
+      if (successCount > 0) {
+        toast.success(`Added ${successCount} of ${lines.length} sources!`);
+        if (errors.length > 0) toast.error(`${errors.length} failed: ${errors[0]}`);
+        setIsAddModalOpen(false); setBulkUrls("");
+      } else {
+        toast.error(errors[0] || "No valid sources could be added. Check URLs and try again.");
+      }
     }
   };
 

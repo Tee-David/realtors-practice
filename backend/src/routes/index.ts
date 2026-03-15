@@ -15,6 +15,7 @@ import auditLogRoutes from "./auditLog.routes";
 import geoRoutes from "./geo.routes";
 import backupRoutes from "./backup.routes";
 import systemSettingsRoutes from "./systemSettings.routes";
+import marketRoutes from "./market.routes";
 
 const router = Router();
 
@@ -34,5 +35,6 @@ router.use("/export", exportRoutes);
 router.use("/audit-logs", auditLogRoutes);
 router.use("/backups", backupRoutes);
 router.use("/settings", systemSettingsRoutes);
+router.use("/market", marketRoutes);
 
 export default router;

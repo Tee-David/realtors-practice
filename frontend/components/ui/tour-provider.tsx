@@ -83,23 +83,38 @@ export function TourProvider() {
       localStorage.setItem(TOUR_SEEN_KEY, "true");
       document.dispatchEvent(new CustomEvent("tour-active", { detail: false }));
       // Fire real confetti bursts
+      const colors = ["#0001FC", "#FF6600", "#0a6906", "#8b5cf6", "#facc15"];
+
+      // Initial big burst from center
+      confetti({
+        particleCount: 120,
+        spread: 100,
+        origin: { x: 0.5, y: 0.5 },
+        colors,
+        startVelocity: 45,
+        gravity: 0.8,
+        scalar: 1.1,
+      });
+
+      // Sustained side cannons
       const duration = 3000;
       const end = Date.now() + duration;
-      const colors = ["#0001FC", "#FF6600", "#0a6906", "#8b5cf6", "#facc15"];
       (function frame() {
         confetti({
-          particleCount: 4,
+          particleCount: 8,
           angle: 60,
-          spread: 55,
+          spread: 70,
           origin: { x: 0, y: 0.7 },
           colors,
+          startVelocity: 35,
         });
         confetti({
-          particleCount: 4,
+          particleCount: 8,
           angle: 120,
-          spread: 55,
+          spread: 70,
           origin: { x: 1, y: 0.7 },
           colors,
+          startVelocity: 35,
         });
         if (Date.now() < end) requestAnimationFrame(frame);
       })();

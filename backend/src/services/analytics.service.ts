@@ -177,4 +177,130 @@ export class AnalyticsService {
       throw error;
     }
   }
+
+  /**
+   * Price trends over recent months — average price grouped by month.
+   */
+  static async getPriceTrends() {
+    try {
+      const cacheKey = "analytics:price_trends";
+      const cached = await RedisClient.get(cacheKey);
+      if (cached) return JSON.parse(cached);
+
+      const sixMonthsAgo = new Date();
+      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+      const properties = await prisma.property.findMany({
+        where: {
+          deletedAt: null,
+          price: { not: null, gt: 0 },
+          createdAt: { gte: sixMonthsAgo },
+        },
+        select: {
+          price: true,
+          listingType: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: "asc" },
+      });
+
+      // Group by year-month and listing type
+      const monthlyMap = new Map<string, { total: number; count: number }>();
+      for (const p of properties) {
+        const key = `${p.createdAt.getFullYear()}-${String(p.createdAt.getMonth() + 1).padStart(2, "0")}:${p.listingType}`;
+        const existing = monthlyMap.get(key) || { total: 0, count: 0 };
+        existing.total += p.price!;
+        existing.count += 1;
+        monthlyMap.set(key, existing);
+      }
+
+      const result = Array.from(monthlyMap.entries()).map(([key, data]) => {
+        const [month, listingType] = key.split(":");
+        return {
+          month,
+          listingType,
+          avgPrice: Math.round(data.total / data.count),
+          count: data.count,
+        };
+      });
+
+      await RedisClient.set(cacheKey, JSON.stringify(result), CACHE_TTL);
+      return result;
+    } catch (error: any) {
+      Logger.error(`Error in getPriceTrends: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Distribution of quality scores across all properties.
+   */
+  static async getQualityDistribution() {
+    try {
+      const cacheKey = "analytics:quality_dist";
+      const cached = await RedisClient.get(cacheKey);
+      if (cached) return JSON.parse(cached);
+
+      const [excellent, good, fair, poor, unscored] = await Promise.all([
+        prisma.property.count({ where: { deletedAt: null, qualityScore: { gte: 80 } } }),
+        prisma.property.count({ where: { deletedAt: null, qualityScore: { gte: 60, lt: 80 } } }),
+        prisma.property.count({ where: { deletedAt: null, qualityScore: { gte: 40, lt: 60 } } }),
+        prisma.property.count({ where: { deletedAt: null, qualityScore: { gte: 0, lt: 40 } } }),
+        prisma.property.count({ where: { deletedAt: null, qualityScore: null } }),
+      ]);
+
+      const result = [
+        { range: "Excellent (80-100)", count: excellent },
+        { range: "Good (60-79)", count: good },
+        { range: "Fair (40-59)", count: fair },
+        { range: "Poor (0-39)", count: poor },
+        { range: "Unscored", count: unscored },
+      ];
+
+      await RedisClient.set(cacheKey, JSON.stringify(result), CACHE_TTL);
+      return result;
+    } catch (error: any) {
+      Logger.error(`Error in getQualityDistribution: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Listing velocity — new listings per day over the past 30 days.
+   */
+  static async getListingVelocity() {
+    try {
+      const cacheKey = "analytics:listing_velocity";
+      const cached = await RedisClient.get(cacheKey);
+      if (cached) return JSON.parse(cached);
+
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+      const properties = await prisma.property.findMany({
+        where: {
+          deletedAt: null,
+          createdAt: { gte: thirtyDaysAgo },
+        },
+        select: { createdAt: true },
+        orderBy: { createdAt: "asc" },
+      });
+
+      const dailyMap = new Map<string, number>();
+      for (const p of properties) {
+        const day = p.createdAt.toISOString().split("T")[0];
+        dailyMap.set(day, (dailyMap.get(day) || 0) + 1);
+      }
+
+      const result = Array.from(dailyMap.entries()).map(([date, count]) => ({
+        date,
+        count,
+      }));
+
+      await RedisClient.set(cacheKey, JSON.stringify(result), CACHE_TTL);
+      return result;
+    } catch (error: any) {
+      Logger.error(`Error in getListingVelocity: ${error.message}`);
+      throw error;
+    }
+  }
 }
