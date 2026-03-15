@@ -29,6 +29,10 @@ from pipeline.validator import validate_property
 from pipeline.deduplicator import Deduplicator
 from pipeline.normalizer import normalize_property
 from pipeline.enricher import enrich_property
+from pipeline.page_classifier import should_skip_page, classify_page
+from pipeline.incremental import IncrementalTracker
+from pipeline.relevance_scorer import RelevanceScorer
+from engine.pagination_strategy import PaginationStrategy
 from utils.callback import report_progress, report_results, report_error, report_log, report_property
 from utils.robots_checker import is_allowed as robots_allowed, get_crawl_delay
 from utils.url_normalizer import normalize_url, VisitedSet, is_valid_property_url
@@ -223,6 +227,19 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
             await report_log(job_id, "INFO", f"Scraping site: {site.name} ({site.baseUrl})")
             site_properties: list[dict[str, Any]] = []
 
+            # Initialize per-site pipeline improvements
+            incremental = IncrementalTracker(
+                redis_client=redis_client,
+                site_id=site.id,
+                consecutive_threshold=5,
+            )
+            relevance_scorer = RelevanceScorer(threshold=40)
+            paginator = PaginationStrategy(
+                pagination_type=site.paginationType,
+                pagination_config=dict(site.paginationConfig),
+                max_pages=site.maxPages,
+            )
+
             try:
                 # Check robots.txt before scraping
                 if not robots_allowed(site.baseUrl):
@@ -255,13 +272,22 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
 
                     await report_log(job_id, "INFO", f"Crawling path: {start_url}")
 
+                    # Reset incremental tracker consecutive counter for each start path
+                    incremental.reset_consecutive()
+
                     # Fetch listing pages for this path
                     page_num = 0
+                    current_page_url = start_url
                     while page_num < site.maxPages:
                         if (redis_client and redis_client.exists(f"job:stop:{job_id}")):
                             break
 
-                        page_url = _build_page_url_for_start(site, start_url, page_num)
+                        # Build page URL: first page uses start_url directly,
+                        # subsequent pages use 3-strategy pagination when HTML is available
+                        if page_num == 0:
+                            page_url = start_url
+                        else:
+                            page_url = current_page_url  # Set by paginator at end of loop
                         await report_log(job_id, "DEBUG", f"[{site.name}] Fetching page {page_num + 1}: {page_url}")
 
                         html = await fetcher.fetch(page_url, requires_js=site.requiresJs)
@@ -269,6 +295,11 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
                             await report_log(job_id, "WARN", f"Empty response from {page_url}")
                             break
                         total_pages_fetched += 1
+
+                        # Phase 3.5: Category page detection — skip index/directory pages
+                        if should_skip_page(html, page_url):
+                            await report_log(job_id, "INFO", f"[{site.name}] Skipping category/index page: {page_url}")
+                            break
 
                         # Check for cached LLM-discovered selectors (self-healing)
                         effective_selectors = dict(site.selectors)
@@ -309,14 +340,44 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
                                 all_raw_urls.append(u)
                         raw_listing_urls = all_raw_urls if all_raw_urls else raw_listing_urls
 
+                        # Phase 3.5: Relevance scoring fallback — if CSS selectors found nothing,
+                        # use multi-signal element scoring to find property listing URLs
+                        if not raw_listing_urls:
+                            await report_log(job_id, "DEBUG", f"[{site.name}] CSS selectors found nothing, trying relevance scorer")
+                            relevance_urls = relevance_scorer.extract_listing_urls_by_relevance(
+                                html, site.baseUrl
+                            )
+                            if relevance_urls:
+                                raw_listing_urls = relevance_urls
+                                await report_log(job_id, "INFO", f"[{site.name}] Relevance scorer found {len(relevance_urls)} candidate URLs")
+
                         # Filter invalid URLs, normalize, and deduplicate via visited set
                         listing_urls = []
+                        incremental_stop = False
                         for u in raw_listing_urls:
                             if not is_valid_property_url(u):
                                 continue
                             normalized = normalize_url(u)
-                            if visited.add(normalized):
+                            if not visited.add(normalized):
+                                continue
+
+                            # Phase 3.5: Incremental scraping — track seen URLs,
+                            # stop after N consecutive already-known URLs
+                            is_new = incremental.check_and_track(normalized)
+                            if incremental.should_stop:
+                                await report_log(
+                                    job_id, "INFO",
+                                    f"[{site.name}] Incremental stop: {incremental.consecutive_known} "
+                                    f"consecutive known URLs — assuming remaining pages are old"
+                                )
+                                incremental_stop = True
+                                break
+
+                            if is_new:
                                 listing_urls.append(normalized)
+
+                        if incremental_stop:
+                            break
 
                         if not listing_urls:
                             await report_log(job_id, "INFO", f"[{site.name}] No more listings found on page {page_num + 1}")
@@ -324,7 +385,7 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
 
                         skipped = len(raw_listing_urls) - len(listing_urls)
                         if skipped:
-                            await report_log(job_id, "DEBUG", f"Skipped {skipped} already-visited URLs on page {page_num + 1}")
+                            await report_log(job_id, "DEBUG", f"Skipped {skipped} already-visited/known URLs on page {page_num + 1}")
                         await report_log(job_id, "INFO", f"[{site.name}] Found {len(listing_urls)} new listings on page {page_num + 1}")
 
                         # Process each listing
@@ -440,6 +501,9 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
 
                                 site_properties.append(validated)
 
+                                # Phase 3.5: Mark URL as scraped for incremental tracking
+                                incremental.mark_scraped(listing_url)
+
                                 # Report property to frontend for live feed
                                 await report_property(job_id, {
                                     "title": validated.get("title"),
@@ -469,6 +533,15 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
                                 total_errors += 1
                                 await report_log(job_id, "ERROR", f"[{site.name}] Error processing {listing_url}: {str(e)}")
 
+                        # Phase 3.5: 3-strategy pagination — next button → numeric links → URL param
+                        next_page_url = paginator.get_next_page_url(html, page_url, page_num)
+                        if next_page_url:
+                            current_page_url = next_page_url
+                            if paginator.current_strategy:
+                                await report_log(job_id, "DEBUG", f"[{site.name}] Pagination strategy: {paginator.current_strategy}")
+                        else:
+                            # Fallback to legacy URL builder if 3-strategy pagination found nothing
+                            current_page_url = _build_page_url_for_start(site, start_url, page_num + 1)
                         page_num += 1
 
             except Exception as e:

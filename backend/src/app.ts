@@ -132,8 +132,11 @@ app.get("/debug-sentry", function mainHandler(req, res) {
   throw new Error("My first Sentry error!");
 });
 
-// API routes
+// API routes — unversioned (backwards compatibility)
 app.use("/api", routes);
+
+// API routes — versioned (v1)
+app.use("/api/v1", routes);
 
 // The error handler must be registered before any other error middleware and after all controllers
 Sentry.setupExpressErrorHandler(app);

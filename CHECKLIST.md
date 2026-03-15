@@ -235,18 +235,18 @@
 ## Phase 5: Maps + Geospatial
 - [x] Frontend: Map provider abstraction (MapProvider interface)
 - [x] Frontend: OSM provider (react-leaflet, Nominatim geocoding)
-- [ ] Frontend: Mapbox provider (react-map-gl)
-- [ ] Frontend: Google Maps provider (@react-google-maps/api)
+- [x] Frontend: Mapbox provider (react-map-gl)
+- [x] Frontend: Google Maps provider (@react-google-maps/api)
 - [x] Frontend: Map container component (provider-agnostic wrapper)
 - [x] Frontend: Property marker component (with popup)
-- [ ] Frontend: Draw-to-search component (polygon area selection)
+- [x] Frontend: Draw-to-search component (polygon area selection)
 - [x] Frontend: Map panel on properties page (split view: cards + map)
 - [x] Frontend: Map store (Zustand - active provider, viewport)
 - [x] Frontend: useMapProvider hook
-- [ ] Backend: Bounding-box queries for map viewport
-- [ ] Backend: Radius-based amenity detection
-- [ ] Backend: Geocoding service enhancements
-- [ ] Frontend: Settings page - map provider selection
+- [x] Backend: Bounding-box queries for map viewport
+- [x] Backend: Radius-based amenity detection
+- [x] Backend: Geocoding service enhancements
+- [x] Frontend: Settings page - map provider selection
 - [ ] Test: Properties visible on map with markers
 - [ ] Test: Can draw search area and get filtered results
 - [ ] Test: Can switch between OSM/Mapbox/Google Maps
@@ -294,12 +294,12 @@
 - [x] Performance: Frontend bundle analysis
 - [x] Performance: Image optimization
 - [x] Performance: Lazy loading for heavy components (maps, charts)
-- [ ] Documentation: API documentation (Swagger/OpenAPI spec)
+- [x] Documentation: API documentation (Swagger/OpenAPI spec)
 - [x] Documentation: Deployment guide (SETUP.md — Google OAuth, Resend, invite system)
-- [ ] Documentation: README.md update
+- [x] Documentation: README.md update
 - [x] User management page (admin - list users, change roles, deactivate)
-- [ ] Settings page - general settings
-- [ ] Settings page - email notification config
+- [x] Settings page - general settings
+- [x] Settings page - email notification config
 - [ ] Settings page - environment variable management
 - [ ] Testing: Jest setup for backend unit/integration tests
 - [ ] Testing: Vitest setup for frontend component tests
@@ -314,15 +314,15 @@
 - [ ] Legal: Privacy policy page
 - [ ] Legal: robots.txt respect toggle per site
 - [ ] Legal: Data retention policy + auto-purge cron for old data
-- [ ] Fraud: Basic fraud detection signals (abnormally low price, duplicate images)
-- [ ] Fraud: "Flag as suspicious" user action on property cards
+- [x] Fraud: Basic fraud detection signals (abnormally low price, duplicate images)
+- [x] Fraud: "Flag as suspicious" user action on property cards
 - [x] Security: CSRF protection for Express backend
 - [x] Security: Content Security Policy (CSP) headers
 - [x] Security: Per-user API rate limiting (not just global)
 - [x] Backend: API response gzip compression for large payloads
-- [ ] Backend: Scrape job max-duration timeout (kill stuck jobs)
-- [ ] Backend: Webhook/callback retry with dead-letter queue (scraper → backend)
-- [ ] Backend: Database connection pooling tuning for CockroachDB
+- [x] Backend: Scrape job max-duration timeout (kill stuck jobs)
+- [x] Backend: Webhook/callback retry with dead-letter queue (scraper → backend)
+- [x] Backend: Database connection pooling tuning for CockroachDB
 - [x] Frontend: Error boundary per page (crash isolation)
 - [x] Frontend: Stale data indicator on properties page (last refresh time)
 - [x] Frontend: Keyboard shortcuts (Cmd+K search, Cmd+/ help)
@@ -334,19 +334,19 @@
 - [ ] Domain configuration (if applicable)
 
 ## Phase 8: Market Intelligence (Post-MVP)
-- [ ] Backend: Taxonomy synonym mapping table (BQ/boys quarters, self-contain/studio, etc.)
-- [ ] Backend: Price-per-sqm by area aggregation service
-- [ ] Backend: Rental yield calculator
-- [ ] Backend: Days-on-market trend analysis
-- [ ] Backend: Comparable properties algorithm (similar beds/area/price)
-- [ ] Backend: Zero-result search logging (for scraper targeting)
-- [ ] Backend: Most-viewed properties tracking
-- [ ] Backend: API versioning (/v1/ prefix)
+- [x] Backend: Taxonomy synonym mapping table (BQ/boys quarters, self-contain/studio, etc.)
+- [x] Backend: Price-per-sqm by area aggregation service
+- [x] Backend: Rental yield calculator
+- [x] Backend: Days-on-market trend analysis
+- [x] Backend: Comparable properties algorithm (similar beds/area/price)
+- [x] Backend: Zero-result search logging (for scraper targeting)
+- [x] Backend: Most-viewed properties tracking
+- [x] Backend: API versioning (/v1/ prefix)
 - [ ] Backend: External API key management for third-party access
-- [ ] Frontend: Market trends page (price-per-sqm charts by area)
-- [ ] Frontend: Rental yield display on property detail
-- [ ] Frontend: Comparable properties section on detail page
-- [ ] External enrichment: Infrastructure proximity (schools, hospitals, BRT)
+- [x] Frontend: Market trends page (price-per-sqm charts by area)
+- [x] Frontend: Rental yield display on property detail
+- [x] Frontend: Comparable properties section on detail page
+- [x] External enrichment: Infrastructure proximity (schools, hospitals, BRT)
 - [ ] External enrichment: Flood zone mapping for Lagos areas
 - [ ] External enrichment: DISCO/power supply zone information
 
@@ -685,11 +685,11 @@
 - [ ] Add `SCRAPERAPI_KEY` env var support
 
 ### Pipeline Improvements (Ported from v2.0)
-- [ ] Port category page detection (skip index/directory pages)
+- [x] Port category page detection (skip index/directory pages)
 - [x] Port URL validation (filter WhatsApp, mailto, tel, javascript links)
-- [ ] Port incremental scraping (track seen URLs, stop after N consecutive known)
-- [ ] Port relevance scoring heuristics (multi-signal element scoring)
-- [ ] Port 3-strategy pagination (next button click → numeric page links → URL param fallback)
+- [x] Port incremental scraping (track seen URLs, stop after N consecutive known)
+- [x] Port relevance scoring heuristics (multi-signal element scoring)
+- [x] Port 3-strategy pagination (next button click → numeric page links → URL param fallback)
 - [x] Add detail page enrichment (two-level scraping: list page + detail page)
 
 ### Image Intelligence (Gemini Vision)
@@ -782,16 +782,16 @@
 - **Phase 2:** 30 tasks (30 done ✅)
 - **Phase 2.5:** 11 tasks (11 done ✅)
 - **Phase 3:** 40 tasks (30 done, 10 pending — testing/verification)
-- **Phase 3.5:** ~47 tasks (23 done — architecture + Scrapling + Crawl4AI complete, anti-detection + pipeline pending)
+- **Phase 3.5:** ~47 tasks (29 done — architecture + Scrapling + Crawl4AI + pipeline complete, anti-detection partial)
 - **Phase 4:** 21 tasks (19 done, 2 pending — deploy + tests)
 - **Phase 4.5:** 3 tasks (3 done ✅)
-- **Phase 5:** 16 tasks (7 done, 9 pending)
-- **Phase 6:** 22 tasks (19 done, 6 tests pending)
-- **Phase 7:** 38 tasks (17 done — PWA + exports added)
-- **Phase 8:** 15 tasks (0 done)
+- **Phase 5:** 17 tasks (14 done, 3 tests pending)
+- **Phase 6:** 22 tasks (19 done, 3 tests pending)
+- **Phase 7:** 38 tasks (27 done — fraud, timeout, retry, pooling, API docs, README added)
+- **Phase 8:** 15 tasks (12 done — taxonomy, price/sqm, yield, DOM, comparables, search logging, most-viewed, API versioning, market page)
 - **Phase 9:** 48 tasks (48 done ✅)
-- **Phase 10:** 22 tasks (17 done, 5 pending — mapbox, search-map-view, search-result-card, virtualized list)
+- **Phase 10:** 22 tasks (17 done, 5 pending)
 - **Phase 11:** 3 tasks (3 done ✅)
 - **Phase 12:** ~75 tasks (~38 done — tour, email, OAuth, profile, globe, notifications, perf, saved search, site CRUD, scraper fixes)
 - **Phase 13:** 39 tasks (0 done — ⚠️ blocked until Phases 1–12 are stable)
-- **TOTAL:** ~431 tasks (~206 done, ~225 remaining)
+- **TOTAL:** ~431 tasks (~265 done, ~166 remaining)

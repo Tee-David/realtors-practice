@@ -17,6 +17,7 @@ import {
   Globe,
   Bookmark,
   BarChart3,
+  TrendingUp,
   Settings,
   ScrollText,
   Menu,
@@ -44,6 +45,7 @@ const navItems: NavItem[] = [
 
   // ANALYTICS
   { label: "Analytics", href: "/analytics", icon: BarChart3, section: "ANALYTICS" },
+  { label: "Market Intel", href: "/market", icon: TrendingUp, section: "ANALYTICS" },
   { label: "Saved Searches", href: "/saved-searches", icon: Bookmark, section: "ANALYTICS" },
 
   // SYSTEM

@@ -215,7 +215,7 @@ export function GlobeHero() {
         initial={{ opacity: 0, x: -50 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 2, ease: "easeOut" }}
-        className="hidden lg:block absolute -bottom-[45%] -left-[12%] w-[50%] h-[130%] pointer-events-none z-0"
+        className="hidden lg:block absolute -bottom-[55%] -left-[20%] w-[55%] h-[140%] pointer-events-none z-0 overflow-hidden"
       >
         <div className="absolute inset-0 flex items-center justify-center">
           <Globe

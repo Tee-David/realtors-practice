@@ -282,4 +282,49 @@ export class PropertyService {
   static async enrich(id: string, enrichmentData: Record<string, unknown>) {
     return this.update(id, enrichmentData as UpdatePropertyInput, "ENRICHMENT");
   }
+
+  /**
+   * Increment the view count for a property.
+   */
+  static async incrementViewCount(id: string) {
+    const property = await prisma.property.findFirst({
+      where: { id, deletedAt: null },
+    });
+
+    if (!property) return null;
+
+    return prisma.property.update({
+      where: { id },
+      data: { viewCount: { increment: 1 } },
+      select: { id: true, viewCount: true },
+    });
+  }
+
+  /**
+   * Get the most viewed properties.
+   */
+  static async getMostViewed(limit: number = 20) {
+    return prisma.property.findMany({
+      where: {
+        deletedAt: null,
+        viewCount: { gt: 0 },
+      },
+      orderBy: { viewCount: "desc" },
+      take: limit,
+      select: {
+        id: true,
+        title: true,
+        price: true,
+        area: true,
+        state: true,
+        listingType: true,
+        category: true,
+        bedrooms: true,
+        propertyType: true,
+        images: true,
+        viewCount: true,
+        createdAt: true,
+      },
+    });
+  }
 }

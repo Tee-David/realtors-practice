@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { MarketService } from "../services/market.service";
 import { TaxonomyService } from "../services/taxonomy.service";
+import { PropertyService } from "../services/property.service";
 import { sendSuccess, sendError } from "../utils/apiResponse.util";
 import { Logger } from "../utils/logger.util";
 
@@ -119,6 +120,47 @@ export class MarketController {
   }
 
   /**
+   * GET /api/market/trends?area=&state=
+   * Serves chart-ready market trend data for the frontend.
+   */
+  static async getMarketTrends(req: Request, res: Response) {
+    try {
+      const { area, state } = req.query as { area?: string; state?: string };
+      const result = await MarketService.getMarketTrends(area, state);
+      return sendSuccess(res, result, "Market trends retrieved successfully");
+    } catch (error: any) {
+      Logger.error(`MarketController.getMarketTrends error: ${error.message}`);
+      return sendError(res, "Failed to retrieve market trends", 500, error.message);
+    }
+  }
+
+  /**
+   * GET /api/market/rental-yield/calculate?salePrice=&monthlyRent=&area=
+   * Calculate rental yield for a specific property or hypothetical scenario.
+   */
+  static async calculateRentalYield(req: Request, res: Response) {
+    try {
+      const salePrice = parseFloat(req.query.salePrice as string);
+      const monthlyRent = req.query.monthlyRent ? parseFloat(req.query.monthlyRent as string) : undefined;
+      const area = req.query.area as string | undefined;
+
+      if (!salePrice || salePrice <= 0) {
+        return sendError(res, "Valid salePrice is required", 400);
+      }
+
+      if (!monthlyRent && !area) {
+        return sendError(res, "Either monthlyRent or area must be provided", 400);
+      }
+
+      const result = await MarketService.calculatePropertyRentalYield(salePrice, monthlyRent, area);
+      return sendSuccess(res, { salePrice, monthlyRent, area, ...result }, "Rental yield calculated");
+    } catch (error: any) {
+      Logger.error(`MarketController.calculateRentalYield error: ${error.message}`);
+      return sendError(res, "Failed to calculate rental yield", 500, error.message);
+    }
+  }
+
+  /**
    * GET /api/market/taxonomy/normalize?term=
    */
   static async normalizeTerm(req: Request, res: Response) {
@@ -150,6 +192,51 @@ export class MarketController {
     } catch (error: any) {
       Logger.error(`MarketController.getSynonyms error: ${error.message}`);
       return sendError(res, "Failed to retrieve synonyms", 500, error.message);
+    }
+  }
+
+  /**
+   * GET /api/market/taxonomy/map - Get the full synonym map
+   */
+  static async getSynonymMap(_req: Request, res: Response) {
+    try {
+      const map = TaxonomyService.getSynonymMap();
+      return sendSuccess(res, map, "Synonym map retrieved successfully");
+    } catch (error: any) {
+      Logger.error(`MarketController.getSynonymMap error: ${error.message}`);
+      return sendError(res, "Failed to retrieve synonym map", 500, error.message);
+    }
+  }
+
+  /**
+   * GET /api/market/taxonomy/bathrooms?text=2.5 baths
+   * Normalize Nigerian bathroom count text to an integer.
+   */
+  static async normalizeBathrooms(req: Request, res: Response) {
+    try {
+      const { text } = req.query as { text?: string };
+      if (!text) {
+        return sendError(res, "text parameter is required", 400);
+      }
+      const normalized = TaxonomyService.normalizeBathrooms(text);
+      return sendSuccess(res, { original: text, normalized }, "Bathroom count normalized");
+    } catch (error: any) {
+      Logger.error(`MarketController.normalizeBathrooms error: ${error.message}`);
+      return sendError(res, "Failed to normalize bathroom count", 500, error.message);
+    }
+  }
+
+  /**
+   * GET /api/market/most-viewed?limit=20
+   */
+  static async getMostViewed(req: Request, res: Response) {
+    try {
+      const limit = parseInt(req.query.limit as string) || 20;
+      const properties = await PropertyService.getMostViewed(limit);
+      return sendSuccess(res, properties, `${properties.length} most viewed properties`);
+    } catch (error: any) {
+      Logger.error(`MarketController.getMostViewed error: ${error.message}`);
+      return sendError(res, "Failed to retrieve most viewed properties", 500, error.message);
     }
   }
 }

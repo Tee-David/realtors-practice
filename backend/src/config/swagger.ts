@@ -9,14 +9,23 @@ const options: swaggerJsdoc.Options = {
     info: {
       title: "Realtors' Practice API",
       version: "3.0.0",
-      description: "API documentation for the Realtors' Practice real estate platform.",
+      description:
+        "Nigerian property intelligence platform API. Scrapes, validates, enriches, and serves Nigerian real estate listings.\n\n" +
+        "## Authentication\n" +
+        "Most endpoints require a Bearer JWT token obtained from Supabase Auth via `/auth/login`.\n" +
+        "Internal endpoints (scraper callbacks) use the `X-Internal-Key` header.\n\n" +
+        "## Rate Limits\n" +
+        "- General: 300 req / 15 min (production)\n" +
+        "- Auth: 10 req / hour (production)",
       contact: {
         name: "WDC Solutions Hub",
       },
     },
     servers: [
       {
-        url: config.env === "production" ? "https://realtorspractice.onrender.com/api" : "http://localhost:5000/api",
+        url: config.env === "production"
+          ? "https://realtors-practice-new-api.onrender.com/api"
+          : `http://localhost:${config.port}/api`,
         description: config.env === "production" ? "Production Server" : "Development Server",
       },
     ],
@@ -35,8 +44,8 @@ const options: swaggerJsdoc.Options = {
       },
     ],
   },
-  // Look for swagger JSDoc comments in all route files and controllers
-  apis: ["./src/routes/*.ts", "./src/controllers/*.ts"],
+  // Look for swagger JSDoc comments in all route files, controllers, and services
+  apis: ["./src/routes/*.ts", "./src/controllers/*.ts", "./src/services/*.ts"],
 };
 
 const swaggerSpec = swaggerJsdoc(options);

@@ -4,11 +4,13 @@ import { Logger } from "../utils/logger.util";
  * Synonym map for common Nigerian property terminology.
  * Keys are lowercase normalized terms, values are arrays of synonyms.
  */
-const SYNONYM_MAP: Record<string, string[]> = {
+export const SYNONYM_MAP: Record<string, string[]> = {
   // Abbreviations
   "bq": ["boys quarters", "boys quarter", "bq", "b.q", "b.q."],
   "self con": ["self contained", "self-contained", "studio", "self con", "selfcon"],
   "s/c": ["self contained", "self-contained", "studio", "s/c"],
+  "selfcon": ["self contained", "self-contained", "studio", "selfcon", "self con"],
+  "studio": ["studio", "self contained", "self-contained", "self con", "selfcon"],
   "ensuite": ["en-suite", "ensuite", "en suite"],
   "sqm": ["square meters", "square metres", "sq.m", "sqm", "m2", "m\u00B2"],
   "sqft": ["square feet", "sq.ft", "sqft", "ft2", "ft\u00B2"],
@@ -27,6 +29,7 @@ const SYNONYM_MAP: Record<string, string[]> = {
   "room and parlour": ["room and parlour", "room & parlour", "mini flat"],
 
   // Nigerian-specific terms
+  "boys quarters": ["boys quarters", "boys quarter", "bq", "b.q", "b.q."],
   "shortlet": ["short let", "shortlet", "short-let", "short stay"],
   "jv": ["joint venture", "jv", "j.v", "j/v"],
   "c of o": ["certificate of occupancy", "c of o", "c-of-o", "cofo"],
@@ -137,4 +140,45 @@ export class TaxonomyService {
   static getSynonymMap(): Record<string, string[]> {
     return { ...SYNONYM_MAP };
   }
+
+  /**
+   * Normalize bathroom counts from Nigerian listing text.
+   * "2.5 baths" -> 3, "1.5 bathrooms" -> 2, "half bath" -> 1
+   * Rounds up fractional values (a half-bath still counts as a bathroom).
+   */
+  static normalizeBathrooms(text: string): number | null {
+    try {
+      const lower = text.toLowerCase().trim();
+
+      // Match patterns like "2.5 baths", "3 bathrooms", "1.5 bath"
+      const bathMatch = lower.match(/([\d.]+)\s*(?:bath(?:room)?s?|baths?)/);
+      if (bathMatch) {
+        return Math.ceil(parseFloat(bathMatch[1]));
+      }
+
+      // Match "half bath" -> 1
+      if (/half\s*bath/.test(lower)) {
+        return 1;
+      }
+
+      // Plain number
+      const numMatch = lower.match(/^(\d+(?:\.\d+)?)$/);
+      if (numMatch) {
+        return Math.ceil(parseFloat(numMatch[1]));
+      }
+
+      return null;
+    } catch (error: any) {
+      Logger.error(`Error in TaxonomyService.normalizeBathrooms: ${error.message}`);
+      return null;
+    }
+  }
+}
+
+/**
+ * Convenience function: normalize a full text block by replacing all known
+ * synonyms with their canonical forms. Useful for search indexing and scraper output.
+ */
+export function normalizeTaxonomy(text: string): string {
+  return TaxonomyService.normalize(text);
 }

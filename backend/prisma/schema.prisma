@@ -401,6 +401,23 @@ model ScrapeLog {
   @@index([timestamp])
 }
 
+// ==================== DEAD LETTER QUEUE ====================
+
+model CallbackDeadLetter {
+  id          String    @id @default(cuid())
+  jobId       String
+  endpoint    String
+  payload     Json
+  lastError   String
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(5)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([jobId])
+  @@index([createdAt])
+}
+
 // ==================== SAVED SEARCHES & NOTIFICATIONS ====================
 
 model SavedSearch {
@@ -490,6 +507,26 @@ model SystemSetting {
   updatedAt DateTime  @updatedAt
 
   @@index([category])
+}
+
+// ==================== FRAUD DETECTION ====================
+
+model PropertyFlag {
+  id          String    @id @default(cuid())
+  propertyId  String
+  userId      String?
+  reason      String
+  details     String?
+  source      String    @default("USER")  // USER, SYSTEM
+  resolved    Boolean   @default(false)
+  resolvedAt  DateTime?
+  resolvedBy  String?
+  createdAt   DateTime  @default(now())
+
+  @@index([propertyId])
+  @@index([userId])
+  @@index([resolved])
+  @@index([createdAt])
 }
 
 // ==================== MARKET INTELLIGENCE ====================

@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { internalAuth } from "../middlewares/internal.middleware";
 import { ScrapeService } from "../services/scrape.service";
 import { Logger } from "../utils/logger.util";
+import { withCallbackRetry } from "../utils/callbackRetry.util";
 import prisma from "../prismaClient";
 
 const router = Router();
@@ -20,8 +21,13 @@ router.post("/scrape-results", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "jobId and properties required" });
     }
 
-    // Process async — respond immediately
-    ScrapeService.handleResults(jobId, properties, stats || {}).catch((err) =>
+    // Process async with retry — respond immediately
+    withCallbackRetry({
+      jobId,
+      endpoint: "/internal/scrape-results",
+      payload: { jobId, propertyCount: properties.length, stats },
+      handler: () => ScrapeService.handleResults(jobId, properties, stats || {}),
+    }).catch((err) =>
       Logger.error(`Error processing results for ${jobId}: ${err.message}`)
     );
 
@@ -82,7 +88,12 @@ router.post("/scrape-error", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "jobId and error required" });
     }
 
-    await ScrapeService.handleError(jobId, error, details);
+    await withCallbackRetry({
+      jobId,
+      endpoint: "/internal/scrape-error",
+      payload: { jobId, error, details },
+      handler: () => ScrapeService.handleError(jobId, error, details),
+    });
     return res.json({ success: true });
   } catch (err: any) {
     return res.status(500).json({ error: "Internal error" });

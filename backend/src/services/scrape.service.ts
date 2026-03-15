@@ -468,6 +468,74 @@ export class ScrapeService {
   }
 
   /**
+   * Kill stuck scrape jobs that have exceeded the max duration.
+   * Called periodically by the cron service.
+   */
+  static async killStuckJobs() {
+    const timeoutMs = config.scraper.jobTimeoutMs ?? 30 * 60 * 1000; // default 30 min
+    const cutoff = new Date(Date.now() - timeoutMs);
+
+    const stuckJobs = await prisma.scrapeJob.findMany({
+      where: {
+        status: { in: ["RUNNING", "PENDING"] },
+        startedAt: { lt: cutoff },
+      },
+    });
+
+    for (const job of stuckJobs) {
+      Logger.warn(
+        `Killing stuck scrape job ${job.id} — started ${job.startedAt?.toISOString()}, exceeded ${timeoutMs / 60000}m timeout`
+      );
+
+      // Try to tell the Python scraper to stop
+      try {
+        await fetch(`${config.scraper.url}/api/jobs/${job.id}/stop`, {
+          method: "POST",
+          headers: { "X-Internal-Key": config.scraper.internalKey },
+          signal: AbortSignal.timeout(5000),
+        });
+      } catch {
+        // Scraper may be unreachable, that's fine
+      }
+
+      const durationMs = job.startedAt
+        ? Date.now() - new Date(job.startedAt).getTime()
+        : undefined;
+
+      await prisma.scrapeJob.update({
+        where: { id: job.id },
+        data: {
+          status: "FAILED",
+          completedAt: new Date(),
+          durationMs,
+        },
+      });
+
+      // Log the timeout
+      await prisma.scrapeLog.create({
+        data: {
+          jobId: job.id,
+          level: "ERROR",
+          message: `Job killed — exceeded max duration of ${timeoutMs / 60000} minutes`,
+        },
+      }).catch(() => {});
+
+      broadcastScrapeError(job.id, `Job timed out after ${timeoutMs / 60000} minutes`);
+
+      // Update site health
+      for (const siteId of job.siteIds) {
+        await SiteService.updateHealth(siteId, false).catch(() => {});
+      }
+    }
+
+    if (stuckJobs.length > 0) {
+      Logger.info(`[TIMEOUT] Killed ${stuckJobs.length} stuck scrape job(s)`);
+    }
+
+    return stuckJobs.length;
+  }
+
+  /**
    * Handle log entry from scraper — persist + broadcast.
    */
   static async handleLog(

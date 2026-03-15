@@ -3,6 +3,7 @@ import { MeiliService } from "./meili.service";
 import { SavedSearchService } from "./savedSearch.service";
 import { NotificationService } from "./notification.service";
 import { EmailService } from "./email.service";
+import { ScrapeService } from "./scrape.service";
 import { Logger } from "../utils/logger.util";
 import prisma from "../prismaClient";
 
@@ -41,6 +42,20 @@ export class CronService {
         }
       } catch (error: any) {
         Logger.error(`[CRON] Saved search check failed: ${error.message}`);
+      }
+    }, {
+      timezone: "Africa/Lagos"
+    });
+
+    // Run every 5 minutes — Kill stuck scrape jobs that exceed max duration
+    cron.schedule("*/5 * * * *", async () => {
+      try {
+        const killed = await ScrapeService.killStuckJobs();
+        if (killed > 0) {
+          Logger.info(`[CRON] Killed ${killed} stuck scrape job(s)`);
+        }
+      } catch (error: any) {
+        Logger.error(`[CRON] Stuck job cleanup failed: ${error.message}`);
       }
     }, {
       timezone: "Africa/Lagos"

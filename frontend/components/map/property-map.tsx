@@ -14,6 +14,22 @@ const OpenStreetMap = dynamic(
   }
 );
 
+const MapboxMap = dynamic(
+  () => import("@/lib/map-providers/mapbox-map").then((mod) => mod.MapboxMap),
+  {
+    ssr: false,
+    loading: () => <Skeleton className="w-full h-full min-h-[400px] rounded-xl" />,
+  }
+);
+
+const GoogleMapsMap = dynamic(
+  () => import("@/lib/map-providers/google-map").then((mod) => mod.GoogleMap),
+  {
+    ssr: false,
+    loading: () => <Skeleton className="w-full h-full min-h-[400px] rounded-xl" />,
+  }
+);
+
 interface PropertyMapProps {
   properties: Property[];
   hoveredId: string | null;
@@ -34,24 +50,20 @@ export function PropertyMap({ properties, hoveredId, onMarkerClick }: PropertyMa
         />
       );
     case "mapbox":
-      // Feature Flag / Placeholder for future Mapbox integration
       return (
-        <div className="w-full h-full min-h-[400px] rounded-xl bg-card border border-border flex flex-col items-center justify-center p-6 text-center">
-          <h3 className="font-display font-bold text-lg mb-2">Mapbox Integration Required</h3>
-          <p className="text-sm text-muted-foreground max-w-sm">
-            You've selected Mapbox as your provider, but API keys are required. Please switch to OpenStreetMap in your preferences or configure Mapbox in the `.env` settings.
-          </p>
-        </div>
+        <MapboxMap
+          properties={properties}
+          hoveredId={hoveredId}
+          onMarkerClick={onMarkerClick}
+        />
       );
     case "google":
-      // Feature Flag / Placeholder for future Google Maps integration
       return (
-        <div className="w-full h-full min-h-[400px] rounded-xl bg-card border border-border flex flex-col items-center justify-center p-6 text-center">
-          <h3 className="font-display font-bold text-lg mb-2">Google Maps Integration Required</h3>
-          <p className="text-sm text-muted-foreground max-w-sm">
-            You've selected Google Maps as your provider, but an API key is required. Please switch to OpenStreetMap in your preferences or configure Google Maps in the `.env` settings.
-          </p>
-        </div>
+        <GoogleMapsMap
+          properties={properties}
+          hoveredId={hoveredId}
+          onMarkerClick={onMarkerClick}
+        />
       );
     default:
       return null;

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import EmailEditor, { EditorRef } from "react-email-editor";
 import { Save, X } from "lucide-react";
 import { toast } from "sonner";
@@ -18,6 +18,16 @@ export function EmailTemplateBuilder({
   onSave: (html: string, design: any) => void;
 }) {
   const emailEditorRef = useRef<EditorRef>(null);
+  const [editorHeight, setEditorHeight] = useState(600);
+
+  useEffect(() => {
+    if (open) {
+      setEditorHeight(window.innerHeight - 70);
+      const handleResize = () => setEditorHeight(window.innerHeight - 70);
+      window.addEventListener("resize", handleResize);
+      return () => window.removeEventListener("resize", handleResize);
+    }
+  }, [open]);
 
   const saveDesign = () => {
     emailEditorRef.current?.editor?.exportHtml((data: any) => {
@@ -39,7 +49,7 @@ export function EmailTemplateBuilder({
         exit={{ opacity: 0, scale: 0.98 }}
         transition={{ duration: 0.2 }}
         className="fixed inset-0 z-[2000] flex flex-col"
-        style={{ backgroundColor: "var(--background)" }}
+        style={{ backgroundColor: "var(--background)", display: 'flex', flexDirection: 'column' }}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b shrink-0 bg-[var(--card)]" style={{ borderColor: "var(--border)" }}>
@@ -69,13 +79,13 @@ export function EmailTemplateBuilder({
           </div>
         </div>
 
-        {/* Editor — uses explicit calc height to fill remaining viewport */}
-        <div className="overflow-hidden bg-white" style={{ height: "calc(100vh - 64px)", minHeight: "400px" }}>
+        {/* Editor — explicit pixel height so iframe resolves correctly */}
+        <div className="bg-white" style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
           <EmailEditor
             ref={emailEditorRef}
             onLoad={onLoad}
             onReady={onReady}
-            minHeight="100%"
+            minHeight={`${editorHeight}px`}
             options={{
               features: {
                 textEditor: {
@@ -143,7 +153,7 @@ export function EmailTemplateBuilder({
                 },
               }
             }}
-            style={{ height: '100%', width: '100%' }}
+            style={{ height: '100vh', width: '100%', flex: 1 }}
           />
         </div>
       </motion.div>

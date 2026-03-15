@@ -8,7 +8,12 @@ export type MapProviderType = "osm" | "mapbox" | "google";
 interface MapProviderState {
   provider: MapProviderType;
   setProvider: (provider: MapProviderType) => void;
-  // Future: store API keys here or in secure config
+  /** Mapbox access token (set in Settings). */
+  mapboxApiKey: string;
+  setMapboxApiKey: (key: string) => void;
+  /** Google Maps API key (set in Settings). */
+  googleApiKey: string;
+  setGoogleApiKey: (key: string) => void;
 }
 
 export const useMapProvider = create<MapProviderState>()(
@@ -16,6 +21,10 @@ export const useMapProvider = create<MapProviderState>()(
     (set) => ({
       provider: "osm", // Default to OpenStreetMap
       setProvider: (provider) => set({ provider }),
+      mapboxApiKey: "",
+      setMapboxApiKey: (mapboxApiKey) => set({ mapboxApiKey }),
+      googleApiKey: "",
+      setGoogleApiKey: (googleApiKey) => set({ googleApiKey }),
     }),
     {
       name: "map-provider-storage",

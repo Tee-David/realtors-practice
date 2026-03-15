@@ -3,7 +3,14 @@ import nodemailer from "nodemailer";
 import { Logger } from "../utils/logger.util";
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const FROM_EMAIL = process.env.EMAIL_FROM || "Realtors Practice <noreply@realtorspractice.com>";
+
+// Resend free-tier limitation: you can only send from `onboarding@resend.dev`
+// unless you have verified a custom domain in the Resend dashboard.
+// If EMAIL_FROM is explicitly set, we trust the user has a verified domain.
+// Otherwise, when using Resend, default to the sandbox address.
+const RESEND_DEFAULT_FROM = "Realtors Practice <onboarding@resend.dev>";
+const SMTP_DEFAULT_FROM = "Realtors Practice <noreply@realtorspractice.com>";
+const CUSTOM_FROM = process.env.EMAIL_FROM;
 
 // SMTP config from env (optional — if set, used as fallback or primary)
 const SMTP_HOST = process.env.SMTP_HOST;
@@ -18,6 +25,9 @@ let smtpTransporter: nodemailer.Transporter | null = null;
 if (RESEND_API_KEY) {
   resend = new Resend(RESEND_API_KEY);
   Logger.info("[Email] Resend email service initialized");
+  if (!CUSTOM_FROM) {
+    Logger.info("[Email] No EMAIL_FROM set — using Resend sandbox address (onboarding@resend.dev). Set EMAIL_FROM to use a verified custom domain.");
+  }
 }
 
 if (SMTP_HOST && SMTP_USER) {
@@ -35,19 +45,43 @@ if (!resend && !smtpTransporter) {
 }
 
 /**
- * Send an email using whatever provider is configured (Resend preferred, SMTP fallback)
+ * Send an email using whatever provider is configured (Resend preferred, SMTP fallback).
+ *
+ * NOTE on Resend domain verification:
+ * Resend free tier only allows sending from `onboarding@resend.dev`. Attempting to
+ * send from an unverified domain (e.g. noreply@yourdomain.com) will result in a
+ * 403 "You can only send testing emails to your own email address" or a domain
+ * validation error. To send from a custom domain, verify it in the Resend dashboard
+ * and set the EMAIL_FROM environment variable.
  */
 async function sendEmail(to: string, subject: string, html: string, from?: string) {
-  const sender = from || FROM_EMAIL;
-
   // Try Resend first
   if (resend) {
-    await resend.emails.send({ from: sender, to, subject, html });
-    return;
+    // Use explicit `from`, then EMAIL_FROM env var, then Resend sandbox default
+    const sender = from || CUSTOM_FROM || RESEND_DEFAULT_FROM;
+    try {
+      const result = await resend.emails.send({ from: sender, to, subject, html });
+      if (result.error) {
+        throw new Error(result.error.message);
+      }
+      return;
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      // Provide a clear hint when the error is about domain verification
+      if (msg.includes("validation") || msg.includes("domain") || msg.includes("testing emails") || msg.includes("not verified")) {
+        throw new Error(
+          `Resend domain error: ${msg}. ` +
+          `On the free tier you must send from "onboarding@resend.dev". ` +
+          `Either remove EMAIL_FROM or verify your custom domain at https://resend.com/domains`
+        );
+      }
+      throw new Error(`Resend email failed: ${msg}`);
+    }
   }
 
-  // Fallback to SMTP
+  // Fallback to SMTP (unchanged behavior)
   if (smtpTransporter) {
+    const sender = from || CUSTOM_FROM || SMTP_DEFAULT_FROM;
     await smtpTransporter.sendMail({ from: sender, to, subject, html });
     return;
   }
@@ -139,7 +173,7 @@ export class EmailService {
   ) {
     if (!resend && !smtpTransporter) {
       Logger.warn("[Email] No email provider configured — invite email skipped");
-      return;
+      return; // No provider at all — graceful no-op
     }
 
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
@@ -187,6 +221,8 @@ export class EmailService {
       Logger.info(`[Email] Invitation sent to ${to} (role: ${role})`);
     } catch (err: any) {
       Logger.error(`[Email] Failed to send invite to ${to}: ${err.message}`);
+      // Re-throw so the caller (invite route) can inform the user the email failed
+      throw err;
     }
   }
 

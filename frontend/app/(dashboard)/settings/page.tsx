@@ -6,6 +6,7 @@ import { auth, users as usersApi } from "@/lib/api";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { usePersistedState } from "@/hooks/use-persisted-state";
+import { useMapProvider } from "@/hooks/use-map-provider";
 import {
   User, Lock, Bell, Palette, LayoutDashboard, Mail, Database,
   Info, Users, ChevronRight, ChevronLeft, Upload, Eye, EyeOff,
@@ -660,8 +661,11 @@ function AppearanceSection() {
 // ─── Data & Display ─────────────────────────────────────────────────────────
 
 function DisplaySection() {
-  const [mapProvider, setMapProvider] = usePersistedState("display-map-provider", "osm");
-  const [mapKey, setMapKey] = usePersistedState("display-map-key", "");
+  const {
+    provider: mapProvider, setProvider: setMapProvider,
+    mapboxApiKey, setMapboxApiKey,
+    googleApiKey, setGoogleApiKey,
+  } = useMapProvider();
   const [perPage, setPerPage] = usePersistedState("display-per-page", "20");
   const [defaultSort, setDefaultSort] = usePersistedState("display-default-sort", "createdAt");
   const [defaultType, setDefaultType] = usePersistedState("display-default-type", "");
@@ -669,9 +673,9 @@ function DisplaySection() {
   const [dateFormat, setDateFormat] = usePersistedState("display-date-format", "DD/MM/YYYY");
 
   const providers = [
-    { key: "osm",    name: "OpenStreetMap", desc: "Free, open-source",              free: true },
-    { key: "mapbox", name: "Mapbox GL",     desc: "Premium tiles, 3D. 50K loads/mo", free: false },
-    { key: "google", name: "Google Maps",   desc: "Satellite + Street View",         free: false },
+    { key: "osm" as const,    name: "OpenStreetMap", desc: "Free, open-source",              free: true },
+    { key: "mapbox" as const, name: "Mapbox GL",     desc: "Premium tiles, 3D. 50K loads/mo", free: false },
+    { key: "google" as const, name: "Google Maps",   desc: "Satellite + Street View",         free: false },
   ];
 
   return (
@@ -698,10 +702,22 @@ function DisplaySection() {
             </button>
           ))}
         </div>
-        {mapProvider !== "osm" && (
+        {mapProvider === "mapbox" && (
           <div className="mt-4">
-            <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>{mapProvider === "mapbox" ? "Mapbox" : "Google Maps"} API Key</label>
-            <input type="password" value={mapKey} onChange={e => setMapKey(e.target.value)} className={inputBase} style={inputStyle} placeholder="Enter API key…" />
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Mapbox Access Token</label>
+            <input type="password" value={mapboxApiKey} onChange={e => setMapboxApiKey(e.target.value)} className={inputBase} style={inputStyle} placeholder="pk.eyJ1Ijo…" />
+            <p className="text-[11px] mt-1.5" style={{ color: "var(--muted-foreground)" }}>
+              Get a free token at <a href="https://account.mapbox.com/access-tokens/" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: "var(--primary)" }}>mapbox.com</a>. 50,000 map loads/month free.
+            </p>
+          </div>
+        )}
+        {mapProvider === "google" && (
+          <div className="mt-4">
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Google Maps API Key</label>
+            <input type="password" value={googleApiKey} onChange={e => setGoogleApiKey(e.target.value)} className={inputBase} style={inputStyle} placeholder="AIzaSy…" />
+            <p className="text-[11px] mt-1.5" style={{ color: "var(--muted-foreground)" }}>
+              Enable the Maps JavaScript API in your <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: "var(--primary)" }}>Google Cloud Console</a>.
+            </p>
           </div>
         )}
       </Card>

@@ -580,3 +580,10 @@ body.shepherd-active #app-sidebar {
     border-radius: 8px !important;
   }
 }
+
+/* Force react-email-editor iframe to fill viewport */
+div[id^="editor-"] {
+  height: 100vh !important;
+  width: 100% !important;
+  flex: 1 1 0% !important;
+}

@@ -134,4 +134,30 @@ export class PropertyController {
       return sendError(res, "Failed to fetch stats");
     }
   }
+
+  /**
+   * POST /properties/:id/view - Increment property view count
+   */
+  static async incrementViewCount(req: Request, res: Response) {
+    try {
+      const result = await PropertyService.incrementViewCount(req.params.id);
+      if (!result) return sendError(res, "Property not found", 404);
+      return sendSuccess(res, result, "View count incremented");
+    } catch (err) {
+      return sendError(res, "Failed to increment view count");
+    }
+  }
+
+  /**
+   * GET /properties/stats/most-viewed?limit=20 - Get most viewed properties
+   */
+  static async getMostViewed(req: Request, res: Response) {
+    try {
+      const limit = parseInt(req.query.limit as string) || 20;
+      const properties = await PropertyService.getMostViewed(limit);
+      return sendSuccess(res, properties, `${properties.length} most viewed properties`);
+    } catch (err) {
+      return sendError(res, "Failed to fetch most viewed properties");
+    }
+  }
 }

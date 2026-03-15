@@ -224,19 +224,25 @@ export class MarketService {
   }
 
   /**
-   * Find comparable properties: same area, +/- 1 bedroom, +/- 30% price, same category.
+   * Find comparable properties: same category, similar bedrooms (+/-1),
+   * similar area/location, similar price range (+/-30%).
+   * Returns top matches sorted by a composite similarity score (0-100).
    */
-  static async getComparableProperties(propertyId: string, limit = 5) {
+  static async getComparableProperties(propertyId: string, limit = 10) {
     try {
       const property = await prisma.property.findUnique({
         where: { id: propertyId },
         select: {
           id: true,
           area: true,
+          state: true,
           bedrooms: true,
+          bathrooms: true,
           price: true,
           category: true,
           listingType: true,
+          landSizeSqm: true,
+          buildingSizeSqm: true,
         },
       });
 
@@ -244,6 +250,7 @@ export class MarketService {
         throw new Error("Property not found");
       }
 
+      // Broad query: same category and listing type, relaxed price/bedroom range
       const where: Record<string, unknown> = {
         deletedAt: null,
         id: { not: propertyId },
@@ -251,28 +258,30 @@ export class MarketService {
         listingType: property.listingType,
       };
 
-      if (property.area) {
-        where.area = property.area;
-      }
-
+      // Relax bedroom filter to +/- 2 for broader candidate pool
       if (property.bedrooms !== null) {
         where.bedrooms = {
-          gte: Math.max(0, property.bedrooms - 1),
-          lte: property.bedrooms + 1,
+          gte: Math.max(0, property.bedrooms - 2),
+          lte: property.bedrooms + 2,
         };
       }
 
+      // Relax price to +/- 50% for broader pool, scoring will rank tighter matches higher
       if (property.price !== null && property.price > 0) {
         where.price = {
-          gte: property.price * 0.7,
-          lte: property.price * 1.3,
+          gte: property.price * 0.5,
+          lte: property.price * 1.5,
         };
       }
 
-      const comparables = await prisma.property.findMany({
+      // Prefer same state at minimum
+      if (property.state) {
+        where.state = property.state;
+      }
+
+      const candidates = await prisma.property.findMany({
         where: where as any,
-        take: limit,
-        orderBy: { createdAt: "desc" },
+        take: limit * 5, // Fetch more candidates for scoring
         select: {
           id: true,
           title: true,
@@ -290,6 +299,54 @@ export class MarketService {
           createdAt: true,
         },
       });
+
+      // Score each candidate on similarity
+      const scored = candidates.map((candidate) => {
+        let score = 0;
+
+        // Area match (30 points): exact area match = 30, same state only = 10
+        if (property.area && candidate.area) {
+          if (candidate.area.toLowerCase() === property.area.toLowerCase()) {
+            score += 30;
+          } else if (candidate.area.toLowerCase().includes(property.area.toLowerCase()) ||
+                     property.area.toLowerCase().includes(candidate.area.toLowerCase())) {
+            score += 20;
+          }
+        }
+        if (property.state && candidate.state &&
+            candidate.state.toLowerCase() === property.state.toLowerCase()) {
+          score += 10;
+        }
+
+        // Price similarity (30 points): closer price = higher score
+        if (property.price && candidate.price && property.price > 0) {
+          const priceRatio = Math.min(property.price, candidate.price) /
+                             Math.max(property.price, candidate.price);
+          score += Math.round(priceRatio * 30);
+        }
+
+        // Bedroom match (20 points): exact = 20, off by 1 = 10
+        if (property.bedrooms !== null && candidate.bedrooms !== null) {
+          const diff = Math.abs(property.bedrooms - candidate.bedrooms);
+          if (diff === 0) score += 20;
+          else if (diff === 1) score += 10;
+          else if (diff === 2) score += 3;
+        }
+
+        // Size similarity (10 points)
+        const subjectSqm = property.buildingSizeSqm || property.landSizeSqm;
+        const candSqm = candidate.buildingSizeSqm || candidate.landSizeSqm;
+        if (subjectSqm && candSqm && subjectSqm > 0) {
+          const sizeRatio = Math.min(subjectSqm, candSqm) / Math.max(subjectSqm, candSqm);
+          score += Math.round(sizeRatio * 10);
+        }
+
+        return { ...candidate, similarityScore: score };
+      });
+
+      // Sort by similarity score descending, take top N
+      scored.sort((a, b) => b.similarityScore - a.similarityScore);
+      const comparables = scored.slice(0, limit);
 
       return {
         subject: property,
@@ -404,6 +461,134 @@ export class MarketService {
       Logger.error(`Error in getMarketReport: ${error.message}`);
       throw error;
     }
+  }
+
+  /**
+   * Calculate rental yield for a specific property given its sale price
+   * and an estimated monthly rent (or area average rent).
+   */
+  static async calculatePropertyRentalYield(
+    salePrice: number,
+    monthlyRent?: number,
+    area?: string
+  ): Promise<{ annualRent: number; rentalYield: number; source: "provided" | "area_average" }> {
+    let annualRent: number;
+    let source: "provided" | "area_average" = "provided";
+
+    if (monthlyRent && monthlyRent > 0) {
+      annualRent = monthlyRent * 12;
+    } else if (area) {
+      // Fall back to area average rent
+      const rentProperties = await prisma.property.findMany({
+        where: {
+          deletedAt: null,
+          listingType: "RENT",
+          area: { contains: area, mode: "insensitive" },
+          price: { not: null, gt: 0 },
+        } as any,
+        select: { price: true, rentFrequency: true },
+      });
+
+      if (rentProperties.length === 0) {
+        throw new Error(`No rental data available for area: ${area}`);
+      }
+
+      let totalAnnual = 0;
+      for (const p of rentProperties) {
+        const freq = (p.rentFrequency || "").toLowerCase();
+        if (freq.includes("month")) {
+          totalAnnual += p.price! * 12;
+        } else if (freq.includes("week")) {
+          totalAnnual += p.price! * 52;
+        } else {
+          totalAnnual += p.price!; // Assume annual
+        }
+      }
+      annualRent = totalAnnual / rentProperties.length;
+      source = "area_average";
+    } else {
+      throw new Error("Either monthlyRent or area must be provided");
+    }
+
+    const rentalYield = (annualRent / salePrice) * 100;
+
+    return {
+      annualRent: Math.round(annualRent),
+      rentalYield: Math.round(rentalYield * 100) / 100,
+      source,
+    };
+  }
+
+  /**
+   * Market trends data suitable for frontend charts:
+   * - Price-per-sqm by area (for bar/line charts)
+   * - Rental yields by area
+   * - Days-on-market by area
+   * - Monthly listing volume trends
+   */
+  static async getMarketTrends(area?: string, state?: string) {
+    try {
+      const cacheKey = `market:trends:${area || "all"}:${state || "all"}`;
+      const cached = await RedisClient.get(cacheKey);
+      if (cached) return JSON.parse(cached);
+
+      const [pricePerSqm, rentalYields, daysOnMarket, volumeTrends] = await Promise.all([
+        this.getPricePerSqm({ area, state }),
+        this.getRentalYield(area),
+        this.getDaysOnMarket({ area, state }),
+        this.getMonthlyVolumeTrends(area, state),
+      ]);
+
+      const result = {
+        pricePerSqm,
+        rentalYields,
+        daysOnMarket,
+        volumeTrends,
+        generatedAt: new Date().toISOString(),
+      };
+
+      await RedisClient.set(cacheKey, JSON.stringify(result), CACHE_TTL);
+      return result;
+    } catch (error: any) {
+      Logger.error(`Error in getMarketTrends: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Monthly listing volume for the last 12 months, grouped by month.
+   */
+  private static async getMonthlyVolumeTrends(area?: string, state?: string) {
+    const where: Record<string, unknown> = {
+      deletedAt: null,
+      createdAt: { gte: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000) },
+    };
+    if (area) where.area = { contains: area, mode: "insensitive" };
+    if (state) where.state = { contains: state, mode: "insensitive" };
+
+    const properties = await prisma.property.findMany({
+      where: where as any,
+      select: {
+        createdAt: true,
+        listingType: true,
+      },
+    });
+
+    // Group by YYYY-MM
+    const monthMap = new Map<string, { sale: number; rent: number; total: number }>();
+
+    for (const p of properties) {
+      const month = p.createdAt.toISOString().slice(0, 7); // YYYY-MM
+      const existing = monthMap.get(month) || { sale: 0, rent: 0, total: 0 };
+      existing.total += 1;
+      if (p.listingType === "SALE") existing.sale += 1;
+      else if (p.listingType === "RENT") existing.rent += 1;
+      monthMap.set(month, existing);
+    }
+
+    return Array.from(monthMap.entries())
+      .map(([month, data]) => ({ month, ...data }))
+      .sort((a, b) => a.month.localeCompare(b.month));
   }
 
   /**

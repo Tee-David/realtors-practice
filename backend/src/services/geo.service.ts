@@ -1,5 +1,6 @@
 import prisma from "../prismaClient";
 import { Logger } from "../utils/logger.util";
+import { RedisClient } from "../utils/redis.util";
 
 interface BoundingBox {
   north: number; // max latitude
@@ -28,6 +29,42 @@ interface GeoSearchResult {
   images: any;
   distance?: number;
 }
+
+interface Amenity {
+  id: number;
+  name: string;
+  type: string;       // e.g. "school", "hospital", "supermarket"
+  category: string;   // OSM category grouping
+  lat: number;
+  lng: number;
+  distance: number;   // km from query point
+  tags?: Record<string, string>;
+}
+
+interface AmenitySearchResult {
+  center: { lat: number; lng: number };
+  radiusMeters: number;
+  amenities: Amenity[];
+  cached: boolean;
+}
+
+const AMENITY_CACHE_PREFIX = "amenity:";
+const AMENITY_CACHE_TTL = 3600; // 1 hour
+
+/**
+ * Overpass API amenity type mappings.
+ * Maps human-readable categories to OSM tag filters.
+ */
+const AMENITY_CATEGORIES: Record<string, string> = {
+  school: '["amenity"~"school|university|college|kindergarten"]',
+  hospital: '["amenity"~"hospital|clinic|doctors|pharmacy"]',
+  market: '["shop"~"supermarket|convenience|mall|marketplace"]',
+  bank: '["amenity"~"bank|atm"]',
+  restaurant: '["amenity"~"restaurant|fast_food|cafe"]',
+  worship: '["amenity"~"place_of_worship"]',
+  fuel: '["amenity"="fuel"]',
+  police: '["amenity"="police"]',
+};
 
 // Nigeria bounding box for validation
 const NIGERIA_BOUNDS = {
@@ -108,6 +145,24 @@ const AREA_COORDINATES: Record<string, { lat: number; lng: number }> = {
 };
 
 export class GeoService {
+  /**
+   * Parse a bbox query string in the format "minLng,minLat,maxLng,maxLat"
+   * (standard OGC/GeoJSON bbox convention) into a BoundingBox.
+   */
+  static parseBboxString(bbox: string): BoundingBox {
+    const parts = bbox.split(",").map(Number);
+    if (parts.length !== 4 || parts.some(isNaN)) {
+      throw new Error("bbox must be 4 comma-separated numbers: minLng,minLat,maxLng,maxLat");
+    }
+    const [minLng, minLat, maxLng, maxLat] = parts;
+    return {
+      west: minLng,
+      south: minLat,
+      east: maxLng,
+      north: maxLat,
+    };
+  }
+
   /**
    * Find properties within a bounding box (map viewport)
    */
@@ -207,19 +262,213 @@ export class GeoService {
   }
 
   /**
-   * Get nearby amenities (placeholder — extend with real data source)
+   * Find nearby amenities (schools, hospitals, markets, etc.) using the
+   * OpenStreetMap Overpass API. Results are cached in Redis for 1 hour.
+   *
+   * @param lat      Latitude of the center point
+   * @param lng      Longitude of the center point
+   * @param radiusM  Radius in meters (default 1000)
+   * @param types    Optional array of amenity categories to filter
+   *                 (e.g. ["school","hospital"]). Defaults to all categories.
    */
-  static async findNearbyAmenities(lat: number, lng: number, radiusKm: number = 2) {
-    // For now, return static amenity categories with counts from properties nearby
-    const nearby = await this.findInRadius({ lat, lng, radiusKm });
+  static async findNearbyAmenities(
+    lat: number,
+    lng: number,
+    radiusM: number = 1000,
+    types?: string[]
+  ): Promise<AmenitySearchResult> {
+    // Round coordinates for cache key stability (4 decimal places ~ 11m)
+    const cacheKey = `${AMENITY_CACHE_PREFIX}${lat.toFixed(4)}:${lng.toFixed(4)}:${radiusM}:${(types || ["all"]).sort().join(",")}`;
 
-    return {
-      propertiesNearby: nearby.length,
-      radiusKm,
-      center: { lat, lng },
-      // Future: integrate OSM Overpass API for schools, hospitals, etc.
-      amenities: [],
-    };
+    // Check cache first
+    const cached = await RedisClient.get(cacheKey);
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached) as AmenitySearchResult;
+        return { ...parsed, cached: true };
+      } catch {
+        // Corrupted cache entry, continue to fetch
+      }
+    }
+
+    // Build Overpass query for requested amenity types
+    const categoriesToQuery = types && types.length > 0
+      ? types.filter((t) => AMENITY_CATEGORIES[t])
+      : Object.keys(AMENITY_CATEGORIES);
+
+    if (categoriesToQuery.length === 0) {
+      return { center: { lat, lng }, radiusMeters: radiusM, amenities: [], cached: false };
+    }
+
+    // Build Overpass QL body: query nodes for each category within radius
+    const queryParts = categoriesToQuery.map((cat) => {
+      const filter = AMENITY_CATEGORIES[cat];
+      return `node${filter}(around:${radiusM},${lat},${lng});`;
+    });
+
+    const overpassQuery = `
+      [out:json][timeout:10];
+      (
+        ${queryParts.join("\n        ")}
+      );
+      out body;
+    `.trim();
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
+
+      const response = await fetch("https://overpass-api.de/api/interpreter", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: `data=${encodeURIComponent(overpassQuery)}`,
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        Logger.warn(`Overpass API returned ${response.status}: ${response.statusText}`);
+        return { center: { lat, lng }, radiusMeters: radiusM, amenities: [], cached: false };
+      }
+
+      const data = await response.json() as { elements?: Array<{
+        id: number;
+        lat: number;
+        lon: number;
+        tags?: Record<string, string>;
+      }> };
+
+      const amenities: Amenity[] = (data.elements || []).map((el) => {
+        const tags = el.tags || {};
+        const name = tags.name || tags["name:en"] || "Unnamed";
+        const type = this.classifyAmenityType(tags);
+        const category = this.classifyAmenityCategory(tags);
+        const distance = this.haversine(lat, lng, el.lat, el.lon);
+
+        return {
+          id: el.id,
+          name,
+          type,
+          category,
+          lat: el.lat,
+          lng: el.lon,
+          distance: Math.round(distance * 1000) / 1000, // km, 3 decimal places
+          tags,
+        };
+      }).sort((a, b) => a.distance - b.distance);
+
+      const result: AmenitySearchResult = {
+        center: { lat, lng },
+        radiusMeters: radiusM,
+        amenities,
+        cached: false,
+      };
+
+      // Cache the result
+      await RedisClient.set(cacheKey, JSON.stringify(result), AMENITY_CACHE_TTL);
+
+      return result;
+    } catch (error: any) {
+      if (error.name === "AbortError") {
+        Logger.warn("Overpass API request timed out");
+      } else {
+        Logger.error(`Overpass API error: ${error.message}`);
+      }
+      // Return empty on failure rather than crashing
+      return { center: { lat, lng }, radiusMeters: radiusM, amenities: [], cached: false };
+    }
+  }
+
+  /**
+   * Classify an OSM element's tags into a human-readable type string.
+   */
+  private static classifyAmenityType(tags: Record<string, string>): string {
+    if (tags.amenity) return tags.amenity;
+    if (tags.shop) return tags.shop;
+    if (tags.leisure) return tags.leisure;
+    if (tags.tourism) return tags.tourism;
+    return "other";
+  }
+
+  /**
+   * Classify an OSM element into one of our amenity categories.
+   */
+  private static classifyAmenityCategory(tags: Record<string, string>): string {
+    const amenity = tags.amenity || "";
+    const shop = tags.shop || "";
+
+    if (/school|university|college|kindergarten/i.test(amenity)) return "school";
+    if (/hospital|clinic|doctors|pharmacy/i.test(amenity)) return "hospital";
+    if (/supermarket|convenience|mall|marketplace/i.test(shop)) return "market";
+    if (/bank|atm/i.test(amenity)) return "bank";
+    if (/restaurant|fast_food|cafe/i.test(amenity)) return "restaurant";
+    if (/place_of_worship/i.test(amenity)) return "worship";
+    if (amenity === "fuel") return "fuel";
+    if (amenity === "police") return "police";
+    return "other";
+  }
+
+  /**
+   * Find nearby properties for a specific property by ID.
+   * Looks up the property's lat/lng, then searches within the given radius.
+   */
+  static async findNearbyProperties(
+    propertyId: string,
+    radiusKm: number = 5,
+    filters?: Record<string, unknown>
+  ) {
+    const property = await prisma.property.findFirst({
+      where: { id: propertyId, deletedAt: null },
+      select: { id: true, latitude: true, longitude: true, area: true, state: true },
+    });
+
+    if (!property) {
+      throw new Error("Property not found");
+    }
+
+    if (property.latitude === null || property.longitude === null) {
+      // Fall back to area-based search if no coordinates
+      if (!property.area) {
+        return { property, nearby: [], fallback: "no_coordinates" };
+      }
+
+      const areaProperties = await prisma.property.findMany({
+        where: {
+          deletedAt: null,
+          id: { not: propertyId },
+          area: property.area,
+          ...(filters?.listingType ? { listingType: filters.listingType as any } : {}),
+          ...(filters?.category ? { category: filters.category as any } : {}),
+        },
+        select: {
+          id: true,
+          title: true,
+          price: true,
+          latitude: true,
+          longitude: true,
+          area: true,
+          state: true,
+          listingType: true,
+          bedrooms: true,
+          propertyType: true,
+          images: true,
+        },
+        take: 20,
+        orderBy: { qualityScore: "desc" },
+      });
+
+      return { property, nearby: areaProperties, fallback: "area_match" };
+    }
+
+    const nearby = await this.findInRadius(
+      { lat: property.latitude, lng: property.longitude, radiusKm },
+      filters
+    );
+
+    // Exclude the subject property from results
+    const filtered = nearby.filter((p) => p.id !== propertyId);
+
+    return { property, nearby: filtered, fallback: null };
   }
 
   /**

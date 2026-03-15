@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { PropertyController } from "../controllers/property.controller";
+import { GeoController } from "../controllers/geo.controller";
 import { authenticate } from "../middlewares/auth.middleware";
 import { authorize } from "../middlewares/role.middleware";
 import { validate } from "../middlewares/validation.middleware";
@@ -67,6 +68,24 @@ router.get("/stats", PropertyController.getStats);
 
 /**
  * @swagger
+ * /properties/stats/most-viewed:
+ *   get:
+ *     summary: Get the most viewed properties
+ *     tags: [Properties]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *     responses:
+ *       200:
+ *         description: Most viewed properties
+ */
+router.get("/stats/most-viewed", PropertyController.getMostViewed);
+
+/**
+ * @swagger
  * /properties/{id}:
  *   get:
  *     summary: Get a single property by ID
@@ -107,8 +126,62 @@ router.get("/:id", PropertyController.getById);
  */
 router.get("/:id/versions", PropertyController.getVersions);
 
-// Get property price history (all roles)
+/**
+ * @swagger
+ * /properties/{id}/price-history:
+ *   get:
+ *     summary: Get price history for a property
+ *     tags: [Properties]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Price history entries
+ */
 router.get("/:id/price-history", PropertyController.getPriceHistory);
+
+/**
+ * @swagger
+ * /properties/{id}/nearby:
+ *   get:
+ *     summary: Find nearby properties
+ *     tags: [Properties]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Nearby properties
+ */
+router.get("/:id/nearby", GeoController.findNearbyByProperty);
+
+/**
+ * @swagger
+ * /properties/{id}/view:
+ *   post:
+ *     summary: Increment the view count for a property
+ *     tags: [Properties]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: View count incremented
+ */
+router.post("/:id/view", PropertyController.incrementViewCount);
 
 /**
  * @swagger
@@ -163,10 +236,55 @@ router.post("/", authorize("ADMIN", "EDITOR"), validate(createPropertySchema), P
  */
 router.put("/:id", authorize("ADMIN", "EDITOR"), validate(updatePropertySchema), PropertyController.update);
 
-// Enrich property (admin, editor)
+/**
+ * @swagger
+ * /properties/{id}/enrich:
+ *   patch:
+ *     summary: Enrich a property with additional data
+ *     tags: [Properties]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Property enriched
+ *       403:
+ *         description: Admin or Editor role required
+ */
 router.patch("/:id/enrich", authorize("ADMIN", "EDITOR"), PropertyController.enrich);
 
-// Bulk action (admin only)
+/**
+ * @swagger
+ * /properties/bulk-action:
+ *   post:
+ *     summary: Perform a bulk action on multiple properties
+ *     tags: [Properties]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [ids, action]
+ *             properties:
+ *               ids:
+ *                 type: array
+ *                 items: { type: string }
+ *               action:
+ *                 type: string
+ *                 enum: [verify, reject, flag, delete, restore]
+ *     responses:
+ *       200:
+ *         description: Bulk action completed
+ *       403:
+ *         description: Admin role required
+ */
 router.post("/bulk-action", authorize("ADMIN"), validate(bulkActionSchema), PropertyController.bulkAction);
 
 /**

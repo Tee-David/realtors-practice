@@ -34,12 +34,20 @@ export const config = {
   scraper: {
     url: process.env.SCRAPER_URL || "http://localhost:8000",
     internalKey: process.env.INTERNAL_API_KEY || "dev-internal-key",
+    jobTimeoutMs: parseInt(
+      process.env.SCRAPE_JOB_TIMEOUT_MS || String(30 * 60 * 1000),
+      10
+    ),
   },
   resend: {
     apiKey: process.env.RESEND_API_KEY || "",
   },
   redis: {
     url: process.env.REDIS_URL || "",
+  },
+  callbackRetry: {
+    maxAttempts: parseInt(process.env.CALLBACK_RETRY_MAX_ATTEMPTS || "5", 10),
+    baseDelayMs: parseInt(process.env.CALLBACK_RETRY_BASE_DELAY_MS || "1000", 10),
   },
   exchangeRate: {
     apiKey: process.env.EXCHANGERATE_API_KEY || "",

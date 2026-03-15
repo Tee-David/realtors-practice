@@ -742,31 +742,31 @@ export default function ScraperPage() {
       </div>
 
       {/* Footer */}
-      <div className="p-4 sm:p-6 border-t border-border/50 shrink-0 bg-secondary/10 flex flex-col sm:flex-row gap-2">
+      <div className="p-4 sm:p-6 border-t border-border/50 shrink-0 bg-secondary/10 flex gap-2">
         <button
           type="button"
           onClick={() => setIsConfigOpen(false)}
-          className="flex-1 px-4 py-2.5 rounded-xl font-semibold border hover:bg-secondary transition-colors text-sm"
+          className="px-4 py-2.5 rounded-xl font-semibold border hover:bg-secondary transition-colors text-sm whitespace-nowrap"
         >
           Cancel
         </button>
         <button
           type="button"
           onClick={handleSaveConfig}
-          className="flex-1 px-4 py-2.5 rounded-xl font-semibold border border-border hover:bg-secondary transition-colors text-sm flex items-center justify-center gap-1.5"
+          className="px-4 py-2.5 rounded-xl font-semibold border border-border hover:bg-secondary transition-colors text-sm flex items-center justify-center gap-1.5 whitespace-nowrap"
         >
-          <Save className="w-3.5 h-3.5" /> Save
+          <Save className="w-3.5 h-3.5 shrink-0" /> Save
         </button>
         <button
           type="button"
           onClick={handleSaveAndRun}
           disabled={startScrape.isPending}
-          className="flex-1 px-4 py-2.5 rounded-xl font-bold text-white transition-all shadow-lg hover:-translate-y-0.5 text-sm flex items-center justify-center gap-1.5 disabled:opacity-50"
+          className="flex-1 px-4 py-2.5 rounded-xl font-bold text-white transition-all shadow-lg hover:-translate-y-0.5 text-sm flex items-center justify-center gap-1.5 disabled:opacity-50 whitespace-nowrap"
           style={{ background: "var(--primary)" }}
         >
           {startScrape.isPending
-            ? <RefreshCcw className="w-3.5 h-3.5 animate-spin" />
-            : <Play className="w-3.5 h-3.5 fill-current" />}
+            ? <RefreshCcw className="w-3.5 h-3.5 animate-spin shrink-0" />
+            : <Play className="w-3.5 h-3.5 fill-current shrink-0" />}
           Save &amp; Run
         </button>
       </div>
