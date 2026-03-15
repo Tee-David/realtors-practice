@@ -792,7 +792,7 @@ export default function ScraperPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
+        <div data-tour="scraper-controls" className="flex items-center gap-3 shrink-0">
           {/* Connection indicator */}
           <div className="hidden md:flex items-center gap-2 px-3 py-2 rounded-xl bg-secondary/50 border border-border text-xs font-medium">
             <div className="relative flex items-center justify-center w-3 h-3">
@@ -924,7 +924,7 @@ export default function ScraperPage() {
         <div className="lg:col-span-4 flex flex-col gap-5">
 
           {/* Live Stats Card */}
-          <Card className="border shadow-sm relative overflow-hidden">
+          <Card data-tour="scraper-stats" className="border shadow-sm relative overflow-hidden">
             <div
               className={`absolute top-0 left-0 right-0 h-0.5 transition-colors duration-700 ${
                 pageState === "running"
@@ -1213,7 +1213,7 @@ export default function ScraperPage() {
         <div className="lg:col-span-8 flex flex-col gap-5">
 
           {/* Live Terminal */}
-          <Card className="bg-white dark:bg-[#0A0A0B] border border-border dark:border-white/10 shadow-xl relative overflow-hidden flex flex-col rounded-2xl min-h-[340px]">
+          <Card data-tour="scraper-terminal" className="bg-white dark:bg-[#0A0A0B] border border-border dark:border-white/10 shadow-xl relative overflow-hidden flex flex-col rounded-2xl min-h-[340px]">
             {/* Terminal header */}
             <CardHeader className="pb-2 border-b border-border dark:border-white/10 bg-slate-50/80 dark:bg-[#0A0A0B]/80 backdrop-blur-xl z-10 flex-shrink-0">
               <div className="flex items-center justify-between">
@@ -1285,7 +1285,7 @@ export default function ScraperPage() {
 
           {/* Incoming Properties Feed */}
           {(pageState === "running" || pageState === "complete") && (
-            <Card className="border shadow-sm overflow-hidden">
+            <Card data-tour="scraper-feed" className="border shadow-sm overflow-hidden">
               <CardHeader className="pb-3 border-b border-border/50">
                 <CardTitle className="text-sm font-semibold flex items-center justify-between">
                   <span className="flex items-center gap-2">

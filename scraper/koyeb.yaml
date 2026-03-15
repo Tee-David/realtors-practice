@@ -1,38 +1,42 @@
-# Koyeb deployment config for the scraper Celery worker
-# Deploy as a Worker service (no HTTP port)
-# Environment variables must be set in the Koyeb dashboard
+# Koyeb deployment config for the scraper HTTP service
+# Deploy as a Web service so backend can POST jobs directly via HTTP
 
-name: realtors-scraper-worker
-type: worker
+name: realtors-scraper
+type: web
 
 # Docker build settings
 docker:
   dockerfile: Dockerfile
-  # Override CMD to run Celery worker instead of uvicorn
-  command: >
-    celery -A tasks worker
-    --loglevel=info
-    --concurrency=2
-    -Q celery
-    --without-heartbeat
-    --without-mingle
+  # Uses the default CMD from Dockerfile: uvicorn app:app --host 0.0.0.0 --port 8000
 
 # Instance config
 instance_type: eco  # 512MB RAM, $2.70/mo
 regions:
-  - fra  # Frankfurt (closest to Render EU)
+  - fra  # Frankfurt
+
 min_scale: 1
 max_scale: 1
 
-# Health check (Celery worker doesn't have HTTP, use process check)
-# Koyeb monitors the process — if it exits, it restarts
+# Port config
+ports:
+  - port: 8000
+    protocol: http
 
-# Environment variables (set these in Koyeb dashboard, not here):
-# REDIS_URL          — Upstash Redis URL (rediss://...)
-# API_CALLBACK_URL   — https://realtors-practice-new-api.onrender.com/api
-# INTERNAL_API_KEY   — Must match backend's INTERNAL_API_KEY
-# GEMINI_API_KEY     — For LLM extraction fallback
-# PROXY_URL          — Rotating proxy URL (optional)
-# LOG_LEVEL          — info
-# SAVE_RAW_HTML      — true
-# RAW_HTML_DIR       — /tmp/scraper-snapshots
+# Health check
+health_checks:
+  - type: http
+    port: 8000
+    path: /health
+    interval: 30
+    timeout: 10
+    healthy_threshold: 2
+    unhealthy_threshold: 3
+
+# Environment variables (set these in the Koyeb dashboard):
+# INTERNAL_API_KEY   — rp-internal-7a36766a4f46a427295e720f0cbd4b57
+# API_BASE_URL       — https://realtors-practice-new-api.onrender.com/api
+# REDIS_URL          — rediss://... (your Upstash Redis URL)
+# PLAYWRIGHT_HEADLESS — true
+# GEMINI_API_KEY     — For LLM extraction fallback (optional)
+# PROXY_LIST         — Rotating proxy URLs, comma-separated (optional)
+# LOG_LEVEL          — INFO

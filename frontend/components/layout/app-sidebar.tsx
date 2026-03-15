@@ -39,8 +39,8 @@ const navItems: NavItem[] = [
 
   // DATA & TOOLS
   { label: "Data Explorer", href: "/data-explorer", icon: Database, section: "DATA & TOOLS" },
-  { label: "Scraper", href: "/scraper", icon: Bot, section: "DATA & TOOLS" },
   { label: "Sites", href: "/scraper/sites", icon: Globe, section: "DATA & TOOLS" },
+  { label: "Scraper", href: "/scraper", icon: Bot, section: "DATA & TOOLS" },
 
   // ANALYTICS
   { label: "Analytics", href: "/analytics", icon: BarChart3, section: "ANALYTICS" },

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import Shepherd from "shepherd.js";
+import confetti from "canvas-confetti";
 import { fullAppTour, PAGE_TOURS, tourOptions, type ShepherdTour } from "./tour-steps";
 import { TourSelectorModal } from "./tour-selector-modal";
 import { useRouter } from "next/navigation";
@@ -63,7 +64,7 @@ export function TourProvider() {
   const router = useRouter();
   const tourRef = useRef<ShepherdTour | null>(null);
   const [showModal, setShowModal] = useState(false);
-  const [showConfetti, setShowConfetti] = useState(false);
+  // confetti is fired imperatively via canvas-confetti, no state needed
 
   // ── Attach Shepherd events ──────────────────────────────────────────────
 
@@ -71,7 +72,6 @@ export function TourProvider() {
     tour.on("start", () => {
       document.dispatchEvent(new CustomEvent("tour-active", { detail: true }));
       document.dispatchEvent(new CustomEvent("expand-sidebar"));
-      setShowConfetti(false);
     });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -82,8 +82,27 @@ export function TourProvider() {
     tour.on("complete", () => {
       localStorage.setItem(TOUR_SEEN_KEY, "true");
       document.dispatchEvent(new CustomEvent("tour-active", { detail: false }));
-      setShowConfetti(true);
-      setTimeout(() => setShowConfetti(false), 5000);
+      // Fire real confetti bursts
+      const duration = 3000;
+      const end = Date.now() + duration;
+      const colors = ["#0001FC", "#FF6600", "#0a6906", "#8b5cf6", "#facc15"];
+      (function frame() {
+        confetti({
+          particleCount: 4,
+          angle: 60,
+          spread: 55,
+          origin: { x: 0, y: 0.7 },
+          colors,
+        });
+        confetti({
+          particleCount: 4,
+          angle: 120,
+          spread: 55,
+          origin: { x: 1, y: 0.7 },
+          colors,
+        });
+        if (Date.now() < end) requestAnimationFrame(frame);
+      })();
     });
 
     tour.on("cancel", () => {
@@ -155,14 +174,6 @@ export function TourProvider() {
         />
       )}
 
-      {showConfetti && (
-        <div className="fixed inset-0 pointer-events-none z-[3000]">
-          {/* We keep confetti as a simple CSS fallback since react-confetti-boom might not be installed */}
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-24 h-24 text-6xl animate-bounce flex items-center justify-center">🎉</div>
-          </div>
-        </div>
-      )}
     </>
   );
 }

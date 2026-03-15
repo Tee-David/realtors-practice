@@ -226,31 +226,37 @@ export const searchSteps = (_router: unknown) => [
 
 export const scraperSteps = (_router: unknown) => [
   {
-    id: "scraper-engine",
-    title: "Extraction Engine",
-    text: richText("⚙️", "The Scraping Engine", "This is your data collection hub. The engine status indicator shows whether a worker is connected and ready.", "Green = active, Amber = standby (normal when idle)."),
-    attachTo: attach("[data-tour='engine-status']"),
+    id: "scraper-welcome",
+    title: "Scraper Command Center",
+    text: richText("⚙️", "Live Data Collection", "This is your scraping command center. Monitor live progress, view terminal logs, and watch properties stream in as they're discovered.", "The connection indicator shows whether the real-time socket is active."),
     buttons: nav(false),
   },
   {
-    id: "scraper-sites",
-    title: "Sites Panel",
-    text: richText("🌐", "Scraping Targets", "Each site is a target you want to collect listings from. Toggle them on/off, or click the settings icon to configure selectors.", "Sites with a green dot are currently enabled."),
-    attachTo: attach("[data-tour='sites-panel']", "right"),
+    id: "scraper-controls",
+    title: "Configure & Run",
+    text: richText("▶️", "Launch a Scrape", "Click 'Configure' to select your target sites, set scrape mode (passive or active), and optionally schedule a run. Then hit Dispatch to start.", "Your configuration is saved locally so you can re-run quickly."),
+    attachTo: attach("[data-tour='scraper-controls']"),
     buttons: nav(),
   },
   {
-    id: "scraper-add",
-    title: "Add a New Site",
-    text: richText("➕", "Adding Targets", "Click 'Add Site' to register a new scraping target. Give it a name, URL, and the system will figure out the rest.", "You can also bulk-import sites with a CSV."),
-    attachTo: attach("[data-tour='add-site-btn']"),
+    id: "scraper-stats",
+    title: "Live Stats",
+    text: richText("📊", "Real-Time Progress", "Watch pages fetched, properties found, duplicates skipped, and errors — all updating live with animated counters as the scraper works.", "When complete, you'll see a full summary with a link to view your new properties."),
+    attachTo: attach("[data-tour='scraper-stats']"),
     buttons: nav(),
   },
   {
-    id: "scraper-run",
-    title: "Run a Scrape",
-    text: richText("▶️", "Starting a Scrape", "Select the sites you want and click 'Run Scrape'. Watch the live log as properties roll in.", "Jobs can be paused and resumed."),
-    attachTo: attach("[data-tour='run-scrape-btn']"),
+    id: "scraper-terminal",
+    title: "Live Terminal",
+    text: richText("🖥️", "Stream Logs", "A real terminal-style log viewer shows every action the scraper takes — page fetches, property extractions, errors, and more. Logs stream in real-time via Socket.io.", "Logs are colour-coded by level: blue for info, amber for warnings, red for errors."),
+    attachTo: attach("[data-tour='scraper-terminal']", "left"),
+    buttons: nav(),
+  },
+  {
+    id: "scraper-feed",
+    title: "Incoming Properties",
+    text: richText("🏠", "Live Property Feed", "As properties are scraped, they appear here instantly — title, price, location, and thumbnail. This lets you verify data quality in real-time.", "Properties are saved to the database automatically after validation."),
+    attachTo: attach("[data-tour='scraper-feed']", "left"),
     buttons: endNav(),
   },
 ];
@@ -455,7 +461,7 @@ export const fullAppTour = (router: { push: (path: string) => void }) => [
   // Navigate to Scraper
   {
     id: "full-nav-scraper",
-    title: "Extraction Engine",
+    title: "Scraper Command Center",
     text: richText("⚙️", "The Scraper", "Now let's see how you collect new property data."),
     buttons: [
       btn.back("tour"),
@@ -466,6 +472,36 @@ export const fullAppTour = (router: { push: (path: string) => void }) => [
 
   // Scraper
   ...scraperSteps(router).slice(1).map(s => ({ ...s, id: "full-" + s.id, buttons: nav() })),
+
+  // Navigate to Saved Searches
+  {
+    id: "full-nav-saved-searches",
+    title: "Saved Searches",
+    text: richText("🔖", "Your Watchlists", "Set up alerts for properties that match your criteria."),
+    buttons: [
+      btn.back("tour"),
+      { classes: "rp-btn-primary", text: "Go to Saved Searches →", action: function(this: ShepherdTour) { router.push("/saved-searches"); setTimeout(() => this.next(), 700); } },
+      btn.skip(),
+    ],
+  },
+
+  // Saved Searches
+  ...savedSearchesSteps(router).slice(1).map(s => ({ ...s, id: "full-" + s.id, buttons: nav() })),
+
+  // Navigate to Data Explorer
+  {
+    id: "full-nav-data-explorer",
+    title: "Data Explorer",
+    text: richText("🗂️", "Deep Data Access", "Inspect, filter, and manage your raw and enriched property data."),
+    buttons: [
+      btn.back("tour"),
+      { classes: "rp-btn-primary", text: "Go to Data Explorer →", action: function(this: ShepherdTour) { router.push("/data-explorer"); setTimeout(() => this.next(), 700); } },
+      btn.skip(),
+    ],
+  },
+
+  // Data Explorer
+  ...dataExplorerSteps(router).slice(1).map(s => ({ ...s, id: "full-" + s.id, buttons: nav() })),
 
   // Navigate to Analytics
   {
@@ -481,6 +517,21 @@ export const fullAppTour = (router: { push: (path: string) => void }) => [
 
   // Analytics
   ...analyticsSteps(router).slice(1).map(s => ({ ...s, id: "full-" + s.id, buttons: nav() })),
+
+  // Navigate to Audit Log
+  {
+    id: "full-nav-audit-log",
+    title: "Audit Log",
+    text: richText("📋", "Activity Trail", "See every action taken in the system."),
+    buttons: [
+      btn.back("tour"),
+      { classes: "rp-btn-primary", text: "Go to Audit Log →", action: function(this: ShepherdTour) { router.push("/audit-log"); setTimeout(() => this.next(), 700); } },
+      btn.skip(),
+    ],
+  },
+
+  // Audit Log
+  ...auditLogSteps(router).slice(1).map(s => ({ ...s, id: "full-" + s.id, buttons: nav() })),
 
   // Navigate to Settings
   {
