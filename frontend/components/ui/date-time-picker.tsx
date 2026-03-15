@@ -80,8 +80,8 @@ export function DateTimePicker({ value, onChange, placeholder = "Pick a date", c
           <Button
             variant={"outline"}
             className={cn(
-              "w-full justify-start text-left font-normal border-border/50 bg-secondary/20 hover:bg-secondary/40 focus:ring-1 focus:ring-primary/50",
-              !value && "text-muted-foreground",
+              "w-full justify-start text-left font-normal border-border/50 bg-secondary/20 hover:bg-secondary/30 focus:ring-1 focus:ring-primary/50",
+              !value && "text-muted-foreground hover:text-foreground",
               className
             )}
           >
@@ -124,7 +124,7 @@ export function DateTimePicker({ value, onChange, placeholder = "Pick a date", c
                   ),
                   day_selected:
                     "bg-primary font-bold text-primary-foreground hover:bg-primary shadow-sm hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
-                  day_today: "bg-accent/20 text-accent font-semibold",
+                  day_today: "font-semibold text-foreground ring-1 ring-primary/40",
                   day_outside: "text-muted-foreground/30 opacity-50 font-normal",
                   day_disabled: "text-muted-foreground opacity-50",
                   day_hidden: "invisible",

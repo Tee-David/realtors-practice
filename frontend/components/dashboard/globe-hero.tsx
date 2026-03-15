@@ -253,7 +253,7 @@ export function GlobeHero() {
             baseColor={isDark ? [0.15, 0.08, 0.35] : [0.25, 0.25, 0.7]}
             glowColor={isDark ? [0.32, 0.15, 1] : [0.2, 0.1, 0.8]}
             markerColor={isDark ? [0.32, 0.15, 1] : [0, 0.004, 0.99]}
-            className="w-full max-w-[500px]"
+            className="w-full max-w-[500px] aspect-square"
           />
         </div>
       </motion.div>

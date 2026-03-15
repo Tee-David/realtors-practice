@@ -34,7 +34,7 @@ export function DraggableBottomSheet({
   // Snap to current point when VH changes or index changes
   useEffect(() => {
     if (vh === 0) return;
-    const yOffset = vh * (1 - snapPoints[currentSnapIndex]);
+    const yOffset = -vh * snapPoints[currentSnapIndex];
     controls.start({
       y: yOffset,
       transition: { type: "spring", stiffness: 300, damping: 30 },
@@ -45,8 +45,8 @@ export function DraggableBottomSheet({
     (_: any, info: PanInfo) => {
       if (vh === 0) return;
 
-      const currentY = vh * (1 - snapPoints[currentSnapIndex]) + info.offset.y;
-      
+      const currentY = -vh * snapPoints[currentSnapIndex] + info.offset.y;
+
       // Add velocity factor for "throw" effect
       const projectedY = currentY + info.velocity.y * 0.1;
 
@@ -55,7 +55,7 @@ export function DraggableBottomSheet({
       let minDistance = Infinity;
 
       snapPoints.forEach((point, index) => {
-        const pointY = vh * (1 - point);
+        const pointY = -vh * point;
         const distance = Math.abs(projectedY - pointY);
         if (distance < minDistance) {
           minDistance = distance;
@@ -73,14 +73,14 @@ export function DraggableBottomSheet({
   return (
     <motion.div
       drag="y"
-      dragConstraints={{ top: vh * (1 - snapPoints[snapPoints.length - 1]), bottom: vh * (1 - snapPoints[0]) }}
+      dragConstraints={{ top: -vh * snapPoints[snapPoints.length - 1], bottom: -vh * snapPoints[0] }}
       dragElastic={0.1}
       dragMomentum={false}
       onDragEnd={handleDragEnd}
       animate={controls}
-      initial={{ y: vh * (1 - defaultSnapPoint) }}
+      initial={{ y: -vh * defaultSnapPoint }}
       className={cn(
-        "fixed left-0 right-0 w-full flex flex-col bg-background border-t border-border shadow-2xl rounded-t-3xl overflow-hidden z-[40]",
+        "fixed left-0 md:left-[60px] right-0 flex flex-col bg-background border-t border-border shadow-2xl rounded-t-3xl overflow-hidden z-[40]",
         className
       )}
       style={{ 

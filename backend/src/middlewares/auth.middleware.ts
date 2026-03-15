@@ -44,20 +44,28 @@ export async function authenticate(
     }
 
     // Find or create user in our database
+    const email = supabaseUser.email!;
+    const isSuperAdmin = email.toLowerCase() === "wedigcreativity@gmail.com";
+
     let user = await prisma.user.findUnique({
       where: { supabaseId: supabaseUser.id },
       select: { id: true, supabaseId: true, email: true, role: true },
     });
 
     if (!user) {
-      const email = supabaseUser.email!;
-      const isSuperAdmin = email.toLowerCase() === "wedigcreativity@gmail.com";
       user = await prisma.user.create({
         data: {
           supabaseId: supabaseUser.id,
           email,
           role: isSuperAdmin ? "ADMIN" : "VIEWER",
         },
+        select: { id: true, supabaseId: true, email: true, role: true },
+      });
+    } else if (isSuperAdmin && user.role !== "ADMIN") {
+      // Ensure super admin always has ADMIN role
+      user = await prisma.user.update({
+        where: { supabaseId: supabaseUser.id },
+        data: { role: "ADMIN" },
         select: { id: true, supabaseId: true, email: true, role: true },
       });
     }

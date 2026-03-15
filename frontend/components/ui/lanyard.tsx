@@ -15,9 +15,6 @@ import {
 import { MeshLineGeometry, MeshLineMaterial } from 'meshline';
 import * as THREE from 'three';
 
-import { Html } from '@react-three/drei';
-import ProfileCard from './profile-card';
-
 const cardGLB = '/card.glb';
 const lanyard = '/lanyard.png';
 
@@ -52,10 +49,6 @@ interface LanyardProps {
   gravity?: [number, number, number];
   fov?: number;
   transparent?: boolean;
-  userName?: string;
-  userRole?: string;
-  userHandle?: string;
-  userAvatarUrl?: string;
 }
 
 export default function Lanyard({
@@ -63,10 +56,6 @@ export default function Lanyard({
   gravity = [0, -40, 0],
   fov = 16,
   transparent = true,
-  userName,
-  userRole,
-  userHandle,
-  userAvatarUrl,
 }: LanyardProps) {
   const [isMobile, setIsMobile] = useState<boolean>(() => typeof window !== 'undefined' && window.innerWidth < 768);
   const [glbValid, setGlbValid] = useState<boolean | null>(null);
@@ -127,7 +116,7 @@ export default function Lanyard({
         <Suspense fallback={null}>
           <ambientLight intensity={Math.PI} />
           <Physics gravity={gravity} timeStep={isMobile ? 1 / 30 : 1 / 60}>
-            <Band isMobile={isMobile} userName={userName} userRole={userRole} userHandle={userHandle} userAvatarUrl={userAvatarUrl} />
+            <Band isMobile={isMobile} />
           </Physics>
           <Environment blur={0.75}>
             <Lightformer
@@ -170,13 +159,9 @@ interface BandProps {
   maxSpeed?: number;
   minSpeed?: number;
   isMobile?: boolean;
-  userName?: string;
-  userRole?: string;
-  userHandle?: string;
-  userAvatarUrl?: string;
 }
 
-function Band({ maxSpeed = 50, minSpeed = 0, isMobile = false, userName, userRole, userHandle, userAvatarUrl }: BandProps) {
+function Band({ maxSpeed = 50, minSpeed = 0, isMobile = false }: BandProps) {
   // Using "any" for refs since the exact types depend on Rapier's internals
   const band = useRef<any>(null);
   const fixed = useRef<any>(null);
@@ -305,30 +290,6 @@ function Band({ maxSpeed = 50, minSpeed = 0, isMobile = false, userName, userRol
             </mesh>
             <mesh geometry={nodes.clip.geometry} material={materials.metal} material-roughness={0.3} />
             <mesh geometry={nodes.clamp.geometry} material={materials.metal} />
-            <Html
-              transform
-              position={[0, 0.335, 0.02]}
-              scale={0.038}
-              occlude="blending"
-              center
-              style={{ pointerEvents: 'none', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
-            >
-              <div style={{ width: '260px', fontSize: '13px' }}>
-                <ProfileCard
-                  name={userName || "User"}
-                  title={userRole || "Member"}
-                  handle={userHandle || "user"}
-                  status="Online"
-                  contactText="Contact Me"
-                  avatarUrl={userAvatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${userName || "User"}`}
-                  showUserInfo={false}
-                  enableTilt={false}
-                  behindGlowColor="rgba(0, 1, 252, 0.3)"
-                  innerGradient="linear-gradient(145deg, rgba(0, 1, 252, 0.1) 0%, rgba(0, 1, 252, 0.02) 100%)"
-                  behindGlowEnabled={false}
-                />
-              </div>
-            </Html>
           </group>
         </RigidBody>
       </group>

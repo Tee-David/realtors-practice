@@ -25,6 +25,8 @@ interface GlobeProps {
 }
 
 const cityCoordinates: Record<string, [number, number]> = {
+  lagos: [6.5244, 3.3792],
+  abuja: [9.0579, 7.4951],
   'san francisco': [37.7749, -122.4194],
   'new york': [40.7128, -74.006],
   london: [51.5074, -0.1278],
