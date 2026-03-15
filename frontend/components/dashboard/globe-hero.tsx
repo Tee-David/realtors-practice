@@ -215,27 +215,8 @@ export function GlobeHero() {
         initial={{ opacity: 0, x: -50 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 2, ease: "easeOut" }}
-        className="hidden lg:block absolute -bottom-[20%] -left-[15%] w-[45%] h-[110%] pointer-events-none z-0"
+        className="hidden lg:block absolute -bottom-[15%] -left-[10%] w-[55%] h-[120%] pointer-events-none z-0"
       >
-        <div
-          className="absolute inset-0"
-          style={{
-            background: isDark
-              ? "radial-gradient(circle, #0a0520 0%, rgba(10,5,32,0.8) 50%, transparent 70%)"
-              : "radial-gradient(circle, rgba(10,15,60,0.9) 0%, rgba(20,25,80,0.7) 40%, rgba(60,70,140,0.3) 65%, transparent 80%)",
-            borderRadius: "50%",
-          }}
-        />
-        <motion.div
-          initial={{ left: "-30%", opacity: 0 }}
-          animate={{ left: "130%", opacity: isDark ? [0, 0.8, 0.8, 0] : [0, 0.6, 0.6, 0] }}
-          transition={{ duration: 3.5, ease: "linear", delay: 1.5 }}
-          className="absolute top-[-25%] w-1.5 h-[150%] rotate-[30deg] z-10"
-          style={{
-            background: isDark ? "#5227FF" : "#0001FC",
-            filter: isDark ? "drop-shadow(0 0 20px rgba(82,39,255,1))" : "drop-shadow(0 0 12px rgba(0,1,252,0.6))",
-          }}
-        />
         <div className="absolute inset-0 flex items-center justify-center">
           <Globe
             rotateCities={["lagos", "london", "dubai", "new york"]}
@@ -253,7 +234,7 @@ export function GlobeHero() {
             baseColor={isDark ? [0.15, 0.08, 0.35] : [0.25, 0.25, 0.7]}
             glowColor={isDark ? [0.32, 0.15, 1] : [0.2, 0.1, 0.8]}
             markerColor={isDark ? [0.32, 0.15, 1] : [0, 0.004, 0.99]}
-            className="w-full max-w-[500px] aspect-square"
+            className="w-full max-w-[650px] aspect-square"
           />
         </div>
       </motion.div>

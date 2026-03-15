@@ -514,7 +514,7 @@ export default function SitesPage() {
           {paginatedSites.map(site => <SiteListRow key={site.id} site={site} />)}
         </div>
       ) : (
-        <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${isMobile ? Math.min(gridCols, 3) : gridCols}, minmax(0, 1fr))` }}>
+        <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${isMobile ? 1 : gridCols}, minmax(0, 1fr))` }}>
           {paginatedSites.map(site => <SiteGridCard key={site.id} site={site} />)}
         </div>
       )}

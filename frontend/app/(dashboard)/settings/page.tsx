@@ -184,7 +184,7 @@ function ProfileSection() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) { toast.error("Please select an image file"); return; }
-    if (file.size > 500 * 1024) { toast.error("Image must be under 500KB"); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error("Image must be under 5MB"); return; }
 
     try {
       setUploadingAvatar(true);
@@ -1258,7 +1258,7 @@ export default function SettingsPage() {
               </div>
 
             <div className="rounded-2xl border overflow-hidden" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
-              {NAV.map(item => {
+              {NAV.filter(item => item.key !== "profile").map(item => {
                 const Icon = item.icon;
                 return (
                   <button

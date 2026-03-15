@@ -345,11 +345,11 @@ router.get("/me", authenticate, async (req: Request, res: Response) => {
       return sendError(res, "User not found", 404);
     }
 
-    // Update last login
-    await prisma.user.update({
+    // Update last login (fire-and-forget, don't block response)
+    prisma.user.update({
       where: { id: req.user!.id },
       data: { lastLoginAt: new Date(), loginCount: { increment: 1 } },
-    });
+    }).catch(() => { /* ignore if loginCount column doesn't exist */ });
 
     void logAudit({
       userId: req.user!.id,
@@ -372,7 +372,7 @@ const updateProfileSchema = z.object({
   phone: z.string().max(20).optional(),
   bio: z.string().max(500).optional(),
   company: z.string().max(100).optional(),
-  avatarUrl: z.string().max(500000).optional().nullable(),
+  avatarUrl: z.string().max(5000000).optional().nullable(),
 });
 
 router.patch("/me", authenticate, async (req: Request, res: Response) => {

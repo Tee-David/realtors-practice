@@ -69,8 +69,8 @@ export function EmailTemplateBuilder({
           </div>
         </div>
 
-        {/* Editor — uses flex-1 to fill remaining viewport height */}
-        <div className="flex-1 overflow-hidden bg-white" style={{ minHeight: "400px" }}>
+        {/* Editor — uses explicit calc height to fill remaining viewport */}
+        <div className="overflow-hidden bg-white" style={{ height: "calc(100vh - 64px)", minHeight: "400px" }}>
           <EmailEditor
             ref={emailEditorRef}
             onLoad={onLoad}

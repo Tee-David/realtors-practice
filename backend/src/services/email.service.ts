@@ -52,7 +52,7 @@ async function sendEmail(to: string, subject: string, html: string, from?: strin
     return;
   }
 
-  Logger.warn("[Email] No email provider available — skipping send");
+  throw new Error("No email provider configured. Set RESEND_API_KEY or SMTP_HOST/SMTP_USER/SMTP_PASS environment variables.");
 }
 
 export class EmailService {
