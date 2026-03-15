@@ -215,7 +215,7 @@ export function GlobeHero() {
         initial={{ opacity: 0, x: -50 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 2, ease: "easeOut" }}
-        className="hidden lg:block absolute -bottom-[15%] -left-[10%] w-[55%] h-[120%] pointer-events-none z-0"
+        className="hidden lg:block absolute -bottom-[45%] -left-[12%] w-[50%] h-[130%] pointer-events-none z-0"
       >
         <div className="absolute inset-0 flex items-center justify-center">
           <Globe
@@ -239,7 +239,7 @@ export function GlobeHero() {
         </div>
       </motion.div>
 
-      <div className="hidden sm:flex absolute bottom-5 left-6 z-10 items-center gap-2 pointer-events-none">
+      <div className="hidden sm:flex absolute bottom-5 left-6 lg:left-[28%] z-10 items-center gap-2 pointer-events-none">
         <Activity className="w-3.5 h-3.5 text-green-500 animate-pulse" />
         <span className="text-[10px] text-foreground/80 dark:text-white/80 uppercase tracking-widest font-mono font-semibold">Sensors Active</span>
       </div>
