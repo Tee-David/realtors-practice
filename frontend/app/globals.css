@@ -305,24 +305,20 @@ iframe[src*="jotfor"],
 
 .shepherd-footer {
   padding: 1.25rem 1.5rem !important;
-  display: flex !important;
-  flex-direction: row !important;
-  flex-wrap: wrap !important;
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
   gap: 12px !important;
   background: white !important;
   border-top: 1px solid rgba(0, 0, 0, 0.05) !important;
 }
 
-/* First two buttons share the first row equally, third button takes full width */
-.shepherd-footer .shepherd-button {
-  flex: 1 1 calc(50% - 6px) !important;
-  max-width: calc(50% - 6px) !important;
+/* Third button (Skip Tour) spans full width across both columns */
+.shepherd-footer .shepherd-button:nth-child(3),
+.shepherd-footer > :nth-child(3) {
+  grid-column: 1 / -1 !important;
 }
 
-.shepherd-footer .shepherd-button:nth-child(3) {
-  flex: 1 1 100% !important;
-  max-width: 100% !important;
-}
+/* When only 2 buttons (e.g. Back + Done), each takes one column naturally */
 
 .dark .shepherd-footer {
   background: rgba(15, 23, 42, 0.5) !important;
@@ -338,6 +334,8 @@ iframe[src*="jotfor"],
   align-items: center !important;
   justify-content: center !important;
   cursor: pointer !important;
+  width: auto !important;
+  min-width: 0 !important;
 }
 
 /* Primary button (Let's Go / Next) → Brand Blue */
@@ -555,6 +553,7 @@ body.shepherd-active #app-sidebar {
   .shepherd-footer {
     padding: 1rem 1.25rem !important;
     gap: 8px !important;
+    grid-template-columns: 1fr 1fr !important;
   }
 
   .shepherd-button {
