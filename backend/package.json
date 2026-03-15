@@ -12,7 +12,10 @@
     "prisma:studio": "prisma studio",
     "prisma:migrate": "prisma migrate deploy",
     "render-build": "npm install && npx prisma generate && npx prisma db push && npm run build",
-    "seed": "npx ts-node prisma/seed.ts"
+    "seed": "npx ts-node prisma/seed.ts",
+    "test": "jest --forceExit --detectOpenHandles",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

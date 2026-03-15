@@ -73,6 +73,19 @@ export class CronService {
     }, {
       timezone: "Africa/Lagos"
     });
+
+    // Run daily at 3:30 AM — Data retention auto-purge
+    cron.schedule("30 3 * * *", async () => {
+      try {
+        Logger.info("[CRON] Starting data retention auto-purge");
+        await this.purgeStaleData();
+        Logger.info("[CRON] Data retention auto-purge completed");
+      } catch (error: any) {
+        Logger.error(`[CRON] Data retention auto-purge failed: ${error.message}`);
+      }
+    }, {
+      timezone: "Africa/Lagos"
+    });
   }
 
   /**
@@ -143,6 +156,60 @@ export class CronService {
       );
     } catch (error: any) {
       Logger.error(`[CRON] Failed to send match notifications: ${error.message}`);
+    }
+  }
+
+  /**
+   * Purge stale data according to retention policy:
+   *   - Properties with status EXPIRED or SOLD older than 90 days
+   *   - Audit logs older than 180 days
+   *   - Scrape logs older than 30 days
+   */
+  private static async purgeStaleData() {
+    const now = new Date();
+
+    // 1. Delete EXPIRED / SOLD properties older than 90 days
+    const propertyThreshold = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+    const deletedProperties = await prisma.property.deleteMany({
+      where: {
+        status: { in: ["EXPIRED", "SOLD"] },
+        updatedAt: { lt: propertyThreshold },
+      },
+    });
+    if (deletedProperties.count > 0) {
+      Logger.info(`[PURGE] Deleted ${deletedProperties.count} expired/sold properties older than 90 days`);
+    }
+
+    // 2. Delete audit logs older than 180 days
+    const auditThreshold = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
+    const deletedAuditLogs = await prisma.auditLog.deleteMany({
+      where: {
+        createdAt: { lt: auditThreshold },
+      },
+    });
+    if (deletedAuditLogs.count > 0) {
+      Logger.info(`[PURGE] Deleted ${deletedAuditLogs.count} audit logs older than 180 days`);
+    }
+
+    // 3. Delete scrape logs older than 30 days
+    const scrapeLogThreshold = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const deletedScrapeLogs = await prisma.scrapeLog.deleteMany({
+      where: {
+        timestamp: { lt: scrapeLogThreshold },
+      },
+    });
+    if (deletedScrapeLogs.count > 0) {
+      Logger.info(`[PURGE] Deleted ${deletedScrapeLogs.count} scrape logs older than 30 days`);
+    }
+
+    // Summary
+    const total = deletedProperties.count + deletedAuditLogs.count + deletedScrapeLogs.count;
+    if (total === 0) {
+      Logger.info("[PURGE] No stale data to purge");
+    } else {
+      Logger.info(
+        `[PURGE] Total purged: ${total} records (${deletedProperties.count} properties, ${deletedAuditLogs.count} audit logs, ${deletedScrapeLogs.count} scrape logs)`
+      );
     }
   }
 }

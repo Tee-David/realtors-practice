@@ -290,7 +290,30 @@ export default function DataExplorerPage() {
               {isLoading ? (
                 <tr><td colSpan={COLUMNS.length + 2}><ModernLoader words={['Querying property database...', 'Enriching data fields...', 'Validating records...', 'Preparing data view...']} /></td></tr>
               ) : items.length === 0 ? (
-                <tr><td colSpan={COLUMNS.length + 2} className="text-center py-12 text-sm" style={{ color: "var(--muted-foreground)" }}>No properties found</td></tr>
+                <tr>
+                  <td colSpan={COLUMNS.length + 2} className="text-center py-16">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ backgroundColor: "rgba(0,1,252,0.08)" }}>
+                        <Database size={28} style={{ color: "var(--primary)", opacity: 0.5 }} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>No data to explore</p>
+                        <p className="text-xs mt-1" style={{ color: "var(--muted-foreground)" }}>
+                          {searchQuery ? "No properties match your search query." : "Scraped property data will appear here once available."}
+                        </p>
+                      </div>
+                      {!searchQuery && (
+                        <a
+                          href="/scraper"
+                          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold mt-1 transition-colors hover:opacity-90"
+                          style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
+                        >
+                          Go to Scraper
+                        </a>
+                      )}
+                    </div>
+                  </td>
+                </tr>
               ) : (
                 items.map((item: any) => (
                   <tr key={item.id} className="border-t transition-colors hover:bg-[var(--secondary)]" style={{ borderColor: "var(--border)" }}>

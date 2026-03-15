@@ -7,7 +7,7 @@ import {
   Building2, TrendingUp, TrendingDown, Home, DollarSign, BarChart3,
   ArrowUpRight, ArrowDownRight, Download, Search, Filter,
   Calendar, RefreshCw, Globe, ChevronDown, MoreHorizontal,
-  Eye, Bed, MapPin, Tag, Activity,
+  Eye, Bed, MapPin, Tag, Activity, BarChart3 as BarChart3Icon,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import AnimatedCounter from "@/components/ui/animated-counter";
@@ -408,9 +408,23 @@ function PropertyTable({ data, tab, setTab, onExport }: { data: any[]; tab: Tabl
           </tbody>
         </table>
         {filtered.length === 0 && (
-          <div className="text-center py-12" style={{ color: "var(--muted-foreground)" }}>
-            <Building2 className="w-8 h-8 mx-auto mb-2 opacity-30" />
-            <p className="text-sm">No properties match this filter</p>
+          <div className="flex flex-col items-center justify-center py-16">
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-3" style={{ backgroundColor: "rgba(0,1,252,0.08)" }}>
+              <BarChart3 className="w-7 h-7" style={{ color: "var(--primary)", opacity: 0.5 }} />
+            </div>
+            <p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>No analytics data yet</p>
+            <p className="text-xs mt-1 mb-4" style={{ color: "var(--muted-foreground)" }}>
+              {tab !== "All" ? "No properties match this filter." : "Scrape some properties to see analytics and insights."}
+            </p>
+            {tab === "All" && (
+              <a
+                href="/scraper"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-colors hover:opacity-90"
+                style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
+              >
+                <Activity className="w-3.5 h-3.5" /> Start Scraping
+              </a>
+            )}
           </div>
         )}
       </div>

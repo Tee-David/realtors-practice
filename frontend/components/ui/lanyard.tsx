@@ -35,7 +35,7 @@ class LanyardErrorBoundary extends Component<{ children: ReactNode }, { hasError
   render() {
     if (this.state.hasError) {
       return (
-        <div className="w-full h-64 flex items-center justify-center text-muted-foreground text-sm">
+        <div className="w-full h-full min-h-[200px] flex items-center justify-center text-muted-foreground text-sm">
           <p>3D preview unavailable — card.glb could not be loaded.</p>
         </div>
       );
@@ -94,7 +94,7 @@ export default function Lanyard({
 
   if (glbValid === null) {
     return (
-      <div className="w-full h-64 flex items-center justify-center text-muted-foreground text-sm">
+      <div className="w-full h-full min-h-[200px] flex items-center justify-center text-muted-foreground text-sm">
         Loading 3D preview...
       </div>
     );
@@ -102,7 +102,7 @@ export default function Lanyard({
 
   if (!glbValid) {
     return (
-      <div className="w-full h-64 flex items-center justify-center text-muted-foreground text-sm">
+      <div className="w-full h-full min-h-[200px] flex items-center justify-center text-muted-foreground text-sm">
         <p>3D preview unavailable — card.glb could not be loaded.</p>
       </div>
     );
@@ -110,12 +110,13 @@ export default function Lanyard({
 
   return (
     <LanyardErrorBoundary>
-    <div className="relative z-0 w-full h-screen flex justify-center items-center transform scale-100 origin-center">
+    <div className="relative z-0 w-full h-full min-h-[250px] max-h-screen flex justify-center items-center transform scale-100 origin-center">
       <Canvas
-        camera={{ position, fov }}
+        camera={{ position, fov: isMobile ? fov + 4 : fov }}
         dpr={[1, isMobile ? 1.5 : 2]}
         gl={{ alpha: transparent }}
         onCreated={({ gl }) => gl.setClearColor(new THREE.Color(0x000000), transparent ? 0 : 1)}
+        style={{ touchAction: "pan-y" }}
       >
         <Suspense fallback={null}>
           <ambientLight intensity={Math.PI} />

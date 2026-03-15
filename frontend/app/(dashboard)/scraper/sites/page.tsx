@@ -11,6 +11,7 @@ import {
   Check, Grid2X2, Grid3X3
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import ModernLoader from "@/components/ui/modern-loader";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -494,15 +495,31 @@ export default function SitesPage() {
 
       {/* Content */}
       {isLoading ? (
-        <div className="py-24 flex flex-col items-center justify-center text-muted-foreground">
-          <RefreshCcw className="w-8 h-8 animate-spin mb-4 opacity-30" />
-          <p className="font-medium">Loading sites...</p>
+        <div className="relative min-h-[400px]">
+          <ModernLoader words={["Loading site configs...", "Checking source status...", "Preparing site list...", "Almost ready..."]} fullPage={false} />
         </div>
       ) : filteredSites.length === 0 ? (
-        <div className="py-24 flex flex-col items-center justify-center text-muted-foreground">
-          <Globe className="w-12 h-12 mb-4 opacity-10" />
-          <p className="font-medium text-lg text-foreground mb-1">No Sites Found</p>
-          <p className="text-sm">{searchQuery ? "No sites match your search." : "Add your first scraping target to get started."}</p>
+        <div className="py-24 flex flex-col items-center justify-center">
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ backgroundColor: "rgba(0,1,252,0.08)" }}>
+            <Globe className="w-8 h-8" style={{ color: "var(--primary)", opacity: 0.5 }} />
+          </div>
+          <p className="font-semibold text-lg text-foreground mb-1">
+            {searchQuery ? "No sites match your search" : "No sites configured"}
+          </p>
+          <p className="text-sm text-muted-foreground mb-5 text-center max-w-sm">
+            {searchQuery
+              ? "Try a different search term or clear your query."
+              : "Add your first scraping target to start collecting property data from across the web."}
+          </p>
+          {!searchQuery && (
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all hover:opacity-90"
+              style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
+            >
+              <Plus className="w-4 h-4" /> Add Your First Site
+            </button>
+          )}
         </div>
       ) : viewMode === "list" ? (
         <div className="bg-background rounded-xl border border-border/50 overflow-hidden">

@@ -315,6 +315,36 @@ function ProfileSection() {
 
 // ─── Security ───────────────────────────────────────────────────────────────
 
+interface SessionInfo {
+  browser: string;
+  os: string;
+  ip: string;
+  lastActive: string;
+  current: boolean;
+}
+
+function parseUserAgent(ua: string): { browser: string; os: string } {
+  let browser = "Unknown browser";
+  let os = "Unknown OS";
+
+  // Detect browser
+  if (ua.includes("Firefox/")) browser = "Firefox";
+  else if (ua.includes("Edg/")) browser = "Edge";
+  else if (ua.includes("OPR/") || ua.includes("Opera/")) browser = "Opera";
+  else if (ua.includes("Chrome/") && !ua.includes("Edg/")) browser = "Chrome";
+  else if (ua.includes("Safari/") && !ua.includes("Chrome/")) browser = "Safari";
+
+  // Detect OS
+  if (ua.includes("Windows")) os = "Windows";
+  else if (ua.includes("Mac OS X") || ua.includes("Macintosh")) os = "macOS";
+  else if (ua.includes("iPhone") || ua.includes("iPad")) os = "iOS";
+  else if (ua.includes("Android")) os = "Android";
+  else if (ua.includes("Linux")) os = "Linux";
+  else if (ua.includes("CrOS")) os = "ChromeOS";
+
+  return { browser, os };
+}
+
 function SecuritySection() {
   const [showNew, setShowNew] = useState(false);
   const [googleLinked, setGoogleLinked] = useState(false);
@@ -322,6 +352,9 @@ function SecuritySection() {
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
   const [changingPw, setChangingPw] = useState(false);
+  const [sessions, setSessions] = useState<SessionInfo[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(true);
+  const [revokingOthers, setRevokingOthers] = useState(false);
 
   // Check if Google identity is already linked — also re-checks after OAuth redirect
   useEffect(() => {
@@ -344,6 +377,74 @@ function SecuritySection() {
     })();
     return () => { sub?.unsubscribe(); };
   }, []);
+
+  // Load current session info
+  useEffect(() => {
+    const loadSession = async () => {
+      try {
+        const { supabase } = await import("@/lib/supabase");
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+          const { browser, os } = parseUserAgent(ua);
+          const lastRefresh = session.expires_at
+            ? new Date(session.expires_at * 1000)
+            : new Date();
+
+          setSessions([{
+            browser,
+            os,
+            ip: "", // IP is not available from client-side Supabase auth
+            lastActive: "Now",
+            current: true,
+          }]);
+
+          // Check for last_sign_in_at from user metadata for additional context
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user?.last_sign_in_at) {
+            const lastSignIn = new Date(user.last_sign_in_at);
+            const now = new Date();
+            const diffMs = now.getTime() - lastSignIn.getTime();
+            const diffMins = Math.floor(diffMs / 60000);
+            const diffHrs = Math.floor(diffMins / 60);
+            const diffDays = Math.floor(diffHrs / 24);
+            let lastActiveStr = "Now";
+            if (diffMins > 2) {
+              if (diffDays > 0) lastActiveStr = `${diffDays}d ago`;
+              else if (diffHrs > 0) lastActiveStr = `${diffHrs}h ago`;
+              else lastActiveStr = `${diffMins}m ago`;
+            }
+            setSessions([{
+              browser,
+              os,
+              ip: "",
+              lastActive: lastActiveStr,
+              current: true,
+            }]);
+          }
+        }
+      } catch {
+        // Silently fail — sessions will just show empty
+      } finally {
+        setSessionsLoading(false);
+      }
+    };
+    loadSession();
+  }, []);
+
+  const handleRevokeOtherSessions = async () => {
+    try {
+      setRevokingOthers(true);
+      const { supabase } = await import("@/lib/supabase");
+      const { error } = await supabase.auth.signOut({ scope: "others" });
+      if (error) throw error;
+      toast.success("All other sessions have been revoked");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to revoke other sessions");
+    } finally {
+      setRevokingOthers(false);
+    }
+  };
 
   const handleGoogleLink = async () => {
     try {
@@ -448,28 +549,44 @@ function SecuritySection() {
       {/* Sessions */}
       <Card>
         <CardHeader icon={Smartphone} title="Active Sessions" />
-        {[
-          { device: "Chrome on macOS", ip: "102.88.34.12", last: "Now", current: true },
-          { device: "Safari on iPhone", ip: "102.88.34.45", last: "2h ago", current: false },
-        ].map((s, i) => (
-          <div key={i} className="flex items-center justify-between py-2.5 border-b last:border-0" style={{ borderColor: "var(--border)" }}>
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: "var(--secondary)" }}>
-                <Smartphone className="w-4 h-4" style={{ color: "var(--muted-foreground)" }} />
-              </div>
-              <div>
-                <p className="text-sm font-medium flex items-center gap-1.5" style={{ color: "var(--foreground)" }}>
-                  {s.device}
-                  {s.current && <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold" style={{ backgroundColor: "rgba(22,163,74,0.12)", color: "#16a34a" }}>Current</span>}
-                </p>
-                <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>{s.ip} · {s.last}</p>
+        {sessionsLoading ? (
+          <div className="py-4 text-center text-xs" style={{ color: "var(--muted-foreground)" }}>Loading sessions...</div>
+        ) : sessions.length === 0 ? (
+          <div className="py-4 text-center text-xs" style={{ color: "var(--muted-foreground)" }}>No active sessions found</div>
+        ) : (
+          sessions.map((s, i) => (
+            <div key={i} className="flex items-center justify-between py-2.5 border-b last:border-0" style={{ borderColor: "var(--border)" }}>
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: "var(--secondary)" }}>
+                  {s.os === "iOS" || s.os === "Android" ? (
+                    <Smartphone className="w-4 h-4" style={{ color: "var(--muted-foreground)" }} />
+                  ) : (
+                    <Monitor className="w-4 h-4" style={{ color: "var(--muted-foreground)" }} />
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm font-medium flex items-center gap-1.5" style={{ color: "var(--foreground)" }}>
+                    {s.browser} on {s.os}
+                    {s.current && <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold" style={{ backgroundColor: "rgba(22,163,74,0.12)", color: "#16a34a" }}>Current</span>}
+                  </p>
+                  <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                    {s.ip ? `${s.ip} · ` : ""}{s.lastActive}
+                  </p>
+                </div>
               </div>
             </div>
-            {!s.current && (
-              <button onClick={() => toast.success("Session revoked")} className="text-xs font-medium" style={{ color: "var(--destructive)" }}>Revoke</button>
-            )}
-          </div>
-        ))}
+          ))
+        )}
+        <div className="pt-3">
+          <button
+            onClick={handleRevokeOtherSessions}
+            disabled={revokingOthers}
+            className="text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-50"
+            style={{ borderColor: "var(--destructive)", color: "var(--destructive)" }}
+          >
+            {revokingOthers ? "Revoking..." : "Sign out all other sessions"}
+          </button>
+        </div>
       </Card>
     </div>
   );

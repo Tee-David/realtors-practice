@@ -74,7 +74,7 @@ export function DateTimePicker({ value, onChange, placeholder = "Pick a date", c
   const minuteOptions = Array.from({ length: 12 }, (_, i) => (i * 5).toString().padStart(2, '0'));
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setOpen} modal={false}>
       <PopoverTrigger asChild>
         <div className="relative">
           <Button
@@ -98,8 +98,20 @@ export function DateTimePicker({ value, onChange, placeholder = "Pick a date", c
           )}
         </div>
       </PopoverTrigger>
-      <PopoverContent className="w-auto max-w-[320px] p-0 z-[1100] pointer-events-auto border-border shadow-xl rounded-xl overflow-hidden" align="start" sideOffset={4}>
-        <div className="flex flex-col bg-card">
+      <PopoverContent
+        className="w-auto max-w-[320px] p-0 !z-[9999] pointer-events-auto border-border shadow-xl rounded-xl overflow-hidden"
+        align="start"
+        sideOffset={4}
+        style={{ zIndex: 9999 }}
+        onPointerDownOutside={(e) => {
+          // Prevent closing when interacting with elements inside sheets/overlays
+          const target = e.target as HTMLElement;
+          if (target?.closest?.("[data-slot='popover-content']")) {
+            e.preventDefault();
+          }
+        }}
+      >
+        <div className="flex flex-col bg-card" onPointerDown={(e) => e.stopPropagation()}>
           {/* Calendar Section */}
           <div className="p-3">
             <Calendar

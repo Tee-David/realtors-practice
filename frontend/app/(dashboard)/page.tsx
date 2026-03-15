@@ -552,8 +552,23 @@ function PropertyOverviewTable({
           <tbody>
             {properties.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-sm" style={{ color: "var(--muted-foreground)" }}>
-                  No properties found
+                <td colSpan={5} className="px-4 py-16 text-center">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ backgroundColor: "rgba(0,1,252,0.08)" }}>
+                      <Building2 size={28} style={{ color: "var(--primary)", opacity: 0.6 }} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>No properties yet</p>
+                      <p className="text-xs mt-1" style={{ color: "var(--muted-foreground)" }}>Start scraping to populate your dashboard</p>
+                    </div>
+                    <Link
+                      href="/scraper"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold mt-1 transition-colors hover:opacity-90"
+                      style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
+                    >
+                      <Activity size={14} /> Start Scraping
+                    </Link>
+                  </div>
                 </td>
               </tr>
             ) : (
@@ -908,13 +923,25 @@ export default function DashboardPage() {
             ))
           ) : (
             <div
-              className="col-span-full flex flex-col items-center justify-center py-12 rounded-xl"
+              className="col-span-full flex flex-col items-center justify-center py-16 rounded-xl"
               style={{ backgroundColor: "var(--card)" }}
             >
-              <Building2 size={32} style={{ color: "var(--muted-foreground)" }} className="mb-2" />
-              <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ backgroundColor: "rgba(0,1,252,0.08)" }}>
+                <Building2 size={32} style={{ color: "var(--primary)", opacity: 0.5 }} />
+              </div>
+              <p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
                 No {recentTab === "SALE" ? "sale" : "rental"} {pluralize(0, "property", "properties")} found
               </p>
+              <p className="text-xs mt-1 mb-4" style={{ color: "var(--muted-foreground)" }}>
+                Properties will appear here once you start scraping listings
+              </p>
+              <Link
+                href="/scraper"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-colors hover:opacity-90"
+                style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
+              >
+                Go to Scraper
+              </Link>
             </div>
           )}
         </div>

@@ -439,9 +439,26 @@ export default function PropertiesPage() {
                 <ModernLoader words={['Loading property listings...', 'Fetching latest data...', 'Preparing your results...', 'Almost there...']} />
               ) : properties.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 gap-3">
-                  <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-                    No properties match your filters.
+                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-1" style={{ backgroundColor: "rgba(0,1,252,0.08)" }}>
+                    <Building2 size={32} style={{ color: "var(--primary)", opacity: 0.5 }} />
+                  </div>
+                  <p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+                    No properties yet
                   </p>
+                  <p className="text-xs text-center max-w-xs" style={{ color: "var(--muted-foreground)" }}>
+                    {filters.search || activeFilterCount > 0
+                      ? "No properties match your current filters. Try adjusting your search criteria."
+                      : "Start scraping property listings to see them here."}
+                  </p>
+                  {!filters.search && activeFilterCount === 0 && (
+                    <a
+                      href="/scraper"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold mt-1 transition-colors hover:opacity-90"
+                      style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
+                    >
+                      Start Scraping
+                    </a>
+                  )}
                 </div>
               ) : (
                 properties.map((property: Property) => (

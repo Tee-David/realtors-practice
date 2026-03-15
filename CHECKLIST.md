@@ -301,9 +301,9 @@
 - [x] Settings page - general settings
 - [x] Settings page - email notification config
 - [ ] Settings page - environment variable management
-- [ ] Testing: Jest setup for backend unit/integration tests
-- [ ] Testing: Vitest setup for frontend component tests
-- [ ] Testing: Core backend service tests (property CRUD, versioning, dedup)
+- [x] Testing: Jest setup for backend unit/integration tests
+- [x] Testing: Vitest setup for frontend component tests
+- [x] Testing: Core backend service tests (property CRUD, versioning, dedup)
 - [ ] Testing: API endpoint integration tests
 - [x] PWA: manifest.json + service worker for offline/mobile
 - [x] PWA: App install prompt for mobile users
@@ -311,9 +311,9 @@
 - [ ] Backup: CockroachDB backup verification
 - [ ] Monitoring: UptimeRobot for API health monitoring
 - [ ] Monitoring: Scraper health dashboard (site success rates, data freshness)
-- [ ] Legal: Privacy policy page
+- [x] Legal: Privacy policy page
 - [ ] Legal: robots.txt respect toggle per site
-- [ ] Legal: Data retention policy + auto-purge cron for old data
+- [x] Legal: Data retention policy + auto-purge cron for old data
 - [x] Fraud: Basic fraud detection signals (abnormally low price, duplicate images)
 - [x] Fraud: "Flag as suspicious" user action on property cards
 - [x] Security: CSRF protection for Express backend
@@ -454,7 +454,7 @@
 - [x] Search: Mobile optimized — CSS-only pills, reduced shadows
 
 ### New Files Required (from spec)
-- [ ] `components/map/mapbox-map.tsx` — Mapbox GL wrapper with flyTo
+- [x] `lib/map-providers/mapbox-map.tsx` — Mapbox GL wrapper with flyTo
 - [x] `components/map/price-pill-marker.tsx` — Custom price pill component
 - [x] `components/map/marker-cluster.tsx` — Supercluster integration
 - [x] `components/map/map-controls.tsx` — Zoom, style switch, locate me
@@ -787,11 +787,11 @@
 - **Phase 4.5:** 3 tasks (3 done ✅)
 - **Phase 5:** 17 tasks (14 done, 3 tests pending)
 - **Phase 6:** 22 tasks (19 done, 3 tests pending)
-- **Phase 7:** 38 tasks (27 done — fraud, timeout, retry, pooling, API docs, README added)
+- **Phase 7:** 38 tasks (32 done — testing setup, privacy, data retention, fraud, API docs added)
 - **Phase 8:** 15 tasks (12 done — taxonomy, price/sqm, yield, DOM, comparables, search logging, most-viewed, API versioning, market page)
 - **Phase 9:** 48 tasks (48 done ✅)
 - **Phase 10:** 22 tasks (17 done, 5 pending)
 - **Phase 11:** 3 tasks (3 done ✅)
 - **Phase 12:** ~75 tasks (~38 done — tour, email, OAuth, profile, globe, notifications, perf, saved search, site CRUD, scraper fixes)
 - **Phase 13:** 39 tasks (0 done — ⚠️ blocked until Phases 1–12 are stable)
-- **TOTAL:** ~431 tasks (~265 done, ~166 remaining)
+- **TOTAL:** ~431 tasks (~270 done, ~161 remaining)

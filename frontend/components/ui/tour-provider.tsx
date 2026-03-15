@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import Shepherd from "shepherd.js";
-import confetti from "canvas-confetti";
 import { fullAppTour, PAGE_TOURS, tourOptions, type ShepherdTour } from "./tour-steps";
 import { TourSelectorModal } from "./tour-selector-modal";
 import { useRouter } from "next/navigation";
@@ -60,11 +59,60 @@ function buildTour(steps: object[]): ShepherdTour {
 
 // ─── Provider ────────────────────────────────────────────────────────────────
 
+// Dynamic import to avoid SSR/ESM issues with canvas-confetti
+async function fireConfetti() {
+  try {
+    const confettiModule = await import("canvas-confetti");
+    const confetti = confettiModule.default || confettiModule;
+    if (typeof confetti !== "function") return;
+
+    const colors = ["#0001FC", "#FF6600", "#0a6906", "#8b5cf6", "#facc15"];
+
+    // Initial big burst from center
+    confetti({
+      particleCount: 120,
+      spread: 100,
+      origin: { x: 0.5, y: 0.5 },
+      colors,
+      startVelocity: 45,
+      gravity: 0.8,
+      scalar: 1.1,
+      zIndex: 999999,
+    });
+
+    // Sustained side cannons for ~3 seconds
+    const duration = 3000;
+    const end = Date.now() + duration;
+    (function frame() {
+      confetti({
+        particleCount: 8,
+        angle: 60,
+        spread: 70,
+        origin: { x: 0, y: 0.7 },
+        colors,
+        startVelocity: 35,
+        zIndex: 999999,
+      });
+      confetti({
+        particleCount: 8,
+        angle: 120,
+        spread: 70,
+        origin: { x: 1, y: 0.7 },
+        colors,
+        startVelocity: 35,
+        zIndex: 999999,
+      });
+      if (Date.now() < end) requestAnimationFrame(frame);
+    })();
+  } catch (err) {
+    console.warn("Confetti failed to load:", err);
+  }
+}
+
 export function TourProvider() {
   const router = useRouter();
   const tourRef = useRef<ShepherdTour | null>(null);
   const [showModal, setShowModal] = useState(false);
-  // confetti is fired imperatively via canvas-confetti, no state needed
 
   // ── Attach Shepherd events ──────────────────────────────────────────────
 
@@ -82,42 +130,8 @@ export function TourProvider() {
     tour.on("complete", () => {
       localStorage.setItem(TOUR_SEEN_KEY, "true");
       document.dispatchEvent(new CustomEvent("tour-active", { detail: false }));
-      // Fire real confetti bursts
-      const colors = ["#0001FC", "#FF6600", "#0a6906", "#8b5cf6", "#facc15"];
-
-      // Initial big burst from center
-      confetti({
-        particleCount: 120,
-        spread: 100,
-        origin: { x: 0.5, y: 0.5 },
-        colors,
-        startVelocity: 45,
-        gravity: 0.8,
-        scalar: 1.1,
-      });
-
-      // Sustained side cannons
-      const duration = 3000;
-      const end = Date.now() + duration;
-      (function frame() {
-        confetti({
-          particleCount: 8,
-          angle: 60,
-          spread: 70,
-          origin: { x: 0, y: 0.7 },
-          colors,
-          startVelocity: 35,
-        });
-        confetti({
-          particleCount: 8,
-          angle: 120,
-          spread: 70,
-          origin: { x: 1, y: 0.7 },
-          colors,
-          startVelocity: 35,
-        });
-        if (Date.now() < end) requestAnimationFrame(frame);
-      })();
+      // Fire confetti via dynamic import to avoid SSR/ESM issues
+      fireConfetti();
     });
 
     tour.on("cancel", () => {

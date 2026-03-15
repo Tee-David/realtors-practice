@@ -7,7 +7,10 @@
     "build": "next build",
     "analyze": "cross-env ANALYZE=true next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@fontsource/space-grotesk": "^5.2.10",
