@@ -364,9 +364,12 @@ export default function ScraperPage() {
     };
   }, [socket, refetch, liveProgress, elapsedMs, selectedSiteIds.length]);
 
-  // ── Auto-scroll logs
+  // ── Auto-scroll logs (within container, not page)
   useEffect(() => {
-    logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = logsEndRef.current;
+    if (el?.parentElement) {
+      el.parentElement.scrollTop = el.parentElement.scrollHeight;
+    }
   }, [logs]);
 
   // ── Site helpers
@@ -1213,7 +1216,7 @@ export default function ScraperPage() {
         <div className="lg:col-span-8 flex flex-col">
 
           {/* Live Terminal */}
-          <Card data-tour="scraper-terminal" className="bg-white dark:bg-[#0A0A0B] border border-border dark:border-white/10 shadow-xl relative overflow-hidden flex flex-col rounded-2xl min-h-[340px] h-full">
+          <Card data-tour="scraper-terminal" className="bg-white dark:bg-[#0A0A0B] border border-border dark:border-white/10 shadow-xl relative overflow-hidden flex flex-col rounded-2xl min-h-[340px] max-h-[600px]">
             {/* Terminal header */}
             <CardHeader className="pb-2 border-b border-border dark:border-white/10 bg-slate-50/80 dark:bg-[#0A0A0B]/80 backdrop-blur-xl z-10 flex-shrink-0">
               <div className="flex items-center justify-between">
