@@ -23,6 +23,37 @@ from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+# Site-specific URL patterns that identify DETAIL pages (not category/index pages).
+# These are the most reliable way to find property listings — CSS selectors break
+# when sites redesign, but URL structures are stable.
+SITE_DETAIL_URL_PATTERNS: dict[str, list[re.Pattern]] = {
+    "propertypro.ng": [
+        # /property/3-bedroom-flat-for-sale-lekki-5PBCA (slug ending with alphanumeric ID)
+        re.compile(r"/property/[\w-]+-\d*[A-Z][A-Z0-9]{2,}$", re.IGNORECASE),
+        re.compile(r"/property/[\w-]{20,}$"),  # Long slugs are detail pages
+    ],
+    "nigeriapropertycentre.com": [
+        re.compile(r"/\d{6,}-[\w-]+$"),  # /2207080-luxury-two-bedroom-maisonette
+        re.compile(r"/property/\d{4,}"),  # /property/125342
+    ],
+    "jiji.ng": [
+        re.compile(r"/[\w-]+-[\w]{5,}\.html$"),  # /slug-id123.html
+        re.compile(r"/item/[\w-]+"),  # /item/slug
+    ],
+    "property24.com.ng": [
+        re.compile(r"/\d{6,}$"),  # /property-for-sale/123456
+        re.compile(r"/property-for-(?:sale|rent)/[\w-]+/\d+"),  # /property-for-sale/lagos/123456
+    ],
+    "buyletlive.com": [
+        re.compile(r"/properties/[a-f0-9-]{20,}"),  # UUID-based
+        re.compile(r"/properties/[\w-]{20,}$"),  # Long slug detail pages
+    ],
+    "privateproperty.com.ng": [
+        re.compile(r"/[\w-]+-\d{4,}$"),  # /slug-12345
+        re.compile(r"/property/[\w-]+-\d+"),  # /property/slug-12345
+    ],
+}
+
 
 class UniversalExtractor:
     """Extracts property data from HTML using configurable CSS selectors."""
@@ -78,17 +109,25 @@ class UniversalExtractor:
     def extract_listing_urls(
         self, html: str, base_url: str, listing_selector: str
     ) -> list[str]:
-        """Extract listing URLs from a search/listing page, filtering honeypots.
+        """Extract listing URLs from a search/listing page.
 
-        Tries the provided selector first, then falls back to auto-detection
-        of property listing links based on URL patterns.
+        Strategy (in priority order):
+        1. Site-specific URL pattern matching (most reliable — survives redesigns)
+        2. CSS selectors from site config (fast but brittle)
+        3. Auto-detection with heuristics (last resort)
         """
         soup = BeautifulSoup(html, "lxml")
+
+        # Strategy 1: Site-specific URL pattern matching
+        domain = urlparse(base_url).netloc.replace("www.", "")
+        pattern_urls = self._extract_by_url_patterns(soup, base_url, domain)
+        if pattern_urls:
+            logger.info(f"URL patterns found {len(pattern_urls)} detail URLs for {domain}")
+            return pattern_urls
+
+        # Strategy 2: CSS selectors from site config
         urls: list[str] = []
-
-        # Try each pipe-separated selector
         selectors = [s.strip() for s in listing_selector.split("|")]
-
         for selector in selectors:
             if not selector:
                 continue
@@ -100,16 +139,58 @@ class UniversalExtractor:
                     href = self._get_href(el)
                     if href:
                         full_url = urljoin(base_url, str(href))
-                        if full_url not in urls and self._is_property_url(full_url, base_url):
+                        if full_url not in urls and self._is_detail_url(full_url, base_url):
                             urls.append(full_url)
                 if urls:
+                    logger.info(f"CSS selector '{selector}' found {len(urls)} detail URLs")
                     return urls
 
-        # Fallback: auto-detect property links by URL patterns
+        # Strategy 3: Auto-detect property links by heuristics
         if not urls:
             urls = self._auto_detect_listing_urls(soup, base_url)
 
         return urls
+
+    def _extract_by_url_patterns(
+        self, soup: BeautifulSoup, base_url: str, domain: str
+    ) -> list[str]:
+        """Extract listing URLs by matching against known site URL patterns."""
+        patterns = SITE_DETAIL_URL_PATTERNS.get(domain, [])
+        if not patterns:
+            return []
+
+        urls: list[str] = []
+        seen = set()
+        base_domain = urlparse(base_url).netloc
+
+        for link in soup.find_all("a", href=True):
+            if self._is_honeypot(link):
+                continue
+            href = str(link["href"])
+
+            # Skip non-http protocols
+            if href.startswith(("mailto:", "tel:", "javascript:", "whatsapp:", "data:")):
+                continue
+
+            full_url = urljoin(base_url, href)
+            parsed = urlparse(full_url)
+
+            # Must be same domain
+            if parsed.netloc and parsed.netloc.replace("www.", "") != base_domain.replace("www.", ""):
+                continue
+
+            path = parsed.path.rstrip("/")
+            if path in seen or not path:
+                continue
+
+            # Check against site-specific patterns
+            for pattern in patterns:
+                if pattern.search(path):
+                    seen.add(path)
+                    urls.append(full_url)
+                    break
+
+        return urls[:200]
 
     def _get_href(self, el: Tag) -> Optional[str]:
         """Extract href from an element or its first child link."""
@@ -121,16 +202,21 @@ class UniversalExtractor:
         return None
 
     @staticmethod
-    def _is_property_url(url: str, base_url: str) -> bool:
-        """Check if a URL looks like a property detail page."""
+    def _is_detail_url(url: str, base_url: str) -> bool:
+        """Check if a URL looks like a property DETAIL page (not category/index).
+
+        Detail pages have unique slugs or numeric IDs and are deeper URLs.
+        Category pages like /property-for-sale/flat-apartment are rejected.
+        """
         parsed = urlparse(url)
         base_domain = urlparse(base_url).netloc
 
         # Must be same domain
-        if parsed.netloc and parsed.netloc != base_domain:
+        if parsed.netloc and parsed.netloc.replace("www.", "") != base_domain.replace("www.", ""):
             return False
 
-        path = parsed.path.lower()
+        path = parsed.path.rstrip("/").lower()
+        segments = [s for s in path.split("/") if s]
 
         # Skip non-property pages
         skip_patterns = [
@@ -138,38 +224,78 @@ class UniversalExtractor:
             "/terms", "/privacy", "/faq", "/help", "/blog",
             "/agents", "/companies", "/account", "/cart", "/checkout",
             ".css", ".js", ".png", ".jpg", ".svg", ".ico",
-            "/search", "/filter",
+            "/search", "/filter", "/requests/", "/market-trends",
+            "/create", "/edit", "/delete", "/settings", "/profile",
+            "/advertise", "/pricing", "/subscribe", "/newsletter",
         ]
         if any(pat in path for pat in skip_patterns):
             return False
 
-        # Common property URL patterns for Nigerian sites
-        property_patterns = [
-            r"/property/", r"/properties/", r"/listing/", r"/listings/",
-            r"/for-sale/", r"/for-rent/", r"/to-let/",
-            r"/house", r"/flat", r"/apartment", r"/land",
-            r"/detail", r"/view/",
-            r"/\d+",  # Numeric IDs in URL
-        ]
-        return any(re.search(pat, path) for pat in property_patterns)
+        # Detail pages need at least 2 path segments (e.g. /property/slug-123)
+        if len(segments) < 2:
+            return False
+
+        last_segment = segments[-1]
+
+        # Reject short generic category segments
+        category_slugs = {
+            "flat-apartment", "house", "land", "commercial", "office",
+            "duplex", "bungalow", "warehouse", "shop", "showtype",
+            "lagos", "abuja", "ibadan", "kano", "port-harcourt",
+            "residential", "all", "sale", "rent", "shortlet",
+        }
+        if last_segment in category_slugs:
+            return False
+
+        # Reject bedroom-filter URLs like /in/lagos/3-bedroom
+        if re.match(r"^\d+-bedroom$", last_segment):
+            return False
+
+        # Positive signals for detail pages:
+        # 1. Has alphanumeric ID (e.g. 5PBCA, abc123)
+        if re.search(r"[A-Z0-9]{4,}$", segments[-1], re.IGNORECASE):
+            return True
+        # 2. Has numeric ID (6+ digits)
+        if re.search(r"\d{5,}", last_segment):
+            return True
+        # 3. Ends with .html
+        if last_segment.endswith(".html"):
+            return True
+        # 4. Long unique slug (20+ chars, likely a property title)
+        if len(last_segment) > 25 and "-" in last_segment:
+            return True
+        # 5. URL has property detail indicators with a unique segment
+        detail_indicators = ["/property/", "/listing/", "/detail/", "/view/", "/item/"]
+        if any(ind in path for ind in detail_indicators) and len(last_segment) > 10:
+            return True
+
+        return False
+
+    # Keep backward compatibility
+    _is_property_url = _is_detail_url
 
     def _auto_detect_listing_urls(self, soup: BeautifulSoup, base_url: str) -> list[str]:
-        """Auto-detect property listing URLs when CSS selectors fail."""
+        """Auto-detect property listing URLs when CSS selectors and patterns fail."""
         urls: list[str] = []
+        seen = set()
 
         for link in soup.find_all("a", href=True):
             if self._is_honeypot(link):
                 continue
             href = str(link["href"])
+            if href.startswith(("mailto:", "tel:", "javascript:", "whatsapp:", "data:")):
+                continue
             full_url = urljoin(base_url, href)
-            if full_url not in urls and self._is_property_url(full_url, base_url):
-                # Additional heuristic: links inside elements that look like listing cards
-                parent_classes = " ".join(link.parent.get("class", [])).lower() if link.parent else ""
-                card_hints = ("card", "listing", "property", "item", "result", "product")
-                if any(hint in parent_classes for hint in card_hints) or self._is_property_url(full_url, base_url):
-                    urls.append(full_url)
+            path = urlparse(full_url).path.rstrip("/")
+            if path in seen:
+                continue
+            seen.add(path)
 
-        return urls[:200]  # Cap at 200 to prevent runaway
+            if self._is_detail_url(full_url, base_url):
+                urls.append(full_url)
+
+        logger.info(f"Auto-detect found {len(urls)} candidate detail URLs")
+        return urls[:200]
 
     def extract_property(self, html: str, url: str) -> Optional[dict[str, Any]]:
         """Extract property data from a detail page."""
@@ -487,7 +613,29 @@ class UniversalExtractor:
         for blob in json_ld_list:
             walk(blob)
 
-        return items
+        if not items:
+            return items
+
+        # Merge multiple JSON-LD objects from the same page into one property.
+        # Many sites (like PropertyPro) split data across RealEstateListing,
+        # SingleFamilyResidence, and Offer objects as siblings.
+        merged: dict[str, Any] = {"_source": "json-ld", "listingUrl": page_url}
+        for item in items:
+            for key, value in item.items():
+                if key == "_source":
+                    continue
+                # Keep the first non-None value for each field
+                if value is not None and (key not in merged or merged[key] is None):
+                    merged[key] = value
+                # For images, merge all lists
+                elif key == "images" and isinstance(value, list) and value:
+                    existing = merged.get("images", [])
+                    for img in value:
+                        if img and img not in existing:
+                            existing.append(img)
+                    merged["images"] = existing
+
+        return [merged]
 
     def extract_property_with_json_ld(
         self, html: str, url: str

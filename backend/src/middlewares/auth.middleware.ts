@@ -45,7 +45,10 @@ export async function authenticate(
 
     // Find or create user in our database
     const email = supabaseUser.email!;
-    const isSuperAdmin = email.toLowerCase() === "wedigcreativity@gmail.com";
+    const superAdminEmails = (process.env.SUPER_ADMIN_EMAILS || "wedigcreativity@gmail.com")
+      .split(",")
+      .map((e) => e.trim().toLowerCase());
+    const isSuperAdmin = superAdminEmails.includes(email.toLowerCase());
 
     let user = await prisma.user.findUnique({
       where: { supabaseId: supabaseUser.id },

@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import crypto from "crypto";
 import { config } from "../config/env";
 
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -26,9 +27,13 @@ export function csrfProtection(
     return next();
   }
 
-  // 2. Internal API calls bypass CSRF
+  // 2. Internal API calls bypass CSRF (timing-safe comparison)
   const internalKey = req.headers["x-internal-key"];
-  if (internalKey && internalKey === config.scraper.internalKey) {
+  if (
+    typeof internalKey === "string" &&
+    internalKey.length === config.scraper.internalKey.length &&
+    crypto.timingSafeEqual(Buffer.from(internalKey), Buffer.from(config.scraper.internalKey))
+  ) {
     return next();
   }
 

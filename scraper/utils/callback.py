@@ -11,18 +11,20 @@ logger = get_logger(__name__)
 
 _client = httpx.AsyncClient(timeout=30.0)
 
-# Module-level override for api_base_url (set per-job from callbackUrl in payload)
-_api_base_url_override: str | None = None
+# Thread-safe per-job callback URL storage using contextvars
+import contextvars
+_api_base_url_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "_api_base_url_var", default=None
+)
 
 
 def set_api_base_url(url: str | None) -> None:
-    """Override the API base URL for callbacks (used when callbackUrl is provided in the job request)."""
-    global _api_base_url_override
-    _api_base_url_override = url.rstrip("/") if url else None
+    """Override the API base URL for callbacks (per-job, concurrency-safe via contextvars)."""
+    _api_base_url_var.set(url.rstrip("/") if url else None)
 
 
 def _base_url() -> str:
-    return _api_base_url_override or config.api_base_url
+    return _api_base_url_var.get() or config.api_base_url
 
 
 def _headers() -> dict[str, str]:

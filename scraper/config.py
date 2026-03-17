@@ -11,7 +11,7 @@ load_dotenv()
 class Config:
     # API callback (supports both API_BASE_URL and API_CALLBACK_URL for backwards compat)
     api_base_url: str = os.getenv("API_BASE_URL", os.getenv("API_CALLBACK_URL", "http://localhost:5000/api"))
-    internal_api_key: str = os.getenv("INTERNAL_API_KEY", "dev-internal-key")
+    internal_api_key: str = os.getenv("INTERNAL_API_KEY", "")
 
     # Server
     host: str = os.getenv("SCRAPER_HOST", "0.0.0.0")
@@ -31,6 +31,14 @@ class Config:
     proxy_urls: list[str] = field(default_factory=list)
 
     def __post_init__(self):
+        # Validate internal API key
+        if not self.internal_api_key or self.internal_api_key == "dev-internal-key":
+            env = os.getenv("ENVIRONMENT", "development")
+            if env == "production":
+                raise RuntimeError("INTERNAL_API_KEY must be set in production (cannot use default)")
+            if not self.internal_api_key:
+                self.internal_api_key = "dev-internal-key"
+        # Parse proxy URLs
         if self.proxy_urls_raw:
             self.proxy_urls = [p.strip() for p in self.proxy_urls_raw.split(",") if p.strip()]
 

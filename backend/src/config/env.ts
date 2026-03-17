@@ -33,7 +33,16 @@ export const config = {
   },
   scraper: {
     url: process.env.SCRAPER_URL || "http://localhost:8000",
-    internalKey: process.env.INTERNAL_API_KEY || "dev-internal-key",
+    internalKey: (() => {
+      const key = process.env.INTERNAL_API_KEY;
+      if (!key || key === "dev-internal-key") {
+        if (process.env.NODE_ENV === "production") {
+          throw new Error("INTERNAL_API_KEY must be set in production (cannot use default)");
+        }
+        return key || "dev-internal-key";
+      }
+      return key;
+    })(),
     jobTimeoutMs: parseInt(
       process.env.SCRAPE_JOB_TIMEOUT_MS || String(30 * 60 * 1000),
       10

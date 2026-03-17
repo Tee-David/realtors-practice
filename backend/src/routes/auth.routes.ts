@@ -18,9 +18,17 @@ const router = Router();
  *   description: Authentication and User Management
  */
 
+const passwordSchema = z
+  .string()
+  .min(8)
+  .regex(
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z0-9]).{8,}$/,
+    "Password must contain at least 1 uppercase letter, 1 lowercase letter, 1 digit, and 1 special character"
+  );
+
 const registerSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(8),
+  password: passwordSchema,
   firstName: z.string().optional(),
   lastName: z.string().optional(),
   role: z.enum(["ADMIN", "EDITOR", "VIEWER", "API_USER"]).optional(),
@@ -85,7 +93,9 @@ router.post(
       }
 
       // Force Super Admin role
-      const isSuperAdmin = body.email.toLowerCase() === "wedigcreativity@gmail.com";
+      const superAdminEmails = (process.env.SUPER_ADMIN_EMAILS || "wedigcreativity@gmail.com")
+        .split(",").map((e: string) => e.trim().toLowerCase());
+      const isSuperAdmin = superAdminEmails.includes(body.email.toLowerCase());
       const finalRole = isSuperAdmin ? "ADMIN" : (body.role || "VIEWER");
 
       const user = await prisma.user.create({
@@ -143,7 +153,7 @@ router.post(
       });
 
       // Generate a 6-character alphanumeric invite code
-      const code = crypto.randomBytes(3).toString("hex").toUpperCase(); // e.g. "A3F1B2"
+      const code = crypto.randomBytes(16).toString("hex").toUpperCase(); // 32 hex chars
       const finalRole = body.role || "VIEWER";
 
       const invitation = await prisma.invitation.create({
@@ -213,7 +223,7 @@ router.post("/validate-invite", async (req: Request, res: Response) => {
 const registerWithCodeSchema = z.object({
   code: z.string().min(1),
   email: z.string().email(),
-  password: z.string().min(8),
+  password: passwordSchema,
   firstName: z.string().optional(),
   lastName: z.string().optional(),
 });
@@ -372,7 +382,7 @@ const updateProfileSchema = z.object({
   phone: z.string().max(20).optional(),
   bio: z.string().max(500).optional(),
   company: z.string().max(100).optional(),
-  avatarUrl: z.string().max(5000000).optional().nullable(),
+  avatarUrl: z.string().max(500000).regex(/^(http|data:image\/)/, "avatarUrl must start with http or data:image/").optional().nullable(),
 });
 
 router.patch("/me", authenticate, async (req: Request, res: Response) => {
@@ -420,7 +430,7 @@ router.patch("/me", authenticate, async (req: Request, res: Response) => {
 
 // ── Send Test Email ──────────────────────────────────────────────────────────
 
-router.post("/test-email", authenticate, async (req: Request, res: Response) => {
+router.post("/test-email", authenticate, authorize("ADMIN"), async (req: Request, res: Response) => {
   try {
     const { to } = req.body;
     const email = to || req.user?.email;

@@ -60,7 +60,9 @@ export class UserController {
         return sendError(res, "User not found", 404);
       }
 
-      if (targetUser.email.toLowerCase() === "wedigcreativity@gmail.com" && req.user!.email.toLowerCase() !== "wedigcreativity@gmail.com") {
+      const superAdminEmails = (process.env.SUPER_ADMIN_EMAILS || "wedigcreativity@gmail.com")
+        .split(",").map((e: string) => e.trim().toLowerCase());
+      if (superAdminEmails.includes(targetUser.email.toLowerCase()) && !superAdminEmails.includes(req.user!.email.toLowerCase())) {
         return sendError(res, "Cannot modify the super admin account", 403);
       }
 
@@ -102,7 +104,9 @@ export class UserController {
         return sendError(res, "User not found", 404);
       }
 
-      if (targetUser.email.toLowerCase() === "wedigcreativity@gmail.com") {
+      const superEmails = (process.env.SUPER_ADMIN_EMAILS || "wedigcreativity@gmail.com")
+        .split(",").map((e: string) => e.trim().toLowerCase());
+      if (superEmails.includes(targetUser.email.toLowerCase())) {
         return sendError(res, "Cannot deactivate the super admin account", 403);
       }
 

@@ -30,6 +30,32 @@ def normalize_property(raw_data: dict[str, Any], site_name: str) -> dict[str, An
     """
     data = dict(raw_data)  # shallow copy
 
+    # Map snake_case extractor fields to camelCase schema fields
+    field_aliases = {
+        "location_text": "locationText",
+        "price_text": "priceText",
+        "listing_url": "listingUrl",
+        "listing_type": "listingType",
+        "property_type": "propertyType",
+        "property_subtype": "propertySubtype",
+        "agent_name": "agentName",
+        "agent_phone": "agentPhone",
+        "agent_email": "agentEmail",
+        "agency_name": "agencyName",
+        "full_address": "fullAddress",
+        "estate_name": "estateName",
+        "street_name": "streetName",
+        "land_size_sqm": "landSizeSqm",
+        "building_size_sqm": "buildingSizeSqm",
+        "price_per_sqm": "pricePerSqm",
+        "service_charge": "serviceCharge",
+    }
+    for snake, camel in field_aliases.items():
+        if snake in data and camel not in data:
+            data[camel] = data.pop(snake)
+        elif snake in data:
+            data.pop(snake)  # camelCase version takes precedence
+
     # Set source
     data["source"] = site_name
 

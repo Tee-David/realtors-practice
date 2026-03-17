@@ -15,7 +15,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, Header, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from config import config
 from bs4 import BeautifulSoup
@@ -120,6 +120,24 @@ class ScrapeJobRequest(BaseModel):
     maxListingsPerSite: int = 100
     callbackUrl: str | None = None
     parameters: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("callbackUrl")
+    @classmethod
+    def validate_callback_url(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        from urllib.parse import urlparse
+        parsed = urlparse(v)
+        if parsed.scheme not in ("http", "https"):
+            raise ValueError("callbackUrl must use http or https scheme")
+        # Allow localhost in dev, restrict to known hosts in production
+        allowed_hosts = [
+            "localhost", "127.0.0.1",
+            urlparse(config.api_base_url).hostname,
+        ]
+        if parsed.hostname not in allowed_hosts:
+            raise ValueError(f"callbackUrl host '{parsed.hostname}' not in allowlist")
+        return v
 
     def get_api_base_url(self) -> str:
         """Return the callback URL from payload, or fall back to config."""

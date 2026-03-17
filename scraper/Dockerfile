@@ -17,6 +17,10 @@ RUN python -c "import crawl4ai; print('crawl4ai imported')" 2>/dev/null || true
 
 COPY . .
 
+# Create non-root user for security
+RUN adduser --disabled-password --gecos '' scraper && chown -R scraper:scraper /app
+USER scraper
+
 EXPOSE 8000
 
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]

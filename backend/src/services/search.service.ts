@@ -160,7 +160,7 @@ export class SearchService {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-internal-api-key": internalApiKey,
+          "X-Internal-Key": internalApiKey,
         },
         body: JSON.stringify({
           sites: ["propertypro", "nigeriapropertycentre"],

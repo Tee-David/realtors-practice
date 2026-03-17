@@ -1,9 +1,32 @@
+import sanitizeHtml from "sanitize-html";
 import prisma from "../prismaClient";
 import { ScrapeJobStatus, Prisma } from "@prisma/client";
 import { PropertyService } from "./property.service";
 import { SiteService } from "./site.service";
 import { config } from "../config/env";
 import { Logger } from "../utils/logger.util";
+
+const SANITIZE_OPTS: sanitizeHtml.IOptions = {
+  allowedTags: [],
+  allowedAttributes: {},
+};
+
+function sanitizeScrapedProperty(prop: Record<string, unknown>): Record<string, unknown> {
+  const textFields = [
+    "title", "description", "locationText", "fullAddress",
+    "agentName", "agentPhone", "agentEmail", "agencyName",
+    "propertyType", "propertySubtype", "estateName", "streetName",
+    "area", "lga", "state", "country",
+  ];
+  const sanitized = { ...prop };
+  for (const field of textFields) {
+    const val = sanitized[field];
+    if (typeof val === "string") {
+      sanitized[field] = sanitizeHtml(val, SANITIZE_OPTS).trim();
+    }
+  }
+  return sanitized;
+}
 import {
   broadcastScrapeLog,
   broadcastScrapeProgress,
@@ -363,8 +386,9 @@ export class ScrapeService {
     let updatedCount = 0;
     let dupCount = 0;
 
-    for (const prop of properties) {
+    for (const rawProp of properties) {
       try {
+        const prop = sanitizeScrapedProperty(rawProp as Record<string, unknown>);
         const result = await PropertyService.create(
           prop as any,
           "SCRAPER"

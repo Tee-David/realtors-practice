@@ -1,12 +1,15 @@
 name: CD Pipeline
 
 on:
-  push:
-    branches: [ "main" ]
+  workflow_run:
+    workflows: ["CI Pipeline"]
+    types: [completed]
+    branches: ["main"]
 
 jobs:
   deploy-backend:
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Deploy to Render
         # Uses Render Deploy Hook
@@ -19,6 +22,7 @@ jobs:
 
   deploy-frontend:
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Deploy to Vercel
         # Uses Vercel Deploy Hook

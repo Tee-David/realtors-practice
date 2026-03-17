@@ -11,11 +11,28 @@ from typing import Literal
 
 from bs4 import BeautifulSoup, Tag
 
+from urllib.parse import urlparse
+
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 PageType = Literal["listing", "detail", "category", "unknown"]
+
+# Nigerian real estate portals that use category-like URL paths (e.g. /property/123)
+# for actual property listings. These must be excluded from the URL-pattern category
+# check to avoid false positives.
+_NIGERIAN_PORTAL_DOMAINS = {
+    "propertypro.ng",
+    "nigeriapropertycentre.com",
+    "privateproperty.com.ng",
+    "buyletlive.com",
+    "realtor.com.ng",
+    "estateintel.com",
+    "tolet.com.ng",
+    "jumia.com.ng",
+    "jiji.ng",
+}
 
 
 # --- Signals for category/index pages ---
@@ -88,8 +105,15 @@ def classify_page(html: str, url: str) -> PageType:
     if not html or len(html) < 200:
         return "unknown"
 
-    # Quick URL check first
-    if _CATEGORY_URL_PATTERNS.search(url):
+    # Quick URL check first — but skip for known Nigerian portals whose listing
+    # URLs overlap with category URL patterns (e.g. /property/123).
+    parsed_url = urlparse(url)
+    domain = parsed_url.hostname or ""
+    # Strip leading "www." for matching
+    domain = domain.removeprefix("www.")
+    is_known_portal = domain in _NIGERIAN_PORTAL_DOMAINS
+
+    if not is_known_portal and _CATEGORY_URL_PATTERNS.search(url):
         logger.debug(f"Category page detected by URL pattern: {url}")
         return "category"
 

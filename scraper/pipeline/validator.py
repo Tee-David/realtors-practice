@@ -100,7 +100,7 @@ def _compute_quality_score(data: dict[str, Any]) -> int:
         detail_score += 3
     if data.get("propertyType"):
         detail_score += 4
-    if data.get("landSize") or data.get("buildingSize"):
+    if data.get("landSizeSqm") or data.get("buildingSizeSqm"):
         detail_score += 4
     score += min(detail_score, 15)
 

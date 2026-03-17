@@ -29,7 +29,6 @@ class Crawl4AIFetcher:
         try:
             from crawl4ai import AsyncWebCrawler
             self._crawler = AsyncWebCrawler(verbose=False)
-            await self._crawler.awarmup()
             return self._crawler
         except ImportError:
             logger.warning("crawl4ai not installed — pip install crawl4ai")

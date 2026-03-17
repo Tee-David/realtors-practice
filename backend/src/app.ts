@@ -28,8 +28,10 @@ import {
 
 const app: Application = express();
 
-// Initialize Swagger documentation
-setupSwagger(app);
+// Initialize Swagger documentation (disabled in production)
+if (config.env !== "production") {
+  setupSwagger(app);
+}
 
 // Security headers
 app.use(
@@ -59,7 +61,15 @@ app.use(
       ];
 
       if (config.env !== "production") {
-        return callback(null, true);
+        const devOrigins = [
+          "http://localhost:3000",
+          "http://localhost:5173",
+          "http://127.0.0.1:3000",
+        ];
+        if (!origin || devOrigins.includes(origin)) {
+          return callback(null, true);
+        }
+        return callback(new Error("Not allowed by CORS"), false);
       }
 
       if (!origin || allowedOrigins.includes(origin)) {
@@ -99,10 +109,11 @@ const authLimiter = rateLimit({
 
 app.use("/api/auth/login", authLimiter);
 app.use("/api/auth/register", authLimiter);
+app.use("/api/auth/validate-invite", authLimiter);
 
 // Body parser
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+app.use(express.json({ limit: "2mb" }));
+app.use(express.urlencoded({ extended: true, limit: "2mb" }));
 
 // Data sanitization against NoSQL query injection / parameter pollution
 // Even with Prisma, it's good practice to strip out keys starting with '$' or '.'
@@ -127,10 +138,12 @@ app.get("/health", (_req, res) => {
   });
 });
 
-// Sentry debug route (optional, to test sentry)
-app.get("/debug-sentry", function mainHandler(req, res) {
-  throw new Error("My first Sentry error!");
-});
+// Sentry debug route (development only)
+if (config.env !== "production") {
+  app.get("/debug-sentry", function mainHandler(req, res) {
+    throw new Error("My first Sentry error!");
+  });
+}
 
 // API routes — unversioned (backwards compatibility)
 app.use("/api", routes);

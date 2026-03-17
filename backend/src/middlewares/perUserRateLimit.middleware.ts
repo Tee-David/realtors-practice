@@ -50,7 +50,12 @@ export const perUserRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req: Request) => {
-    return req._rateLimitUserId || req.ip || "anonymous";
+    // Use authenticated user ID when available, otherwise normalize IP for IPv6 compat
+    if (req._rateLimitUserId) return req._rateLimitUserId;
+    const ip = req.ip || "anonymous";
+    // Normalize IPv6-mapped IPv4 (::ffff:127.0.0.1 → 127.0.0.1)
+    return ip.startsWith("::ffff:") ? ip.slice(7) : ip;
   },
   skip: (req) => req.path === "/health" || req.path === "/api/health",
+  validate: { xForwardedForHeader: false, ip: false },
 });

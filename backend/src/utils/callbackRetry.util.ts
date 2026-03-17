@@ -1,4 +1,3 @@
-import prisma from "../prismaClient";
 import { config } from "../config/env";
 import { Logger } from "./logger.util";
 
@@ -44,17 +43,11 @@ export async function withCallbackRetry(options: RetryOptions): Promise<void> {
   );
 
   try {
-    await prisma.callbackDeadLetter.create({
-      data: {
-        jobId,
-        endpoint,
-        payload: payload as any,
-        lastError: lastError?.message || "Unknown error",
-        attempts: maxAttempts,
-        maxAttempts,
-      },
-    });
+    // Log dead-letter entry (no dedicated table yet — log for manual recovery)
+    Logger.error(
+      `Dead-letter entry: jobId=${jobId}, endpoint=${endpoint}, attempts=${maxAttempts}, error=${lastError?.message}`
+    );
   } catch (dlqError: any) {
-    Logger.error(`Failed to write to dead-letter queue: ${dlqError.message}`);
+    Logger.error(`Failed to log dead-letter entry: ${dlqError.message}`);
   }
 }

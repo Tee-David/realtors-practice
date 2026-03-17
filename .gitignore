@@ -46,6 +46,18 @@ skills-lock.json
 start-services.bat
 start-services.sh
 
+# Doppler
+doppler.yaml
+
+# Secrets / SSH keys
+*.key
+*.pem
+*.p12
+plans/for_ai/
+
+# Claude Code local settings
+.claude/settings.local.json
+
 # Misc
 *.tsbuildinfo
 .vercel

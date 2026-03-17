@@ -52,9 +52,12 @@ function getDatasourceUrl(): string | undefined {
 const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
+    // Query logging can be enabled via DEBUG_PRISMA=true env var
     log:
       process.env.NODE_ENV === "development"
-        ? ["query", "error", "warn"]
+        ? process.env.DEBUG_PRISMA
+          ? ["query", "error", "warn"]
+          : ["error", "warn"]
         : ["error"],
     datasourceUrl: getDatasourceUrl(),
   });

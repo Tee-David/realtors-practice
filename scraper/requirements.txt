@@ -7,8 +7,8 @@ playwright==1.52.0
 beautifulsoup4==4.13.4
 lxml==5.4.0
 curl_cffi==0.7.4
-scrapling>=0.2                  # Layer 2: anti-bot bypass + adaptive self-healing selectors
-crawl4ai>=0.4                   # Layer 3: page → clean Markdown for LLM extraction
+scrapling~=0.2                  # Layer 2: anti-bot bypass + adaptive self-healing selectors
+crawl4ai~=0.4                   # Layer 3: page → clean Markdown for LLM extraction
 
 # Data processing
 pydantic==2.11.3
