@@ -17,7 +17,7 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 
 # Default threshold: stop after this many consecutive known URLs
-DEFAULT_CONSECUTIVE_THRESHOLD = 5
+DEFAULT_CONSECUTIVE_THRESHOLD = 15
 
 # Redis key prefix for the seen-URLs set
 _REDIS_KEY_PREFIX = "scraper:seen_urls:"

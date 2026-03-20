@@ -28,7 +28,6 @@ import {
   Sparkles,
   GitCompareArrows,
   Bell,
-  Map,
 } from "lucide-react";
 
 interface NavItem {
@@ -57,8 +56,7 @@ const navSections: NavSection[] = [
     label: "SEARCH & DISCOVER",
     icon: Search,
     items: [
-      { label: "Search", href: "/search", icon: Search },
-      { label: "Map Explorer", href: "/search?view=map", icon: Map },
+      { label: "Search & Map", href: "/search", icon: Search },
       { label: "Saved Searches", href: "/saved-searches", icon: Bookmark },
     ],
   },

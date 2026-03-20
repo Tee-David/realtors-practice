@@ -386,8 +386,27 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
                                 html, site.baseUrl
                             )
                             if relevance_urls:
-                                raw_listing_urls = relevance_urls
-                                await report_log(job_id, "INFO", f"[{site.name}] Relevance scorer found {len(relevance_urls)} candidate URLs")
+                                # If we're on the base URL (homepage) and found candidate URLs,
+                                # they're likely listing category pages — follow them as new start paths
+                                page_is_homepage = (
+                                    normalize_url(page_url).rstrip("/") == normalize_url(site.baseUrl).rstrip("/")
+                                )
+                                if page_is_homepage:
+                                    valid_paths = [u for u in relevance_urls if is_valid_property_url(u)]
+                                    if valid_paths:
+                                        raw_listing_urls = valid_paths
+                                        await report_log(job_id, "INFO", f"[{site.name}] Relevance scorer found {len(valid_paths)} candidate URLs")
+                                    else:
+                                        # Treat as listing index pages to crawl into
+                                        for rurl in relevance_urls:
+                                            norm_rurl = normalize_url(rurl)
+                                            if norm_rurl not in [normalize_url(su) for su in start_urls] and visited.add(norm_rurl):
+                                                start_urls.append(rurl)
+                                        await report_log(job_id, "INFO",
+                                            f"[{site.name}] Relevance scorer found {len(relevance_urls)} category pages — will crawl them next")
+                                else:
+                                    raw_listing_urls = relevance_urls
+                                    await report_log(job_id, "INFO", f"[{site.name}] Relevance scorer found {len(relevance_urls)} candidate URLs")
 
                         # Filter invalid URLs, normalize, and deduplicate via visited set
                         listing_urls = []
@@ -415,11 +434,20 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
                                 listing_urls.append(normalized)
 
                         if incremental_stop:
-                            break
+                            # Don't stop on page 1 — there may be new listings on later pages
+                            if page_num == 0:
+                                await report_log(job_id, "INFO", f"[{site.name}] Incremental stop on page 1, continuing to check next pages")
+                                incremental.reset_consecutive()
+                            else:
+                                break
 
                         if not listing_urls:
-                            await report_log(job_id, "INFO", f"[{site.name}] No more listings found on page {page_num + 1}")
-                            break
+                            # Allow advancing past up to 2 empty pages before giving up
+                            if page_num < 2:
+                                await report_log(job_id, "DEBUG", f"[{site.name}] No new listings on page {page_num + 1}, trying next page")
+                            else:
+                                await report_log(job_id, "INFO", f"[{site.name}] No more listings found on page {page_num + 1}")
+                                break
 
                         skipped = len(raw_listing_urls) - len(listing_urls)
                         if skipped:
