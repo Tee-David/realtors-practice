@@ -154,6 +154,16 @@ class JobStatus(BaseModel):
     errors: int = 0
 
 
+# In-memory job status tracker (for GH Actions polling)
+_job_statuses: dict[str, dict] = {}
+
+
+def _update_job_status(job_id: str, **kwargs):
+    if job_id not in _job_statuses:
+        _job_statuses[job_id] = {"status": "running", "processed": 0, "total": 0, "errors": 0}
+    _job_statuses[job_id].update(kwargs)
+
+
 # --- Auth ---
 
 def verify_internal_key(x_internal_key: str = Header(...)):
@@ -179,8 +189,8 @@ async def start_job(
 ):
     verify_internal_key(x_internal_key)
 
-    # Run the job in-process (no Celery worker required).
-    # This is the primary execution path when backend dispatches via HTTP.
+    # Track job status and run in-process
+    _update_job_status(request.jobId, status="running")
     asyncio.create_task(_run_scrape_job(request))
 
     return {"jobId": request.jobId, "status": "STARTED"}
@@ -189,10 +199,17 @@ async def start_job(
 @app.get("/api/jobs/{job_id}")
 async def get_job_status(job_id: str, x_internal_key: str = Header(...)):
     verify_internal_key(x_internal_key)
-    
-    # Check if job was stopped
+    info = _job_statuses.get(job_id, {})
     is_stopped = (redis_client and redis_client.exists(f"job:stop:{job_id}")) if redis_client else False
-    return JobStatus(jobId=job_id, status="STOPPING" if is_stopped else "UNKNOWN")
+    status = "STOPPING" if is_stopped else info.get("status", "unknown")
+    return JobStatus(jobId=job_id, status=status, processed=info.get("processed", 0), total=info.get("total", 0), errors=info.get("errors", 0))
+
+
+@app.get("/api/jobs/{job_id}/status")
+async def get_job_status_simple(job_id: str):
+    """Unauthenticated status endpoint for GH Actions polling."""
+    info = _job_statuses.get(job_id, {})
+    return {"jobId": job_id, "status": info.get("status", "unknown")}
 
 
 @app.post("/api/jobs/{job_id}/stop")
@@ -212,11 +229,14 @@ async def _run_scrape_job(request: ScrapeJobRequest) -> None:
             _run_scrape_job_inner(request),
             timeout=1800,  # 30 minutes max
         )
+        _update_job_status(request.jobId, status="completed")
     except asyncio.TimeoutError:
         logger.error(f"Job {request.jobId} exceeded 30-minute timeout")
+        _update_job_status(request.jobId, status="failed")
         await report_error(request.jobId, "Job timed out after 30 minutes")
     except Exception as e:
         logger.exception(f"Job {request.jobId} wrapper error: {e}")
+        _update_job_status(request.jobId, status="failed")
 
 
 async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:

@@ -263,6 +263,45 @@ export class ScrapeService {
       Logger.warn(`Could not reach scraper to stop job ${id}`);
     }
 
+    // Cancel the GitHub Actions workflow run if one is active
+    if (config.github.pat && config.github.repo) {
+      try {
+        const [owner, repo] = config.github.repo.split("/");
+        // Find the running workflow run for this job
+        const runsRes = await fetch(
+          `https://api.github.com/repos/${owner}/${repo}/actions/runs?status=in_progress&per_page=5`,
+          {
+            headers: {
+              Authorization: `Bearer ${config.github.pat}`,
+              Accept: "application/vnd.github.v3+json",
+            },
+            signal: AbortSignal.timeout(10000),
+          }
+        );
+        if (runsRes.ok) {
+          const runsData = await runsRes.json() as { workflow_runs: Array<{ id: number; name: string }> };
+          for (const run of runsData.workflow_runs || []) {
+            if (run.name === "Scrape Properties" || run.name === "Run Scraper") {
+              await fetch(
+                `https://api.github.com/repos/${owner}/${repo}/actions/runs/${run.id}/cancel`,
+                {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${config.github.pat}`,
+                    Accept: "application/vnd.github.v3+json",
+                  },
+                }
+              );
+              Logger.info(`Cancelled GitHub Actions run ${run.id} for job ${id}`);
+              break;
+            }
+          }
+        }
+      } catch (err: any) {
+        Logger.warn(`Could not cancel GitHub Actions run: ${err.message}`);
+      }
+    }
+
     return prisma.scrapeJob.update({
       where: { id },
       data: { status: "CANCELLED", completedAt: new Date() },
