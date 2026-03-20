@@ -59,3 +59,8 @@ jobs:
 
     - name: Build
       run: npm run build
+      env:
+        # Placeholder env vars for static page prerendering in CI
+        NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-key-for-ci-build
+        NEXT_PUBLIC_API_URL: https://placeholder.api.com/api
