@@ -332,9 +332,14 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
                         total_pages_fetched += 1
 
                         # Phase 3.5: Category page detection — skip index/directory pages
+                        # But on first pages, don't break — they might be homepages
+                        # that need auto-discovery of listing subpages
                         if should_skip_page(html, page_url):
-                            await report_log(job_id, "INFO", f"[{site.name}] Skipping category/index page: {page_url}")
-                            break
+                            if page_num == 0:
+                                await report_log(job_id, "INFO", f"[{site.name}] Page looks like category/index, will auto-discover listings")
+                            else:
+                                await report_log(job_id, "INFO", f"[{site.name}] Skipping category/index page: {page_url}")
+                                break
 
                         # Check for cached LLM-discovered selectors (self-healing)
                         effective_selectors = dict(site.selectors)
@@ -386,13 +391,10 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
                                 raw_listing_urls = relevance_urls
                                 await report_log(job_id, "INFO", f"[{site.name}] Relevance scorer found {len(relevance_urls)} candidate URLs")
 
-                        # Auto-discover listing pages from homepage/index pages
-                        # If we're on the base URL or a page with no property detail URLs,
-                        # scan for internal links that look like listing/category pages
-                        page_is_homepage = (
-                            normalize_url(page_url).rstrip("/") == normalize_url(site.baseUrl).rstrip("/")
-                        )
-                        if not raw_listing_urls and page_is_homepage:
+                        # Auto-discover listing pages when no property URLs found
+                        # This triggers on homepages, category pages, or any page
+                        # that doesn't have direct property listing links
+                        if not raw_listing_urls and page_num == 0:
                             await report_log(job_id, "INFO", f"[{site.name}] Homepage has no listings, auto-discovering listing pages...")
                             from bs4 import BeautifulSoup
                             from urllib.parse import urljoin
@@ -425,6 +427,20 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
                                     start_urls.append(dp)
                                 await report_log(job_id, "INFO",
                                     f"[{site.name}] Discovered {len(discovered_paths)} listing pages from homepage, queued {min(len(discovered_paths), 10)} for crawling")
+                            else:
+                                # Last resort: try common property listing URL patterns
+                                base = site.baseUrl.rstrip("/")
+                                common_paths = [
+                                    "/properties", "/listings", "/for-sale", "/for-rent",
+                                    "/buy", "/rent", "/search", "/all-properties",
+                                    "/real-estate", "/homes", "/property",
+                                ]
+                                await report_log(job_id, "INFO", f"[{site.name}] Trying common listing URL patterns...")
+                                for cp in common_paths:
+                                    candidate = base + cp
+                                    if normalize_url(candidate) not in [normalize_url(su) for su in start_urls]:
+                                        start_urls.append(candidate)
+                                await report_log(job_id, "INFO", f"[{site.name}] Queued {len(common_paths)} common paths to try")
 
                         # Filter invalid URLs, normalize, and deduplicate via visited set
                         listing_urls = []

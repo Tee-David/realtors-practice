@@ -656,17 +656,13 @@ class AdaptiveFetcher:
     ) -> list[tuple[str, str]]:
         """Drive Playwright through paginated listing pages in a single session.
 
-        Ported from old scraper's render_and_collect_pages(). Keeps the browser
-        alive across all pages so session state, cookies, and JS context persist.
+        Keeps the browser alive across all pages so session state, cookies,
+        and JS context persist.
 
         Strategy order:
         1. Click "Next" buttons within the page
         2. Discover and follow numeric page links
         3. Fall back to ?page=N / /page/N URL patterns
-
-        Args:
-            start_url: The first listing page URL.
-            max_pages: Maximum number of pages to collect.
 
         Returns:
             List of (url, html) tuples for each page visited.
@@ -678,14 +674,16 @@ class AdaptiveFetcher:
 
             try:
                 # PAGE 1
+                logger.info(f"render_pages: navigating to {start_url}")
                 response = await page.goto(
                     start_url,
                     wait_until="domcontentloaded",
                     timeout=45000,
                 )
-                if response and response.status in (403, 401, 429):
-                    logger.warning(f"render_pages: HTTP {response.status} for {start_url}")
-                    return results
+                if response:
+                    logger.info(f"render_pages: HTTP {response.status} for {start_url}")
+                    if response.status in (403, 401, 429):
+                        return results
 
                 await self._wait_for_cloudflare(page)
                 await self._dismiss_overlays(page)
@@ -693,7 +691,11 @@ class AdaptiveFetcher:
                 await self._human_scroll(page)
 
                 html = await page.content()
-                if not self._is_blocked(html):
+                logger.info(f"render_pages: page 1 HTML length = {len(html)}")
+                block_reason = self._is_blocked(html)
+                if block_reason:
+                    logger.warning(f"render_pages: page 1 blocked ({block_reason})")
+                else:
                     results.append((page.url, html))
 
                 # Strategy A: Click "Next" button repeatedly
@@ -701,6 +703,7 @@ class AdaptiveFetcher:
                 while pages_visited < max_pages:
                     clicked = await self._click_next_button(page)
                     if not clicked:
+                        logger.debug(f"render_pages: no Next button found after page {pages_visited}")
                         break
                     await self._wait_for_list_ready(page)
                     await self._human_scroll(page)
@@ -708,10 +711,13 @@ class AdaptiveFetcher:
                     if not self._is_blocked(html):
                         results.append((page.url, html))
                     pages_visited += 1
+                    logger.info(f"render_pages: collected page {pages_visited} via Next button")
 
                 # Strategy B: Numeric page links (if "Next" button only got page 1)
                 if pages_visited == 1:
+                    logger.info("render_pages: trying numeric page links")
                     numeric_urls = await self._discover_numeric_pages(page)
+                    logger.info(f"render_pages: found {len(numeric_urls)} numeric page links")
                     for num_url in numeric_urls[: max_pages - pages_visited]:
                         try:
                             await page.goto(num_url, wait_until="domcontentloaded", timeout=40000)
@@ -721,15 +727,16 @@ class AdaptiveFetcher:
                             if not self._is_blocked(html):
                                 results.append((page.url, html))
                             pages_visited += 1
-                        except Exception:
+                        except Exception as e:
+                            logger.debug(f"render_pages: numeric page error: {e}")
                             continue
 
                 # Strategy C: URL param fallback (?page=N, /page/N)
                 if pages_visited == 1:
-                    from urllib.parse import urljoin
+                    logger.info("render_pages: trying URL param pagination")
                     base = start_url.rstrip("/")
                     joiner = "&" if "?" in start_url else "?"
-                    for n in range(2, max_pages + 1):
+                    for n in range(2, min(max_pages + 1, 6)):  # Try up to 5 pages with params
                         candidates = [
                             f"{start_url}{joiner}page={n}",
                             f"{base}/page/{n}",
@@ -749,7 +756,7 @@ class AdaptiveFetcher:
                             except Exception:
                                 continue
                         if not found:
-                            break  # No more pages
+                            break
 
                 logger.info(f"render_and_collect_pages: collected {len(results)} pages from {start_url}")
 
@@ -757,7 +764,7 @@ class AdaptiveFetcher:
                 await page.close()
 
         except Exception as e:
-            logger.warning(f"render_and_collect_pages error: {e}")
+            logger.error(f"render_and_collect_pages error for {start_url}: {e}", exc_info=True)
 
         return results
 

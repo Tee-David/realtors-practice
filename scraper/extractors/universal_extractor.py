@@ -106,6 +106,13 @@ class UniversalExtractor:
 
         return False
 
+    # Generic fallback selectors (from proven old scraper)
+    GENERIC_CARD_SELECTORS = [
+        "div[class*='listing']", "div[class*='property']", "div[class*='card']",
+        "li[class*='listing']", "li[class*='property']", "li[class*='item']",
+        "article", "div.item", "div.result", "div.product",
+    ]
+
     def extract_listing_urls(
         self, html: str, base_url: str, listing_selector: str
     ) -> list[str]:
@@ -114,7 +121,8 @@ class UniversalExtractor:
         Strategy (in priority order):
         1. Site-specific URL pattern matching (most reliable — survives redesigns)
         2. CSS selectors from site config (fast but brittle)
-        3. Auto-detection with heuristics (last resort)
+        3. Generic card selectors (broad fallback — works on most sites)
+        4. Auto-detection of all property-like links on the page (last resort)
         """
         soup = BeautifulSoup(html, "lxml")
 
@@ -131,7 +139,10 @@ class UniversalExtractor:
         for selector in selectors:
             if not selector:
                 continue
-            elements = soup.select(selector)
+            try:
+                elements = soup.select(selector)
+            except Exception:
+                continue
             if elements:
                 for el in elements:
                     if self._is_honeypot(el):
@@ -145,10 +156,29 @@ class UniversalExtractor:
                     logger.info(f"CSS selector '{selector}' found {len(urls)} detail URLs")
                     return urls
 
-        # Strategy 3: Auto-detect property links by heuristics
-        if not urls:
-            urls = self._auto_detect_listing_urls(soup, base_url)
+        # Strategy 3: Generic card selectors (works on most property sites)
+        for card_sel in self.GENERIC_CARD_SELECTORS:
+            try:
+                cards = soup.select(card_sel)
+            except Exception:
+                continue
+            if not cards or len(cards) < 2:
+                continue  # Need at least 2 cards to be a listing page
+            card_urls = []
+            for card in cards:
+                if self._is_honeypot(card):
+                    continue
+                href = self._get_href(card)
+                if href:
+                    full_url = urljoin(base_url, str(href))
+                    if full_url not in card_urls and self._is_detail_url(full_url, base_url):
+                        card_urls.append(full_url)
+            if card_urls:
+                logger.info(f"Generic selector '{card_sel}' found {len(card_urls)} detail URLs")
+                return card_urls
 
+        # Strategy 4: Auto-detect property links by heuristics (scans ALL links)
+        urls = self._auto_detect_listing_urls(soup, base_url)
         return urls
 
     def _extract_by_url_patterns(
@@ -205,8 +235,9 @@ class UniversalExtractor:
     def _is_detail_url(url: str, base_url: str) -> bool:
         """Check if a URL looks like a property DETAIL page (not category/index).
 
-        Detail pages have unique slugs or numeric IDs and are deeper URLs.
-        Category pages like /property-for-sale/flat-apartment are rejected.
+        Uses a permissive approach: reject known non-property patterns, then
+        accept URLs with property indicators, numeric IDs, or deep paths.
+        This works dynamically for any property website.
         """
         parsed = urlparse(url)
         base_domain = urlparse(base_url).netloc
@@ -217,6 +248,10 @@ class UniversalExtractor:
 
         path = parsed.path.rstrip("/").lower()
         segments = [s for s in path.split("/") if s]
+
+        # Need at least 1 path segment
+        if not segments:
+            return False
 
         # Skip non-property pages
         skip_patterns = [
@@ -231,42 +266,58 @@ class UniversalExtractor:
         if any(pat in path for pat in skip_patterns):
             return False
 
-        # Detail pages need at least 2 path segments (e.g. /property/slug-123)
-        if len(segments) < 2:
-            return False
-
         last_segment = segments[-1]
 
-        # Reject short generic category segments
-        category_slugs = {
-            "flat-apartment", "house", "land", "commercial", "office",
-            "duplex", "bungalow", "warehouse", "shop", "showtype",
-            "lagos", "abuja", "ibadan", "kano", "port-harcourt",
-            "residential", "all", "sale", "rent", "shortlet",
-        }
-        if last_segment in category_slugs:
+        # Reject pure category/location pages
+        category_patterns = [
+            r"^(for-sale|for-rent|to-let|buy|rent|shortlet)$",
+            r"^(lagos|lekki|ikoyi|vi|victoria-island|ikeja|ajah|yaba|surulere|abuja|port-harcourt)$",
+            r"^(flat-apartment|flats-apartments|houses?|lands?|commercial|offices?)$",
+            r"^(duplex|bungalow|warehouse|shop|showtype|residential|all)$",
+            r"^\d+-bedroom$",
+        ]
+        if len(segments) <= 2 and any(
+            re.match(pat, last_segment) for pat in category_patterns
+        ):
             return False
 
-        # Reject bedroom-filter URLs like /in/lagos/3-bedroom
-        if re.match(r"^\d+-bedroom$", last_segment):
-            return False
+        # ── Positive signals (any match = accept) ──
 
-        # Positive signals for detail pages:
-        # 1. Has alphanumeric ID (e.g. 5PBCA, abc123)
+        # 1. Property keywords in URL path
+        property_keywords = [
+            "bedroom", "bathroom", "property", "flat", "house",
+            "duplex", "apartment", "bungalow", "terrace", "detached",
+            "semi-detached", "plot", "land", "office", "shop",
+            "warehouse", "hotel", "estate", "maisonette", "penthouse",
+            "listing", "villa", "condo", "studio",
+        ]
+        for kw in property_keywords:
+            if kw in path:
+                return True
+
+        # 2. Numeric IDs (4+ digits) anywhere in URL — common for property pages
+        if re.search(r"/\d{4,}", path) or re.search(r"[-_]\d{4,}", path):
+            return True
+
+        # 3. Alphanumeric ID at end (e.g. 5PBCA, abc123)
         if re.search(r"[A-Z0-9]{4,}$", segments[-1], re.IGNORECASE):
             return True
-        # 2. Has numeric ID (6+ digits)
-        if re.search(r"\d{5,}", last_segment):
-            return True
-        # 3. Ends with .html
+
+        # 4. Ends with .html
         if last_segment.endswith(".html"):
             return True
-        # 4. Long unique slug (20+ chars, likely a property title)
-        if len(last_segment) > 25 and "-" in last_segment:
+
+        # 5. Long unique slug (20+ chars with hyphens, likely a property title)
+        if len(last_segment) > 20 and "-" in last_segment:
             return True
-        # 5. URL has property detail indicators with a unique segment
-        detail_indicators = ["/property/", "/listing/", "/detail/", "/view/", "/item/"]
-        if any(ind in path for ind in detail_indicators) and len(last_segment) > 10:
+
+        # 6. 3+ path segments = deep URL, likely a detail page
+        if len(segments) >= 3:
+            return True
+
+        # 7. URL path indicators for detail pages
+        detail_indicators = ["/property/", "/listing/", "/detail/", "/view/", "/item/", "/properties/"]
+        if any(ind in path for ind in detail_indicators) and len(last_segment) > 5:
             return True
 
         return False

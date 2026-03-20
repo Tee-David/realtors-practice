@@ -17,6 +17,7 @@ import backupRoutes from "./backup.routes";
 import systemSettingsRoutes from "./systemSettings.routes";
 import marketRoutes from "./market.routes";
 import aiRoutes from "./ai.routes";
+import aiFeaturesRoutes from "./aiFeatures.routes";
 
 const router = Router();
 
@@ -36,6 +37,7 @@ router.use("/export", exportRoutes);
 router.use("/audit-logs", auditLogRoutes);
 router.use("/backups", backupRoutes);
 router.use("/settings", systemSettingsRoutes);
+router.use("/settings/ai-features", aiFeaturesRoutes);
 router.use("/market", marketRoutes);
 router.use("/ai", aiRoutes);
 

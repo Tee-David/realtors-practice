@@ -465,6 +465,37 @@ async function main() {
   }
 
   console.log(`\nSeeded ${count} properties across ${createdSites.length} sites.`);
+
+  // Seed AI feature flags
+  const AI_FEATURE_FLAGS = [
+    { key: "ai_master", value: { enabled: false }, description: "Global kill switch for all AI features" },
+    { key: "ai_chat", value: { enabled: false }, description: "Chat assistant for property questions and recommendations" },
+    { key: "ai_nl_search", value: { enabled: false }, description: "Natural language search parsing" },
+    { key: "ai_property_scoring", value: { enabled: false }, description: "Automatic quality and fraud scoring for listings" },
+    { key: "ai_market_reports", value: { enabled: false }, description: "Auto-generated area market summaries" },
+    { key: "ai_enrichment", value: { enabled: false }, description: "Extract extra details from property descriptions" },
+    { key: "ai_duplicate_detection", value: { enabled: false }, description: "Find duplicate listings across sources" },
+    { key: "ai_scraper_diagnosis", value: { enabled: false }, description: "AI diagnosis and auto-healing for scraper failures" },
+    { key: "ai_smart_notifications", value: { enabled: false }, description: "AI-prioritized notification digests" },
+    { key: "ai_investment_analysis", value: { enabled: false }, description: "ROI estimates and investment insights" },
+    { key: "ai_neighborhood_profiles", value: { enabled: false }, description: "AI-generated area profiles and guides" },
+    { key: "ai_telegram_bot", value: { enabled: false }, description: "Telegram bot integration for property search" },
+  ];
+
+  let flagCount = 0;
+  for (const flag of AI_FEATURE_FLAGS) {
+    await prisma.systemSetting.upsert({
+      where: { key: flag.key },
+      update: {},
+      create: {
+        key: flag.key,
+        value: flag.value,
+        category: "ai_features",
+      },
+    });
+    flagCount++;
+  }
+  console.log(`Seeded ${flagCount} AI feature flags.`);
 }
 
 main()
