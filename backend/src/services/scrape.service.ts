@@ -118,6 +118,8 @@ export class ScrapeService {
     // then direct HTTP to Render scraper as fallback.
     let dispatched = false;
 
+    Logger.info(`Scrape dispatch: GITHUB_PAT=${config.github.pat ? "set" : "MISSING"}, GITHUB_REPO=${config.github.repo}`);
+
     // Method 1: GitHub Actions (primary — full Playwright + Chromium environment)
     if (config.github.pat && config.github.repo) {
       try {
@@ -156,6 +158,8 @@ export class ScrapeService {
 
     // Method 2: Direct HTTP to Python scraper (fallback — Render or local)
     if (!dispatched) {
+      Logger.warn(`GitHub Actions dispatch skipped/failed, falling back to direct HTTP (scraper URL: ${config.scraper.url})`);
+
       try {
         const response = await fetch(`${config.scraper.url}/api/jobs`, {
           method: "POST",

@@ -29,6 +29,10 @@ services:
         sync: false
       - key: INTERNAL_API_KEY
         sync: false
+      - key: GITHUB_PAT
+        sync: false
+      - key: GITHUB_REPO
+        value: Tee-David/realtors-practice
 
   - type: pserver
     name: meilisearch
