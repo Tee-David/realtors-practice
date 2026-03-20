@@ -133,11 +133,10 @@ export function broadcastScrapeProgress(
   }
 ): void {
   if (!scrapeNamespace) return;
-  scrapeNamespace.to(`job:${jobId}`).emit("job:progress", {
-    jobId,
-    ...data,
-    timestamp: new Date().toISOString(),
-  });
+  const payload = { jobId, ...data, timestamp: new Date().toISOString() };
+  // Emit to job room (targeted) AND namespace-wide (fallback)
+  scrapeNamespace.to(`job:${jobId}`).emit("job:progress", payload);
+  scrapeNamespace.emit("job:progress", payload);
 }
 
 export function broadcastScrapeProperty(
@@ -145,11 +144,9 @@ export function broadcastScrapeProperty(
   property: Record<string, unknown>
 ): void {
   if (!scrapeNamespace) return;
-  scrapeNamespace.to(`job:${jobId}`).emit("job:property", {
-    jobId,
-    property,
-    timestamp: new Date().toISOString(),
-  });
+  const payload = { jobId, property, timestamp: new Date().toISOString() };
+  scrapeNamespace.to(`job:${jobId}`).emit("job:property", payload);
+  scrapeNamespace.emit("job:property", payload);
 }
 
 export function broadcastScrapeComplete(
@@ -157,22 +154,18 @@ export function broadcastScrapeComplete(
   stats: Record<string, unknown>
 ): void {
   if (!scrapeNamespace) return;
-  scrapeNamespace.to(`job:${jobId}`).emit("job:completed", {
-    jobId,
-    stats,
-    timestamp: new Date().toISOString(),
-  });
+  const payload = { jobId, stats, timestamp: new Date().toISOString() };
+  scrapeNamespace.to(`job:${jobId}`).emit("job:completed", payload);
+  scrapeNamespace.emit("job:completed", payload);
   // Notify all clients to refresh job list
   scrapeNamespace.emit("job_update", { jobId, status: "COMPLETED" });
 }
 
 export function broadcastScrapeError(jobId: string, error: string): void {
   if (!scrapeNamespace) return;
-  scrapeNamespace.to(`job:${jobId}`).emit("job:error", {
-    jobId,
-    error,
-    timestamp: new Date().toISOString(),
-  });
+  const payload = { jobId, error, timestamp: new Date().toISOString() };
+  scrapeNamespace.to(`job:${jobId}`).emit("job:error", payload);
+  scrapeNamespace.emit("job:error", payload);
   // Notify all clients to refresh job list
   scrapeNamespace.emit("job_update", { jobId, status: "FAILED" });
 }

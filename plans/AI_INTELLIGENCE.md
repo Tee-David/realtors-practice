@@ -748,17 +748,375 @@ GET  /api/ai/health              → AI service status + provider availability
 
 ---
 
+## Chatbot UI: AI Elements + Jotform Agent Style
+
+### Component Library: AI Elements (elements.ai-sdk.dev)
+
+AI Elements is Vercel's open-source component library built on shadcn/ui, providing 29 production-ready React components for AI-native interfaces. Components are **copied into your codebase** (not node_modules), allowing full customization.
+
+**Installation:**
+```bash
+npx shadcn@latest add https://elements.ai-sdk.dev/api/registry/all.json
+# Or install individually:
+npx ai-elements@latest add message conversation prompt-input reasoning tool-invocation markdown attachment
+```
+
+### Core Components to Use
+
+| Component | Purpose | Priority |
+|---|---|---|
+| **Conversation** | Main chat wrapper with ConversationContent, ConversationEmptyState | Critical |
+| **Message** | Renders user/assistant messages with MessageContent, branching, actions | Critical |
+| **Prompt Input** | Textarea + submit + file upload + model selector | Critical |
+| **Markdown** | GFM rendering (tables, task lists), smart streaming support | Critical |
+| **Tool Invocation** | Collapsible panel showing tool call details (property search, analysis) | High |
+| **Reasoning** | Collapsible chain-of-thought panel; auto-opens during streaming | High |
+| **Attachment / File Preview** | Property images, floor plans, documents | High |
+| **Sources** | Citation display for property listings and data origins | Medium |
+| **Thread** | Conversation history management | Medium |
+
+### Jotform Agent UI Patterns to Replicate
+
+The goal is a **conversational assistant** feel, not a support bot. Key patterns:
+
+| Pattern | Implementation |
+|---|---|
+| **Suggested action chips** | Array of rounded pill buttons below last message; `onClick` sends text via `useChat.append()` |
+| **Typing indicator** | When `status === 'streaming'` and no content yet, show animated 3-dot bounce |
+| **Pulsing avatar** | CSS `@keyframes pulse` on bot avatar with `box-shadow` scale |
+| **One-question-at-a-time** | System prompt instructs AI to ask one property question per turn |
+| **Inline property cards** | Custom tool UI: `searchProperties` tool renders card grid with image/price/location |
+| **Progressive disclosure** | Brief property summary first, expandable to full details (shadcn Collapsible) |
+| **Quick-reply filters** | After search results: chips like "Under 50M", "3+ bedrooms", "Lagos Island" |
+| **Welcome state** | `ConversationEmptyState` with greeting + 3-4 starter buttons ("Find a property", "Get market insights") |
+| **Smooth animations** | Framer Motion `AnimatePresence` with `initial={{ opacity: 0, y: 10 }}` on each message |
+
+### Architecture
+
+```
+app/api/chat/route.ts          → streamText() with tools (search, market data, analysis)
+components/chat/                → AI Elements components (customized copies)
+components/chat/suggested-actions.tsx  → Jotform-style quick reply chips
+components/chat/property-card.tsx      → Rich property card for tool results
+components/chat/typing-indicator.tsx   → Animated dots
+```
+
+**Integration:** `useChat` hook manages all state/streaming. AI Elements' `Message` renders markdown. `ToolInvocation` is customized to render property cards and map views instead of raw JSON. `PromptInput` supports file attachments for property photo reverse lookup.
+
+---
+
+## AI-Enhanced Search Intelligence (10 Ideas)
+
+### S1. Natural Language Query Engine
+Users type "3 bed flat in Lekki under 5M near a good school" → AI parses to structured filters handling Nigerian slang ("selfcon", "boys quarter", "face-me-I-face-you").
+
+**How:** Single Qwen3 32B call via Groq with JSON schema. Cache common patterns. ~200 input tokens, resolves in <1s.
+**Resource:** LOW — 1 LLM call per search.
+
+### S2. Semantic Property Search via Embeddings
+"Quiet family neighborhood with space for children" finds "serene estate with large compound" — captures intent, not just keywords.
+
+**How:** Embed listings with `nomic-embed-text` or HuggingFace free API. Store vectors in pgvector. Query = embed user text + cosine similarity. Blend semantic score (0.6) with filter score (0.4).
+**Resource:** MEDIUM — One-time batch embedding; per-query: 1 embedding call + 1 pgvector query.
+
+### S3. Conversational Search Refinement
+Users refine results through dialogue: "too expensive, show me something cheaper but still on the island" — AI maintains context across turns.
+
+**How:** Short conversation history (3-5 turns) + current active filters as JSON → LLM returns updated filter set. Chat sidebar alongside search results.
+**Resource:** LOW — 1 LLM call per refinement turn.
+
+### S4. Smart Auto-Suggest with Market Context
+As user types: "Lekki Phase 1 (avg 4.5M for 2bed)" or "Ajah — trending, +15% listings this month."
+
+**How:** Pre-compute nightly: per-neighborhood avg price by bedroom count, volume/price trends. Store as JSON lookup. Prefix match on keystroke (no LLM). LLM used only in nightly batch for summary strings.
+**Resource:** LOW — No per-query LLM calls.
+
+### S5. Cross-Listing Duplicate & Deal Detection
+Same property on PropertyPro, NPC, and Jiji at different prices. AI identifies duplicates and flags best deal.
+
+**How:** Embedding similarity to cluster candidates → LLM verifies pairs ("same property? confidence, price difference?"). Background job post-scrape. Store in `listing_matches` table.
+**Resource:** MEDIUM — ~200-500 LLM calls per scrape cycle for top 5% similarity pairs.
+
+### S6. Listing Quality & Trust Scoring
+Score each listing: completeness, photo quality indicators, description realism, price plausibility. Trust badges: "Verified Details", "Likely Accurate", "Incomplete."
+
+**How:** Multi-dimensional: (a) completeness = pure logic; (b) price plausibility = statistical (±2σ from area median); (c) description quality = LLM scores 1-10 with reasoning. Post-scrape batch.
+**Resource:** MEDIUM — 1 LLM call per new listing (~500/day).
+
+### S7. "Why This Property" Explainer
+One-line per search result: "Matches your budget, in your preferred area, and has the home office space you mentioned."
+
+**How:** Top 10 results + original query → single batch LLM prompt → JSON array of explanation strings. One call for all 10 results.
+**Resource:** LOW — 1 LLM call per search page.
+
+### S8. Investment Opportunity Classifier
+Auto-tags: "Below Market Value", "Rental Yield Hotspot", "Emerging Area", "Flip Potential."
+
+**How:** Nightly SQL: per-neighborhood percentiles, rental vs sale comparison, listing volume trends. LLM generates tag descriptions only (~50-100 calls/night).
+**Resource:** LOW — Mostly SQL aggregations.
+
+### S9. Saved Search with Semantic Alerts
+Saved "family home in safe Lekki estate" alerts on "secure gated community in Lekki Phase 2" even without keyword match.
+
+**How:** Store structured filters + embedding of original NL query. New listings: embed → pgvector similarity check against saved searches. Threshold + basic filter match → notification.
+**Resource:** LOW — Embeddings reused from S2.
+
+### S10. Comparative Analysis on Demand
+Select 2-5 properties → "which is the better investment?" → AI generates comparison table + tailored recommendation.
+
+**How:** Listing data + neighborhood stats → Qwen3 32B → markdown table + recommendation paragraph. Streamed response. Limit 5 properties per comparison.
+**Resource:** LOW — 1 LLM call per comparison (user-initiated).
+
+### Search Intelligence Priority Matrix
+
+| Implement First (Quick Wins) | Implement Second | Later Phase |
+|---|---|---|
+| S1. NL Query Engine | S2. Semantic Search | S5. Cross-Listing Detection |
+| S4. Smart Auto-Suggest | S3. Conversational Refinement | S9. Semantic Alerts |
+| S7. "Why This Property" | S6. Trust Scoring | S10. Comparative Analysis |
+| | S8. Investment Tags | |
+
+---
+
+## AI + Maps Intelligence (10 Ideas)
+
+### M1. Natural Language Map Navigation
+"Show me affordable 3-bedrooms near Third Mainland Bridge" → map flies to area with matching properties highlighted.
+
+**How:** LLM extracts location + filters → Nominatim geocodes → `map.flyTo({center, zoom: 14})` → DB query with bounding box + filters → markers rendered.
+**Resource:** LOW — 1 LLM + 1 Nominatim + 1 DB query.
+
+### M2. AI-Generated Neighborhood Profiles
+Click any area → AI profile card: "Victoria Island — premium area, avg rent 3.5M for 2-bed, proximity to banks, heavy traffic, flooding risk in rainy season."
+
+**How:** Reverse geocode → DB aggregate stats → OSM Overpass for nearby amenities → Qwen3 32B generates 3-sentence profile. **Cache per neighborhood, invalidate weekly.**
+**Resource:** LOW — ~50-100 LLM calls to warm cache.
+
+### M3. Dynamic Price Heatmap Layer
+Toggle heatmap: green (affordable) → red (premium). Switch between "sale price/sqm", "rental price", "price trend."
+
+**How:** Pre-compute H3 hexagonal grid (resolution 8, ~460m cells). Aggregate: median price, listing count, 30-day change. Serve as GeoJSON → Mapbox `fill-extrusion` or `heatmap` layer with data-driven styling. Recompute nightly.
+**Resource:** LOW — Pure data aggregation + client-side rendering.
+
+### M4. Commute Time Isochrone Analysis
+Drop a pin on workplace → see shaded overlay: "areas reachable in 30/45/60 minutes." Properties color-coded by commute band. **Essential for Lagos.**
+
+**How:** Mapbox Isochrone API (300 free requests/day) or self-hosted OSRM → GeoJSON polygon layers → Turf.js `booleanPointInPolygon` client-side classifies properties into bands. Filter toggle: "Show only within 30-min commute."
+**Resource:** LOW — 1 isochrone API call per pin. Client-side rendering.
+
+### M5. Investment Hotspot Detection Layer
+AI-analyzed map layer showing growth hotspots: "Epe/Lekki-Epe corridor: +22% listing volume, new rail line, early-stage growth."
+
+**How:** Weekly batch: per-neighborhood metrics (volume change, price change, days-on-market trend) → scoring formula → top 15 = hotspots → LLM generates 2-sentence briefs. Render as pulsing circle markers.
+**Resource:** LOW — ~15 LLM calls weekly. Static GeoJSON layer.
+
+### M6. Smart Property Clustering with Summaries
+Zoomed-out clusters show: "12 luxury apartments, avg 8.5M" instead of just "47."
+
+**How:** Mapbox GL JS built-in clustering → client-side aggregation per cluster (type, median price, dominant bedrooms) → template-generated summary. No LLM for basic view. Optional LLM-enhanced popup on cluster click.
+**Resource:** LOW — Client-side only for basic. 1 LLM per click for enhanced.
+
+### M7. Neighborhood Comparison Fly-Through
+Select 2-3 neighborhoods → animated map fly-through with comparison cards at each stop: "Lekki Phase 1 vs Ajah: Phase 1 is 3x pricier but 20 min closer. Ajah has more new developments."
+
+**How:** Geocode neighborhoods → chain `flyTo` with `pitch: 60` for 3D tilt → popup comparison cards. Single LLM call before animation generates all pairwise comparisons.
+**Resource:** LOW — 1 LLM call + 2-3 Nominatim calls per session.
+
+### M8. Amenity Proximity Scoring Overlay
+Toggle: select "schools + hospitals + markets" → gradient overlay: green (rich in all three) → red (lacking).
+
+**How:** OSM Overpass API for amenities in bounds → per-property score = sum of `1/distance` to nearest amenity per category. Render as Mapbox heatmap. Client-side Turf.js `distance`. Cache OSM data per tile, refresh monthly.
+**Resource:** MEDIUM — Overpass queries cached; client-side math.
+
+### M9. AI Property Value Estimator on Map
+Click any point (even empty plot) → "Estimated value for 3-bed flat here: 4.2M-5.8M (based on 34 comparables within 2km)."
+
+**How:** DB query for comparables within 2km radius (same type/bedrooms) → median, P25/P75 → LLM generates estimate + 1-sentence explanation. Require ≥5 comparables; otherwise show "Insufficient data."
+**Resource:** LOW — 1 DB query + 1 LLM call per click (user-initiated).
+
+### M10. Flood/Infrastructure Risk Layer
+Overlay known flood zones, road quality, infrastructure gaps. AI-generated risk briefs: "Lekki Phase 1 — moderate flood risk July-Sept, frequent water outages, excellent road network."
+
+**How:** Source flood data from OSM (`flood_prone=yes`) + Lagos State flood maps. Road quality from OSM surface tags. Infrastructure from Overpass (power/water facilities). Score per H3 hex. Weekly batch: LLM generates neighborhood risk commentaries. Static GeoJSON layer.
+**Resource:** LOW — ~50-100 LLM calls weekly for commentaries.
+
+### Maps Intelligence Priority Matrix
+
+| Implement First | Implement Second | Later Phase |
+|---|---|---|
+| M1. NL Map Navigation | M4. Commute Isochrones | M7. Fly-Through Comparison |
+| M3. Price Heatmap | M5. Investment Hotspots | M8. Amenity Scoring |
+| M6. Smart Clustering | M2. Neighborhood Profiles | M10. Flood/Risk Layer |
+| | M9. Value Estimator | |
+
+---
+
+## ZeroClaw Sub-Agent Architecture
+
+### Design Principle
+
+ZeroClaw as **orchestrator** — parses intent and routes tasks to **6 specialized sub-agents** (grouped by data affinity, not 1:1 with features). Each sub-agent is niche, shares a common data workspace via PostgreSQL + Redis, and uses the optimal model tier for its task.
+
+### Sub-Agent Roster
+
+```
+[ZeroClaw Gateway :42617]
+         |
+   [Orchestrator — Intent Classifier]
+         |  Uses model_routes hints + lightweight LLM
+         |
+         +--→ search-parser      (NL query parsing, search execution)
+         +--→ property-analyst   (quality/fraud scoring, enrichment, anomaly detection)
+         +--→ market-intel       (market reports, investment analysis)
+         +--→ scraper-ops        (scraper failure diagnosis, monitoring)
+         +--→ chat-assistant     (web chat + Telegram bot, can delegate to others)
+         +--→ notifier           (digest generation, saved search alerts)
+```
+
+### Agent Details
+
+| Agent | Features Covered | Model Tier | Tools | RAM | Latency |
+|---|---|---|---|---|---|
+| **search-parser** | NL query parsing (S1) | Fast (Haiku-tier) | `meilisearch_query`, `geocode_resolve` | ~15 MB | <500ms |
+| **property-analyst** | Quality scoring, enrichment, anomaly detection (S6, S5, Use Cases 2,8,10) | Medium (Sonnet-tier) | `db_property_read/write`, `quality_score`, `duplicate_check` | ~25 MB | <5s/property |
+| **market-intel** | Market reports, investment analysis (S8, Use Cases 3,5) | Strong (Sonnet-tier) | `db_market_aggregate`, `price_trend_query`, `report_template` | ~30 MB | <15s (cacheable) |
+| **scraper-ops** | Scraper failure diagnosis (Use Case 6) | Medium (Haiku-tier) | `scrape_logs_tail`, `site_config_read`, `http_probe` | ~20 MB | <10s (event-driven) |
+| **chat-assistant** | Chat + Telegram (Use Case 7, Telegram) | Strong (Sonnet-tier) | `delegate` (to any agent), `conversation_memory`, `telegram_send` | ~35 MB | <3s first token |
+| **notifier** | Notification digests, alerts (Use Case 9, S9) | Fast (Haiku-tier) | `db_saved_searches`, `email_send`, `push_send` | ~15 MB | Batch, <60s |
+
+### Why 6 Agents, Not 10
+
+Features with shared data access patterns are consolidated:
+- **property-analyst** = scoring + enrichment + anomaly detection (all operate on same property data)
+- **market-intel** = reports + investment analysis (identical data aggregations)
+- **chat-assistant** = web chat + Telegram bot (same intent parsing, same tools, different transport)
+
+### Routing: Zero-Cost Pattern Matching
+
+ZeroClaw's `model_routes` provide **pattern-based routing without any LLM call**:
+
+```toml
+[[model_routes]]
+hint = "search"
+patterns = ["find", "looking for", "show me", "under", "bedroom", "in lekki"]
+
+[[model_routes]]
+hint = "analyze"
+patterns = ["score", "quality", "fraud", "suspicious", "enrich", "anomaly"]
+
+[[model_routes]]
+hint = "market"
+patterns = ["market report", "investment", "ROI", "price trend"]
+
+[[model_routes]]
+hint = "scraper"
+patterns = ["scraper", "crawl", "failed", "diagnose", "site down"]
+```
+
+Only ambiguous inputs trigger an LLM classification call.
+
+### Shared Workspace
+
+| Layer | Technology | Purpose |
+|---|---|---|
+| **Persistent state** | PostgreSQL (existing) | Properties, users, jobs — source of truth |
+| **Agent memory** | SQLite (ZeroClaw built-in, per-agent) | Conversation history, learned patterns |
+| **Hot cache** | Redis (existing) | Cross-agent shared state, market data cache |
+| **Event bus** | Redis Pub/Sub | Scraper failures, new listing alerts, agent triggers |
+
+Sub-agents do NOT share SQLite memory (isolation). Cross-agent data sharing uses PostgreSQL and Redis — both already exist in the stack.
+
+### Integration with Backend
+
+ZeroClaw sits as an **AI sidecar** beside the Node.js backend:
+
+```
+[Frontend / Telegram]
+        ↓
+[Node.js Backend (Express)]
+        ↓
+    ┌── Direct DB operations (existing services, unchanged)
+    └── AI operations ──→ POST to ZeroClaw Gateway :42617
+                                  ↓
+                          [Orchestrator → Sub-agent → Result]
+```
+
+Existing services stay unchanged. ZeroClaw augments, not replaces.
+
+---
+
+## Oracle VM Optimal Requirements
+
+### Current Stack RAM (Revised — Replace Neo4j with FalkorDB)
+
+**Key finding:** Neo4j uses 1.5-3 GB RAM (JVM) even for a tiny graph. Replace with **FalkorDB** (~50-200 MB, Redis-based, C implementation). mem0 has an official FalkorDB plugin — drop-in replacement.
+
+| Component | RAM (Comfortable) |
+|---|---|
+| Ubuntu OS + kernel | 500 MB |
+| ZeroClaw (orchestrator + 6 sub-agents) | ~150 MB |
+| Node.js backend | 150 MB |
+| Python scraper (intermittent) | 100 MB |
+| mem0 FastAPI | 80 MB |
+| PostgreSQL + pgvector | 512 MB |
+| **FalkorDB** (replaces Neo4j) | **200 MB** |
+| Redis | 256 MB |
+| Headroom/buffers | 500 MB |
+| **TOTAL** | **~2.4 GB** |
+
+vs. previous estimate with Neo4j: ~4.6 GB. **Saves ~2.2 GB.**
+
+### Recommended Two-Project VM Split
+
+You can absolutely run two projects. Oracle Free Tier allows splitting 4 OCPU / 24 GB across multiple ARM instances.
+
+| | VM1 (Property Platform) | VM2 (Other Project) |
+|---|---|---|
+| **OCPU** | 2 | 2 |
+| **RAM** | 8 GB | 16 GB |
+| **Boot Volume** | 60 GB | 100 GB |
+
+With only ~2.4 GB actually needed, 8 GB gives 3x headroom for traffic spikes and PostgreSQL caching. 2 OCPU is more than enough since all inference is offloaded to APIs.
+
+### Aggressive Split (If Other Project Needs More)
+
+| | VM1 (Property Platform) | VM2 (Other Project) |
+|---|---|---|
+| **OCPU** | 1 | 3 |
+| **RAM** | 4 GB | 20 GB |
+| **Boot Volume** | 47 GB (minimum) | 153 GB |
+
+Still leaves ~1.6 GB headroom over actual usage. 1 OCPU works because the workload is I/O-bound (waiting on external API calls and DB queries), not CPU-bound.
+
+### FalkorDB vs Neo4j
+
+| Metric | Neo4j | FalkorDB |
+|---|---|---|
+| RAM | 1.5-3 GB (JVM) | 50-200 MB (C/Redis) |
+| p99 latency | ~47,000ms | <140ms |
+| mem0 support | Native | Official plugin (`mem0-falkordb`) |
+| Disk | 500 MB+ | ~50 MB |
+| Setup | Docker Compose (JVM tuning) | Single Docker image |
+
+**Alternative: Vector-only mode** — skip graph memory entirely. Omit `graph_store` from mem0 config. PostgreSQL + pgvector handles everything. Lose relational reasoning but gain simplicity. Good enough for most use cases.
+
+---
+
 ## Key Links
 
 - Groq Console: https://console.groq.com
 - Cerebras Cloud: https://cloud.cerebras.ai
 - SambaNova Cloud: https://cloud.sambanova.ai
 - ZeroClaw binary: `/usr/local/bin/zeroclaw` (Rust binary on the Oracle VM)
+- ZeroClaw repo: https://github.com/zeroclaw-labs/zeroclaw
 - mem0: https://github.com/mem0ai/mem0
 - mem0 docs: https://docs.mem0.ai
+- FalkorDB: https://falkordb.com (Neo4j replacement for mem0 graph storage)
+- AI Elements: https://elements.ai-sdk.dev/components/
+- Vercel AI SDK: https://ai-sdk.dev
 - Oracle Free: https://oracle.com/cloud/free
 - Gemini API: https://ai.google.dev
 
 ---
 
-*Revised 2026-03-17. Architecture updated from local Ollama/Qwen3 8B to free inference APIs (Groq/Cerebras/SambaNova) serving Qwen3 32B at 300-3,000 tok/s. Oracle VM now runs only ZeroClaw + mem0, freeing 19-21 GB of RAM headroom. Zero cost, 100x faster inference, 4x larger model.*
+*Revised 2026-03-17. Added: AI Elements chatbot UI plan (Jotform Agent style), 10 AI-enhanced search ideas, 10 AI+Maps intelligence ideas, ZeroClaw 6-sub-agent architecture, Oracle VM optimization (FalkorDB replaces Neo4j, two-project VM split). Architecture updated from local Ollama/Qwen3 8B to free inference APIs (Groq/Cerebras/SambaNova) serving Qwen3 32B at 300-3,000 tok/s. Oracle VM runs ZeroClaw + mem0 + FalkorDB, total ~2.4 GB RAM.*

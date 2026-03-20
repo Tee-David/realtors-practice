@@ -425,7 +425,7 @@ function PriceChart({ history }: { history: PriceHistoryEntry[] }) {
 
 function PropertyDetailSkeleton() {
   return (
-    <div className="space-y-6 max-w-6xl animate-in fade-in duration-300">
+    <div className="space-y-6 w-full animate-in fade-in duration-300">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2">
         <Skeleton className="h-4 w-20" />
@@ -528,7 +528,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
   };
 
   return (
-    <div className="space-y-6 max-w-6xl">
+    <div className="space-y-6 w-full">
       {/* Breadcrumb */}
       <div className="flex items-center gap-1.5 text-xs" style={{ color: "var(--muted-foreground)" }}>
         <Link href="/" className="hover:underline">Dashboard</Link>

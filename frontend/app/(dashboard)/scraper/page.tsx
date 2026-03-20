@@ -202,6 +202,7 @@ export default function ScraperPage() {
   const [liveProperties, setLiveProperties] = useState<LiveProperty[]>([]);
   const [completionStats, setCompletionStats] = useState<CompletionStats | null>(null);
   const [pageState, setPageState] = useState<PageState>("idle");
+  const [latestLogMessage, setLatestLogMessage] = useState<string | null>(null);
 
   // ── Elapsed timer
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -226,6 +227,9 @@ export default function ScraperPage() {
   const logsEndRef = useRef<HTMLDivElement>(null);
   const logsSectionRef = useRef<HTMLDivElement>(null);
 
+  // ── Live terminal log filters
+  const [terminalLogFilter, setTerminalLogFilter] = useState<string>("all");
+
   // ── Pipeline (per-site progress tracking when multi-site)
   const [pipelineSites, setPipelineSites] = useState<Record<string, { found: number; status: "queued" | "active" | "done" }>>({});
 
@@ -239,8 +243,22 @@ export default function ScraperPage() {
   useEffect(() => {
     if (activeJob) {
       setPageState("running");
+    } else if (pageState === "running") {
+      // Job disappeared from active list (completed/failed) — poll detected completion
+      // Only transition if we didn't already get a job:completed socket event
+      const latestJob = jobs?.[0];
+      if (latestJob && (latestJob.status === "COMPLETED" || latestJob.status === "FAILED" || latestJob.status === "CANCELLED")) {
+        setCompletionStats(prev => prev ?? {
+          propertiesFound: (latestJob as any).totalListings ?? 0,
+          duplicates: (latestJob as any).duplicates ?? 0,
+          errors: (latestJob as any).errors ?? 0,
+          elapsed: elapsedMs,
+          sites: (latestJob as any).siteIds?.length ?? selectedSiteIds.length,
+        });
+        setPageState("complete");
+      }
     }
-  }, [activeJob]);
+  }, [activeJob, jobs, pageState]);
 
   // ── Load saved config on mount
   useEffect(() => {
@@ -283,6 +301,31 @@ export default function ScraperPage() {
     };
   }, [pageState, activeJob]);
 
+  // ── Join socket room when an active job exists (so we receive room-scoped events)
+  const currentJobIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!socket) return;
+    const jobId = activeJob?.id ?? null;
+    if (jobId === currentJobIdRef.current) return;
+
+    // Leave previous room
+    if (currentJobIdRef.current) {
+      socket.emit("leave:job", currentJobIdRef.current);
+    }
+    // Join new room
+    if (jobId) {
+      socket.emit("join:job", jobId);
+    }
+    currentJobIdRef.current = jobId;
+
+    return () => {
+      if (currentJobIdRef.current) {
+        socket.emit("leave:job", currentJobIdRef.current);
+        currentJobIdRef.current = null;
+      }
+    };
+  }, [socket, activeJob?.id]);
+
   // ── Socket events
   useEffect(() => {
     if (!socket) return;
@@ -302,10 +345,12 @@ export default function ScraperPage() {
     });
 
     socket.on("job:log", (data: any) => {
+      const msg = data.message ?? String(data);
+      setLatestLogMessage(msg);
       setLogs(prev => {
         const entry = {
           id: Date.now() + Math.random(),
-          message: data.message ?? String(data),
+          message: msg,
           timestamp: new Date().toISOString(),
           level: data.level ?? "info",
         };
@@ -314,10 +359,12 @@ export default function ScraperPage() {
     });
 
     socket.on("scrape_log", (data: any) => {
+      const msg = data.message ?? String(data);
+      setLatestLogMessage(msg);
       setLogs(prev => {
         const entry = {
           id: Date.now() + Math.random(),
-          message: data.message ?? String(data),
+          message: msg,
           timestamp: new Date().toISOString(),
           level: data.level ?? "info",
         };
@@ -325,17 +372,21 @@ export default function ScraperPage() {
       });
     });
 
-    socket.on("job:property", (data: LiveProperty) => {
-      setLiveProperties(prev => [data, ...prev].slice(0, 100));
+    socket.on("job:property", (data: any) => {
+      // Backend sends { jobId, property, timestamp } — extract the property
+      const prop: LiveProperty = data.property ?? data;
+      setLiveProperties(prev => [prop, ...prev].slice(0, 100));
     });
 
     socket.on("job:completed", (data: any) => {
+      // Stats may be nested under data.stats (from broadcastScrapeComplete) or flat
+      const s = data.stats || data;
       setCompletionStats({
-        propertiesFound: data.propertiesFound ?? liveProgress?.propertiesFound ?? 0,
-        duplicates: data.duplicates ?? liveProgress?.duplicates ?? 0,
-        errors: data.errors ?? liveProgress?.errors ?? 0,
+        propertiesFound: s.totalListings ?? s.propertiesFound ?? liveProgress?.propertiesFound ?? 0,
+        duplicates: s.duplicates ?? liveProgress?.duplicates ?? 0,
+        errors: s.errors ?? liveProgress?.errors ?? 0,
         elapsed: elapsedMs,
-        sites: data.sites ?? selectedSiteIds.length,
+        sites: s.sites ?? selectedSiteIds.length,
       });
       setPageState("complete");
       // Mark all pipeline sites as done
@@ -451,6 +502,7 @@ export default function ScraperPage() {
     setLogs([]);
     setLiveProperties([]);
     setLiveProgress(null);
+    setLatestLogMessage(null);
     setCompletionStats(null);
     setPipelineSites(
       cfg.scrapeMode === "PASSIVE_BULK"
@@ -468,14 +520,21 @@ export default function ScraperPage() {
         parameters: cfg.scheduleTime ? { scheduledAt: cfg.scheduleTime } : undefined,
       },
       {
-        onSuccess: () => toast.success("Scrape job dispatched!"),
+        onSuccess: (job: any) => {
+          toast.success("Scrape job dispatched!");
+          // Immediately join socket room for this job so we get progress/property/completed events
+          if (socket && job?.id) {
+            socket.emit("join:job", job.id);
+            currentJobIdRef.current = job.id;
+          }
+        },
         onError: (err: any) => {
           setPageState("idle");
           toast.error(err.response?.data?.message || "Failed to start scraping job");
         },
       }
     );
-  }, [startScrape, allSites]);
+  }, [startScrape, allSites, socket]);
 
   const handleDispatch = () => {
     if (!savedConfig) {
@@ -1043,9 +1102,20 @@ export default function ScraperPage() {
               )}
 
               {pageState === "running" && !liveProgress && (
-                <div className="py-6 flex items-center justify-center gap-2 text-muted-foreground text-sm">
-                  <RefreshCcw className="w-4 h-4 animate-spin" />
-                  Initialising...
+                <div className="py-6 space-y-3">
+                  <div className="flex items-center justify-center gap-2 text-muted-foreground text-sm">
+                    <RefreshCcw className="w-4 h-4 animate-spin" />
+                    {latestLogMessage ? "Working..." : "Initialising..."}
+                  </div>
+                  {latestLogMessage && (
+                    <p className="text-xs text-muted-foreground text-center truncate px-2">
+                      {latestLogMessage}
+                    </p>
+                  )}
+                  <div className="flex items-center justify-center text-xs text-muted-foreground gap-1.5">
+                    <Clock className="w-3 h-3" />
+                    <span>{formatElapsed(elapsedMs)}</span>
+                  </div>
                 </div>
               )}
 
@@ -1228,7 +1298,36 @@ export default function ScraperPage() {
                     <span className="ml-1 animate-pulse font-bold text-green-400">&gt;&gt;_</span>
                   )}
                 </CardTitle>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-2">
+                  {/* Log level filter pills */}
+                  <div className="flex items-center gap-0.5 mr-2">
+                    {[
+                      { key: "all", label: "All" },
+                      { key: "error", label: "ERR", color: "text-red-400" },
+                      { key: "warn", label: "WRN", color: "text-yellow-400" },
+                      { key: "info", label: "INF", color: "text-blue-400" },
+                    ].map(f => (
+                      <button
+                        key={f.key}
+                        onClick={() => setTerminalLogFilter(f.key)}
+                        className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider transition-colors ${
+                          terminalLogFilter === f.key
+                            ? "bg-white/10 dark:bg-white/10 text-foreground"
+                            : `${f.color || "text-zinc-500"} opacity-50 hover:opacity-100`
+                        }`}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+                  {logs.length > 0 && (
+                    <button
+                      onClick={() => setLogs([])}
+                      className="text-[9px] font-mono text-zinc-500 hover:text-zinc-300 transition-colors mr-2"
+                    >
+                      clear
+                    </button>
+                  )}
                   <div className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
                   <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/60" />
                   <div className="w-2.5 h-2.5 rounded-full bg-green-500/60" />
@@ -1243,7 +1342,7 @@ export default function ScraperPage() {
                 </div>
               ) : (
                 <div className="space-y-1 pb-4">
-                  {logs.map(log => (
+                  {logs.filter(log => terminalLogFilter === "all" || log.level.toLowerCase() === terminalLogFilter).map(log => (
                     <div key={log.id} className="flex items-start gap-2 sm:gap-3 break-words hover:bg-black/[0.02] dark:hover:bg-white/[0.02] px-1 rounded">
                       <span className="text-zinc-400 dark:text-zinc-600 shrink-0 select-none hidden sm:inline text-[10px] pt-0.5 tabular-nums">
                         {new Date(log.timestamp).toLocaleTimeString([], {

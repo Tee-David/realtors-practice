@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
@@ -23,37 +23,73 @@ import {
   Menu,
   X,
   LogOut,
+  ChevronDown,
+  MessageSquareText,
+  Sparkles,
+  GitCompareArrows,
+  Bell,
+  Map,
 } from "lucide-react";
 
 interface NavItem {
   label: string;
   href: string;
   icon: React.ElementType;
-  section: string;
 }
 
-const navItems: NavItem[] = [
-  // MAIN
-  { label: "Dashboard", href: "/", icon: LayoutDashboard, section: "MAIN" },
-  { label: "Properties", href: "/properties", icon: Building2, section: "MAIN" },
-  { label: "Search", href: "/search", icon: Search, section: "MAIN" },
+interface NavSection {
+  label: string;
+  icon: React.ElementType;
+  items: NavItem[];
+}
 
-  // DATA & TOOLS
-  { label: "Data Explorer", href: "/data-explorer", icon: Database, section: "DATA & TOOLS" },
-  { label: "Sites", href: "/scraper/sites", icon: Globe, section: "DATA & TOOLS" },
-  { label: "Scraper", href: "/scraper", icon: Bot, section: "DATA & TOOLS" },
-
-  // ANALYTICS
-  { label: "Analytics", href: "/analytics", icon: BarChart3, section: "ANALYTICS" },
-  { label: "Market Intel", href: "/market", icon: TrendingUp, section: "ANALYTICS" },
-  { label: "Saved Searches", href: "/saved-searches", icon: Bookmark, section: "ANALYTICS" },
-
-  // SYSTEM
-  { label: "Audit Log", href: "/audit-log", icon: ScrollText, section: "SYSTEM" },
-  { label: "Settings", href: "/settings", icon: Settings, section: "SYSTEM" },
+const navSections: NavSection[] = [
+  {
+    label: "OVERVIEW",
+    icon: LayoutDashboard,
+    items: [
+      { label: "Dashboard", href: "/", icon: LayoutDashboard },
+      { label: "Properties", href: "/properties", icon: Building2 },
+      { label: "Compare", href: "/properties/compare", icon: GitCompareArrows },
+    ],
+  },
+  {
+    label: "SEARCH & DISCOVER",
+    icon: Search,
+    items: [
+      { label: "Search", href: "/search", icon: Search },
+      { label: "Map Explorer", href: "/search?view=map", icon: Map },
+      { label: "Saved Searches", href: "/saved-searches", icon: Bookmark },
+    ],
+  },
+  {
+    label: "DATA & SCRAPING",
+    icon: Database,
+    items: [
+      { label: "Scraper", href: "/scraper", icon: Bot },
+      { label: "Sites", href: "/scraper/sites", icon: Globe },
+      { label: "Data Explorer", href: "/data-explorer", icon: Database },
+    ],
+  },
+  {
+    label: "INTELLIGENCE",
+    icon: BarChart3,
+    items: [
+      { label: "Analytics", href: "/analytics", icon: BarChart3 },
+      { label: "Market Intel", href: "/market", icon: TrendingUp },
+      { label: "AI Assistant", href: "/ai", icon: Sparkles },
+    ],
+  },
+  {
+    label: "SYSTEM",
+    icon: Settings,
+    items: [
+      { label: "Notifications", href: "/notifications", icon: Bell },
+      { label: "Audit Log", href: "/audit-log", icon: ScrollText },
+      { label: "Settings", href: "/settings", icon: Settings },
+    ],
+  },
 ];
-
-const sections = [...new Set(navItems.map((item) => item.section))];
 
 function UserAvatar({ expanded }: { expanded: boolean }) {
   const initials = "AD";
@@ -89,15 +125,169 @@ function UserAvatar({ expanded }: { expanded: boolean }) {
   );
 }
 
+/** Hrefs that should only match exactly (not prefix-match child routes) */
+const EXACT_MATCH_HREFS = new Set(["/", "/properties", "/scraper", "/search"]);
+
+function isItemActive(href: string, pathname: string): boolean {
+  if (href.includes("?")) {
+    // Query-based routes (e.g. /search?view=map) — match base path only
+    return pathname === href.split("?")[0];
+  }
+  if (EXACT_MATCH_HREFS.has(href)) {
+    return pathname === href;
+  }
+  return pathname === href || pathname.startsWith(href + "/");
+}
+
+/** Check if any item in a section is currently active */
+function sectionHasActiveItem(section: NavSection, pathname: string): boolean {
+  return section.items.some((item) => isItemActive(item.href, pathname));
+}
+
+function CollapsibleSection({
+  section,
+  expanded,
+  isOpen,
+  onToggle,
+  onNavClick,
+  pathname,
+}: {
+  section: NavSection;
+  expanded: boolean;
+  isOpen: boolean;
+  onToggle: () => void;
+  onNavClick?: () => void;
+  pathname: string;
+}) {
+  const contentRef = React.useRef<HTMLDivElement>(null);
+  const [contentHeight, setContentHeight] = React.useState<number>(0);
+  const hasActive = sectionHasActiveItem(section, pathname);
+  const SectionIcon = section.icon;
+
+  useEffect(() => {
+    if (contentRef.current) {
+      setContentHeight(contentRef.current.scrollHeight);
+    }
+  }, [isOpen, expanded]);
+
+  // Collapsed sidebar: show only section icon
+  if (!expanded) {
+    const firstActiveItem = section.items.find((item) => isItemActive(item.href, pathname));
+    const ActiveIcon = firstActiveItem ? firstActiveItem.icon : SectionIcon;
+
+    return (
+      <div className="flex flex-col items-center">
+        <div
+          className={cn(
+            "flex items-center justify-center rounded-lg px-0 py-2 transition-colors",
+            hasActive ? "font-medium" : "hover:bg-[var(--sidebar-accent)]"
+          )}
+          style={{
+            backgroundColor: hasActive ? "var(--sidebar-accent)" : undefined,
+            color: hasActive
+              ? "var(--sidebar-accent-foreground)"
+              : "var(--sidebar-foreground)",
+            width: 40,
+          }}
+          title={section.label}
+        >
+          <ActiveIcon className="h-4 w-4 shrink-0" />
+        </div>
+      </div>
+    );
+  }
+
+  // Expanded sidebar: collapsible group
+  return (
+    <div>
+      {/* Section header — clickable to toggle */}
+      <button
+        onClick={onToggle}
+        className="flex items-center w-full px-3 py-1 group cursor-pointer"
+      >
+        <span
+          className="text-[10px] font-semibold uppercase tracking-wider flex-1 text-left"
+          style={{ color: "var(--muted-foreground)" }}
+        >
+          {section.label}
+        </span>
+        <ChevronDown
+          className={cn(
+            "h-3 w-3 transition-transform duration-200",
+            !isOpen && "-rotate-90"
+          )}
+          style={{ color: "var(--muted-foreground)" }}
+        />
+      </button>
+
+      {/* Collapsible items container */}
+      <div
+        className="overflow-hidden transition-[max-height] duration-200 ease-in-out"
+        style={{ maxHeight: isOpen ? contentHeight : 0 }}
+      >
+        <div ref={contentRef} className="mt-1 space-y-0.5">
+          {section.items.map((item) => {
+            const isActive = isItemActive(item.href, pathname);
+            const Icon = item.icon;
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={onNavClick}
+                className={cn(
+                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                  isActive
+                    ? "font-medium"
+                    : "hover:bg-[var(--sidebar-accent)]"
+                )}
+                style={{
+                  backgroundColor: isActive
+                    ? "var(--sidebar-accent)"
+                    : undefined,
+                  color: isActive
+                    ? "var(--sidebar-accent-foreground)"
+                    : "var(--sidebar-foreground)",
+                }}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                <span className="whitespace-nowrap overflow-hidden">
+                  {item.label}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SidebarContent({
   expanded,
   onNavClick,
+  isMobile = false,
 }: {
   expanded: boolean;
   onNavClick?: () => void;
+  isMobile?: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
+
+  // Track which sections are open. On mobile, default all open.
+  // On desktop, default all open as well (they collapse/expand on click).
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {};
+    navSections.forEach((s) => {
+      initial[s.label] = true;
+    });
+    return initial;
+  });
+
+  const toggleSection = (label: string) => {
+    setOpenSections((prev) => ({ ...prev, [label]: !prev[label] }));
+  };
 
   const handleLogout = async () => {
     try {
@@ -159,60 +349,17 @@ function SidebarContent({
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto scrollbar-none py-4 px-2 space-y-6 pb-24">
-        {sections.map((section) => (
-          <div key={section}>
-            {expanded && (
-              <span
-                className="px-3 text-[10px] font-semibold uppercase tracking-wider"
-                style={{ color: "var(--muted-foreground)" }}
-              >
-                {section}
-              </span>
-            )}
-            <div className="mt-2 space-y-1">
-              {navItems
-                .filter((item) => item.section === section)
-                .map((item) => {
-                  const isActive =
-                    item.href === "/"
-                      ? pathname === "/"
-                      : pathname === item.href || (pathname.startsWith(item.href) && item.href !== "/scraper");
-                  const Icon = item.icon;
-
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      onClick={onNavClick}
-                      className={cn(
-                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-                        !expanded && "justify-center px-0",
-                        isActive
-                          ? "font-medium"
-                          : "hover:bg-[var(--sidebar-accent)]"
-                      )}
-                      style={{
-                        backgroundColor: isActive
-                          ? "var(--sidebar-accent)"
-                          : undefined,
-                        color: isActive
-                          ? "var(--sidebar-accent-foreground)"
-                          : "var(--sidebar-foreground)",
-                      }}
-                      title={!expanded ? item.label : undefined}
-                    >
-                      <Icon className="h-4 w-4 shrink-0" />
-                      {expanded && (
-                        <span className="whitespace-nowrap overflow-hidden">
-                          {item.label}
-                        </span>
-                      )}
-                    </Link>
-                  );
-                })}
-            </div>
-          </div>
+      <nav className="flex-1 overflow-y-auto scrollbar-none py-4 px-2 space-y-4 pb-24">
+        {navSections.map((section) => (
+          <CollapsibleSection
+            key={section.label}
+            section={section}
+            expanded={expanded}
+            isOpen={isMobile || openSections[section.label]}
+            onToggle={() => toggleSection(section.label)}
+            onNavClick={onNavClick}
+            pathname={pathname}
+          />
         ))}
       </nav>
 
@@ -359,6 +506,7 @@ export function MobileSidebar({
         <SidebarContent
           expanded={true}
           onNavClick={() => onOpenChange(false)}
+          isMobile={true}
         />
       </motion.aside>
     </>

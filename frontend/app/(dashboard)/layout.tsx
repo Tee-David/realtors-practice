@@ -33,6 +33,9 @@ export default function DashboardLayout({
   else if (pathname.startsWith("/saved-searches")) title = "Saved Searches";
   else if (pathname.startsWith("/audit-log")) title = "Audit Log";
   else if (pathname.startsWith("/settings")) title = "Settings";
+  else if (pathname.startsWith("/ai")) title = "AI Assistant";
+  else if (pathname.startsWith("/market")) title = "Market Intel";
+  else if (pathname.startsWith("/notifications")) title = "Notifications";
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "var(--background)" }}>

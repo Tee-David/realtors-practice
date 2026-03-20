@@ -243,6 +243,19 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
                 break
 
             await report_log(job_id, "INFO", f"Scraping site: {site.name} ({site.baseUrl})")
+            # Report initial progress for this site so frontend moves past "Initialising"
+            await report_progress(
+                job_id,
+                processed=len(all_properties),
+                total=request.maxListingsPerSite * len(request.sites),
+                current_site=site.name,
+                current_page=0,
+                max_pages=site.maxPages,
+                pages_fetched=total_pages_fetched,
+                properties_found=len(all_properties),
+                duplicates=0,
+                errors=total_errors,
+            )
             site_properties: list[dict[str, Any]] = []
 
             # Initialize per-site pipeline improvements
@@ -310,7 +323,14 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
 
                         html = await fetcher.fetch(page_url, requires_js=site.requiresJs)
                         if not html:
-                            await report_log(job_id, "WARN", f"Empty response from {page_url}")
+                            block_reason = fetcher.last_block_reason
+                            if block_reason:
+                                total_errors += 1
+                                block_count += 1
+                                await report_log(job_id, "ERROR", f"[{site.name}] Blocked on listing page ({block_reason}): {page_url}")
+                            else:
+                                total_errors += 1
+                                await report_log(job_id, "WARN", f"[{site.name}] Empty response from listing page: {page_url}")
                             break
                         total_pages_fetched += 1
 
