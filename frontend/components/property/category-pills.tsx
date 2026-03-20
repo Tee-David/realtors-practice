@@ -10,7 +10,7 @@ interface CategoryPillsProps {
   onChange: (categories: PropertyCategory[] | undefined) => void;
 }
 
-const CATEGORIES: { value: PropertyCategory | "ALL" | string; label: string; icon: React.ElementType }[] = [
+const CATEGORIES: { value: PropertyCategory | "ALL" | string; label: string; icon: React.ComponentType<any> }[] = [
   { value: "ALL", label: "All", icon: Home },
   { value: "RESIDENTIAL", label: "Residential", icon: Home },
   { value: "COMMERCIAL", label: "Commercial", icon: Building2 },

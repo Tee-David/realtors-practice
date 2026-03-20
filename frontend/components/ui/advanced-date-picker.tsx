@@ -182,7 +182,7 @@ export function AdvancedDateRangePicker({ value, onChange }: AdvancedDateRangePi
                       day_hidden: "invisible",
                   }}
                   components={{
-                     Caption: ({ displayMonth }: any) => {
+                     MonthCaption: ({ displayMonth }: any) => {
                         return (
                            <div className="flex justify-between items-center w-full px-2">
                               <Button variant="outline" size="icon" className="h-7 w-7 rounded-sm opacity-50 hover:opacity-100"><ChevronLeft className="w-4 h-4" /></Button>

@@ -33,12 +33,12 @@ import {
 interface NavItem {
   label: string;
   href: string;
-  icon: React.ElementType;
+  icon: React.ComponentType<any>;
 }
 
 interface NavSection {
   label: string;
-  icon: React.ElementType;
+  icon: React.ComponentType<any>;
   items: NavItem[];
 }
 

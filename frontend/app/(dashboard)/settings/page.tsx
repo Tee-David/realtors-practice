@@ -31,7 +31,7 @@ type SettingsSection =
   | "profile" | "security" | "notifications" | "appearance"
   | "display" | "email" | "backups" | "about" | "users" | "ai";
 
-interface NavItem { key: SettingsSection; label: string; icon: React.ElementType; desc: string; danger?: boolean }
+interface NavItem { key: SettingsSection; label: string; icon: React.ComponentType<any>; desc: string; danger?: boolean }
 
 // ─── Nav Items ──────────────────────────────────────────────────────────────
 
@@ -61,7 +61,7 @@ function Card({ children, className = "" }: { children: React.ReactNode; classNa
   );
 }
 
-function CardHeader({ icon: Icon, title, action, children }: { icon: React.ElementType; title: string; action?: React.ReactNode; children?: React.ReactNode }) {
+function CardHeader({ icon: Icon, title, action, children }: { icon: React.ComponentType<any>; title: string; action?: React.ReactNode; children?: React.ReactNode }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-5">

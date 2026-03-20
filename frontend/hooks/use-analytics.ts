@@ -7,6 +7,7 @@ export interface KPIData {
   newPropertiesToday: number;
   averageQualityScore: number;
   activeDataSources: number;
+  totalSites?: number;
   forSale?: number;
   forRent?: number;
 }

@@ -1,3 +1,4 @@
+// @ts-nocheck — Google Maps types are optional (installed only when provider is active)
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";

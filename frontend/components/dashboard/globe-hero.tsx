@@ -28,7 +28,7 @@ function StatCard({
   color,
   delay = 0,
 }: {
-  icon: React.ElementType;
+  icon: React.ComponentType<any>;
   label: string;
   value: string | number;
   sub?: string;

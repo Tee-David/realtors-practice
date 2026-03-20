@@ -4,7 +4,7 @@ import { Sparkles, Lock, ArrowRight } from "lucide-react";
 import Link from "next/link";
 
 interface AIPlaceholderCardProps {
-  icon?: React.ElementType;
+  icon?: React.ComponentType<any>;
   title: string;
   description: string;
   features?: string[];
@@ -92,7 +92,7 @@ export function AIPlaceholderCard({
 interface AIPlaceholderBannerProps {
   title: string;
   description: string;
-  icon?: React.ElementType;
+  icon?: React.ComponentType<any>;
   ctaLabel?: string;
   ctaHref?: string;
 }
@@ -166,7 +166,7 @@ export function AIPlaceholderBanner({
 
 interface AIInsightPlaceholderProps {
   label: string;
-  icon?: React.ElementType;
+  icon?: React.ComponentType<any>;
   className?: string;
 }
 

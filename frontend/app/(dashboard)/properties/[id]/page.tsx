@@ -47,7 +47,7 @@ const LISTING_TYPE_LABELS: Record<string, string> = {
   SHORTLET: "Shortlet",
 };
 
-const AMENITY_ICONS: Record<string, React.ElementType> = {
+const AMENITY_ICONS: Record<string, React.ComponentType<any>> = {
   parking: Car,
   garage: Car,
   swimming: Droplets,
@@ -66,7 +66,7 @@ const AMENITY_ICONS: Record<string, React.ElementType> = {
   warehouse: Warehouse,
 };
 
-function getAmenityIcon(feature: string): React.ElementType {
+function getAmenityIcon(feature: string): React.ComponentType<any> {
   const lower = feature.toLowerCase();
   for (const [key, Icon] of Object.entries(AMENITY_ICONS)) {
     if (lower.includes(key)) return Icon;
@@ -229,7 +229,7 @@ function ImageGallery({ images }: { images: string[] }) {
 /* ------------------------------------------------------------------ */
 
 function QuickStat({ icon: Icon, value, label }: {
-  icon: React.ElementType;
+  icon: React.ComponentType<any>;
   value: string | number;
   label: string;
 }) {
@@ -252,7 +252,7 @@ function QuickStat({ icon: Icon, value, label }: {
 
 function CollapsibleSection({ title, icon: Icon, defaultOpen = true, children }: {
   title: string;
-  icon: React.ElementType;
+  icon: React.ComponentType<any>;
   defaultOpen?: boolean;
   children: React.ReactNode;
 }) {

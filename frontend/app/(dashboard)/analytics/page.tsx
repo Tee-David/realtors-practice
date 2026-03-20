@@ -139,7 +139,7 @@ function HeroKpi({ value, trend, isLoading }: { value: number; trend: number; is
 
 function MiniKpi({ label, value, trend, icon: Icon, color, bg, prefix = "", isLoading }: {
   label: string; value: number | string; trend?: number;
-  icon: React.ElementType; color: string; bg: string; prefix?: string; isLoading?: boolean;
+  icon: React.ComponentType<any>; color: string; bg: string; prefix?: string; isLoading?: boolean;
 }) {
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}

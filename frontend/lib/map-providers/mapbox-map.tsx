@@ -1,3 +1,4 @@
+// @ts-nocheck — Mapbox types are optional (installed only when provider is active)
 "use client";
 
 import { useEffect, useRef, useCallback, useState } from "react";

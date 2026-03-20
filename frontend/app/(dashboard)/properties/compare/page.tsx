@@ -55,7 +55,7 @@ function CompareRow({
   highlight,
 }: {
   label: string;
-  icon?: React.ElementType;
+  icon?: React.ComponentType<any>;
   values: (React.ReactNode | undefined | null)[];
   highlight?: "highest" | "lowest" | "none";
 }) {

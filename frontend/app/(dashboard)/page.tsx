@@ -54,7 +54,7 @@ const RechartsLegend = dynamic(() => import("recharts").then((mod) => mod.Legend
 /*  Constants                                                          */
 /* ------------------------------------------------------------------ */
 
-const CATEGORY_ICONS: Record<PropertyCategory, React.ElementType> = {
+const CATEGORY_ICONS: Record<PropertyCategory, React.ComponentType<any>> = {
   RESIDENTIAL: Home,
   COMMERCIAL: Building2,
   LAND: TreePine,
@@ -130,7 +130,7 @@ function KpiCard({
 }: {
   label: string;
   value: number;
-  icon: React.ElementType;
+  icon: React.ComponentType<any>;
   trend?: number;
   trendLabel?: string;
   iconBg: string;
@@ -453,7 +453,7 @@ function RevenueAnalyticsChart({
               }}
               itemStyle={{ color: "var(--foreground)", fontSize: "13px", fontWeight: "bold" }}
               labelStyle={{ color: "var(--muted-foreground)", fontSize: "11px", marginBottom: "4px" }}
-              formatter={(value: number) => [formatPrice(value), ""]}
+              formatter={(value: any) => [formatPrice(Number(value)), ""]}
               cursor={{ stroke: "var(--border)", strokeWidth: 1, strokeDasharray: "4 4" }}
             />
             {(chartView === "Rents" || chartView === "Sales") && (

@@ -30,7 +30,7 @@ const AnimatedItem: React.FC<AnimatedItemProps> = ({ children, delay = 0, index,
 
 interface AnimatedListProps {
   items?: ReactNode[];
-  onItemSelect?: (item: string, index: number) => void;
+  onItemSelect?: (item: ReactNode, index: number) => void;
   showGradients?: boolean;
   enableArrowNavigation?: boolean;
   className?: string;

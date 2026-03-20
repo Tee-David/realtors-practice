@@ -18,7 +18,7 @@ type Tab = "price-sqm" | "rental-yield" | "days-on-market" | "most-viewed";
 // ─── Stat Card ──────────────────────────────────────────────────────────────
 
 function StatCard({ icon: Icon, label, value, sub, color, delay = 0 }: {
-  icon: React.ElementType; label: string; value: string | number; sub?: string; color: string; delay?: number;
+  icon: React.ComponentType<any>; label: string; value: string | number; sub?: string; color: string; delay?: number;
 }) {
   return (
     <motion.div
@@ -69,7 +69,7 @@ function BarRow({ label, value, maxValue, suffix = "", delay = 0, color = "var(-
 // ─── Tab Button ─────────────────────────────────────────────────────────────
 
 function TabButton({ active, onClick, icon: Icon, label }: {
-  active: boolean; onClick: () => void; icon: React.ElementType; label: string;
+  active: boolean; onClick: () => void; icon: React.ComponentType<any>; label: string;
 }) {
   return (
     <button
