@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/bottom-sheet";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { ScrapeLogsSection } from "@/components/scraper/scrape-logs-section";
+import { AIPlaceholderCard } from "@/components/ai/ai-placeholder";
 import Link from "next/link";
 
 // ─── Config Types ────────────────────────────────────────────────────────────
@@ -1482,6 +1483,28 @@ export default function ScraperPage() {
       {/* ── ScrapeLogsSection ───────────────────────────────────────────── */}
       <div ref={logsSectionRef}>
         <ScrapeLogsSection jobId={selectedJobId} onClearJobFilter={() => setSelectedJobId(null)} />
+      </div>
+
+      {/* ── AI Scraper Intelligence ──────────────────────────────────────── */}
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <AIPlaceholderCard
+          icon={Sparkles}
+          title="AI Error Diagnosis"
+          description="When a scrape fails, AI analyzes logs to identify: selector changes, anti-bot blocks, or site issues."
+          compact
+        />
+        <AIPlaceholderCard
+          icon={Clock}
+          title="Smart Scheduling"
+          description="AI optimizes scrape timing based on site update patterns and rate limit windows."
+          compact
+        />
+        <AIPlaceholderCard
+          icon={Globe2}
+          title="Auto-Heal Selectors"
+          description="When CSS selectors break, AI generates new ones from live HTML — no manual updates needed."
+          compact
+        />
       </div>
 
       {/* ── Config Sheet ────────────────────────────────────────────────── */}

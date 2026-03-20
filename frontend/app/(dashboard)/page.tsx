@@ -33,6 +33,8 @@ import { PropertyDetailPanel } from "@/components/property/property-detail-panel
 import type { Property, PropertyCategory, ListingType } from "@/types/property";
 import { SiteQualityWidget } from "@/components/dashboard/site-quality-widget";
 import { GlobeHero } from "@/components/dashboard/globe-hero";
+import { AIPlaceholderCard, AIPlaceholderBanner } from "@/components/ai/ai-placeholder";
+import { Brain, TrendingUp as TrendingUpIcon, Bot, Zap } from "lucide-react";
 
 // Lazy load heavy charting libraries
 const RechartsAreaChart = dynamic(() => import("recharts").then((mod) => mod.AreaChart), { ssr: false });
@@ -944,6 +946,36 @@ export default function DashboardPage() {
               </Link>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* AI Intelligence Section */}
+      <div className="space-y-3">
+        <AIPlaceholderBanner
+          title="AI-Powered Market Intelligence"
+          description="Get real-time market insights, property recommendations, and investment analysis powered by Qwen3 32B."
+          icon={Brain}
+          ctaLabel="Explore AI features"
+        />
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <AIPlaceholderCard
+            icon={Zap}
+            title="Smart Property Scoring"
+            description="AI automatically scores each listing for quality, value, and investment potential."
+            features={["Quality score", "Fraud detection", "Price plausibility"]}
+          />
+          <AIPlaceholderCard
+            icon={TrendingUpIcon}
+            title="Trend Predictions"
+            description="Forecast price movements and identify emerging hotspots before the market catches on."
+            features={["Price forecast", "Hotspot detection", "Volume trends"]}
+          />
+          <AIPlaceholderCard
+            icon={Bot}
+            title="Anomaly Alerts"
+            description="Get notified when listings have unusual pricing, suspicious descriptions, or data quality issues."
+            features={["Price outliers", "Duplicate detection", "Bad data flags"]}
+          />
         </div>
       </div>
 

@@ -5,7 +5,9 @@ import { motion } from "framer-motion";
 import {
   TrendingUp, DollarSign, Clock, Eye, BarChart3,
   ArrowUpRight, ArrowDownRight, Building2, MapPin,
+  Sparkles, Brain, Zap, Map,
 } from "lucide-react";
+import { AIPlaceholderCard, AIPlaceholderBanner } from "@/components/ai/ai-placeholder";
 import { usePricePerSqm, useRentalYield, useDaysOnMarket, useMostViewed } from "@/hooks/use-market";
 import { formatPrice } from "@/lib/utils";
 
@@ -270,6 +272,34 @@ export default function MarketTrendsPage() {
         {activeTab === "days-on-market" && <DaysOnMarketTab />}
         {activeTab === "most-viewed" && <MostViewedTab />}
       </motion.div>
+
+      {/* AI Market Intelligence */}
+      <AIPlaceholderBanner
+        title="AI Market Intelligence"
+        description="Investment hotspot detection, neighborhood AI profiles, price heatmaps, and commute isochrone analysis — all powered by free AI APIs."
+        icon={Brain}
+        ctaLabel="View AI roadmap"
+      />
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <AIPlaceholderCard
+          icon={Zap}
+          title="Investment Hotspots"
+          description="AI-detected growth areas based on listing volume, price trends, and infrastructure development."
+          features={["Growth scoring", "Early signals", "Infrastructure data"]}
+        />
+        <AIPlaceholderCard
+          icon={Map}
+          title="Price Heatmap"
+          description="Interactive map overlay showing price-per-sqm across neighborhoods with AI-generated area briefs."
+          features={["Color gradient", "Area profiles", "Trend arrows"]}
+        />
+        <AIPlaceholderCard
+          icon={Sparkles}
+          title="AI Area Reports"
+          description="Weekly auto-generated market summaries for each neighborhood with plain-English insights."
+          features={["Weekly digest", "Price commentary", "Demand signals"]}
+        />
+      </div>
     </div>
   );
 }

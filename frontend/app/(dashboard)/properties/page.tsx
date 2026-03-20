@@ -24,7 +24,9 @@ import {
   Building2,
   Clock,
   RefreshCw,
+  Sparkles,
 } from "lucide-react";
+import { AIInsightPlaceholder } from "@/components/ai/ai-placeholder";
 import {
   SideSheet,
   SideSheetContent,
@@ -418,6 +420,13 @@ export default function PropertiesPage() {
           </button>
         </div>
       )}
+
+      {/* AI Insights */}
+      <div className="flex flex-wrap gap-2">
+        <AIInsightPlaceholder label="AI smart ranking by investment value" icon={Sparkles} />
+        <AIInsightPlaceholder label="Duplicate detection across sources" />
+        <AIInsightPlaceholder label="Price anomaly warnings" />
+      </div>
 
       {/* Main content: Cards + Map split */}
       <div className="flex gap-4">

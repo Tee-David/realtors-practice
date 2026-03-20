@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { properties as propertiesApi, exports as exportsApi } from "@/lib/api";
-import { Database, CheckCircle, AlertTriangle, Shield, Download, Search, ChevronDown, Eye, X, ArrowUpDown, RefreshCcw, FileSpreadsheet, FileText } from "lucide-react";
+import { Database, CheckCircle, AlertTriangle, Shield, Download, Search, ChevronDown, Eye, X, ArrowUpDown, RefreshCcw, FileSpreadsheet, FileText, Sparkles, Bot } from "lucide-react";
+import { AIPlaceholderCard } from "@/components/ai/ai-placeholder";
 import ModernLoader from "@/components/ui/modern-loader";
 
 type Tab = "all" | "raw" | "enriched" | "flagged";
@@ -371,6 +372,24 @@ export default function DataExplorerPage() {
           </div>
         </div>
       )}
+
+      {/* AI Data Quality */}
+      <div className="grid sm:grid-cols-2 gap-3 mt-4">
+        <AIPlaceholderCard
+          icon={Sparkles}
+          title="AI Auto-Tagging"
+          description="Automatically classify, tag, and enrich raw listings with standardized categories and features."
+          features={["Auto-categorize", "Feature extraction", "Normalization"]}
+          compact
+        />
+        <AIPlaceholderCard
+          icon={Bot}
+          title="Duplicate Detection"
+          description="AI finds the same property listed across multiple sources with different titles and prices."
+          features={["Cross-source matching", "Best deal flag", "Merge suggestions"]}
+          compact
+        />
+      </div>
 
       {/* Inspect Panel */}
       {inspectItem && (

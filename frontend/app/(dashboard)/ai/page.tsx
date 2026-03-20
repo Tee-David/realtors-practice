@@ -2,6 +2,7 @@
 
 import { Sparkles, MessageSquareText, Bot, Zap, Brain, ArrowRight } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { AIProviderStatus } from "@/components/ai/ai-provider-status";
 
 const upcomingFeatures = [
   {
@@ -50,6 +51,9 @@ export default function AIAssistantPage() {
           Powered by Groq + Cerebras + SambaNova (Free Tier)
         </div>
       </div>
+
+      {/* AI Provider Status */}
+      <AIProviderStatus />
 
       {/* Feature Cards */}
       <div className="grid sm:grid-cols-2 gap-4">

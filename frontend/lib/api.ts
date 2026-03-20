@@ -153,4 +153,9 @@ export const exports = {
   pdf: (propertyIds?: string[]) => api.get("/export/pdf", { params: { propertyIds: propertyIds?.join(",") }, responseType: "blob" }),
 };
 
+export const ai = {
+  health: () => api.get("/ai/health"),
+  providerHealth: (slug: string) => api.get(`/ai/health/${slug}`),
+};
+
 export default api;

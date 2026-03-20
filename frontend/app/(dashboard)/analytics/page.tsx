@@ -8,7 +8,9 @@ import {
   ArrowUpRight, ArrowDownRight, Download, Search, Filter,
   Calendar, RefreshCw, Globe, ChevronDown, MoreHorizontal,
   Eye, Bed, MapPin, Tag, Activity, BarChart3 as BarChart3Icon,
+  Sparkles, Brain,
 } from "lucide-react";
+import { AIPlaceholderCard, AIPlaceholderBanner } from "@/components/ai/ai-placeholder";
 import { motion } from "framer-motion";
 import AnimatedCounter from "@/components/ui/animated-counter";
 import {
@@ -537,6 +539,22 @@ export default function AnalyticsPage() {
         setTab={setTableTab}
         onExport={exportCsv}
       />
+
+      {/* AI Insights */}
+      <div className="grid sm:grid-cols-2 gap-3">
+        <AIPlaceholderCard
+          icon={Brain}
+          title="Predictive Analytics"
+          description="AI-powered price and volume forecasts for the next 30/90 days based on historical trends."
+          features={["Price forecast", "Volume prediction", "Confidence intervals"]}
+        />
+        <AIPlaceholderCard
+          icon={Sparkles}
+          title="Anomaly Detection"
+          description="Automatically flag unexpected price spikes, listing volume drops, and data quality issues."
+          features={["Price outliers", "Volume anomalies", "Seasonal patterns"]}
+        />
+      </div>
     </div>
   );
 }

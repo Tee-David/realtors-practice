@@ -16,6 +16,7 @@ import geoRoutes from "./geo.routes";
 import backupRoutes from "./backup.routes";
 import systemSettingsRoutes from "./systemSettings.routes";
 import marketRoutes from "./market.routes";
+import aiRoutes from "./ai.routes";
 
 const router = Router();
 
@@ -36,5 +37,6 @@ router.use("/audit-logs", auditLogRoutes);
 router.use("/backups", backupRoutes);
 router.use("/settings", systemSettingsRoutes);
 router.use("/market", marketRoutes);
+router.use("/ai", aiRoutes);
 
 export default router;

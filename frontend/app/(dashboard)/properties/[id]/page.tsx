@@ -16,6 +16,8 @@ import {
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Property, PropertyVersion, PriceHistoryEntry } from "@/types/property";
+import { AIPlaceholderCard } from "@/components/ai/ai-placeholder";
+import { Sparkles, Brain, BarChart3 as BarChartIcon } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -1242,6 +1244,28 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
             </div>
           </div>
         </div>
+      </div>
+
+      {/* ============= AI Analysis Placeholders ============= */}
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
+        <AIPlaceholderCard
+          icon={Sparkles}
+          title="AI Price Estimate"
+          description="Fair market value estimate based on 50+ comparable properties within 2km."
+          features={["Comparable analysis", "Confidence score", "Price history"]}
+        />
+        <AIPlaceholderCard
+          icon={Brain}
+          title="Investment Analysis"
+          description="ROI projection, rental yield estimate, and resale potential for this property."
+          features={["Yield estimate", "Growth forecast", "Risk assessment"]}
+        />
+        <AIPlaceholderCard
+          icon={BarChartIcon}
+          title="Neighborhood Profile"
+          description="AI-generated area brief covering amenities, transport, schools, and market trends."
+          features={["Amenity score", "Transport links", "Price trends"]}
+        />
       </div>
 
       {/* ============= Similar Properties Carousel ============= */}

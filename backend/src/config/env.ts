@@ -61,5 +61,11 @@ export const config = {
   exchangeRate: {
     apiKey: process.env.EXCHANGERATE_API_KEY || "",
   },
+  ai: {
+    groqApiKey: process.env.GROQ_API_KEY || "",
+    cerebrasApiKey: process.env.CEREBRAS_API_KEY || "",
+    sambanovaApiKey: process.env.SAMBANOVA_API_KEY || "",
+    geminiApiKey: process.env.GEMINI_API_KEY || "",
+  },
 };
 

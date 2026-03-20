@@ -8,6 +8,7 @@ import { TopBar } from "@/components/layout/top-bar";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { KeyboardShortcutsModal } from "@/components/ui/keyboard-shortcuts-modal";
 import dynamic from "next/dynamic";
+import { AIChatFab } from "@/components/ai/ai-chat-fab";
 
 const TourProvider = dynamic(() => import("@/components/ui/tour-provider").then(m => ({ default: m.TourProvider })), { ssr: false });
 
@@ -63,6 +64,9 @@ export default function DashboardLayout({
 
       {/* Keyboard shortcuts help modal */}
       <KeyboardShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+
+      {/* Floating AI Chat Button */}
+      <AIChatFab />
 
       {/* Mobile bottom navigation */}
       <MobileBottomNav 

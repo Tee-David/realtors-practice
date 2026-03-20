@@ -19,7 +19,8 @@ import { BottomSheet, BottomSheetContent, BottomSheetClose } from "@/components/
 import { DraggableBottomSheet } from "@/components/ui/draggable-bottom-sheet";
 import { PropertyDetailPanel } from "@/components/property/property-detail-panel";
 import { useSearch } from "@/hooks/use-search";
-import { MapPin, Sparkles, X } from "lucide-react";
+import { MapPin, Sparkles, X, Brain, Zap } from "lucide-react";
+import { AIInsightPlaceholder } from "@/components/ai/ai-placeholder";
 import type { Property, PropertyCategory } from "@/types/property";
 
 const QUICK_SEARCHES = [
@@ -298,9 +299,13 @@ export default function SearchPage() {
                  <h2 className="font-display font-bold text-2xl md:text-3xl mb-2 text-foreground tracking-tight">
                     Where to next?
                  </h2>
-                 <p className="text-sm text-muted-foreground mb-8 max-w-sm">
+                 <p className="text-sm text-muted-foreground mb-4 max-w-sm">
                     Search using natural language, explore the map, or dive straight into one of our quick suggestions below.
                  </p>
+                 <div className="w-full space-y-2 mb-6">
+                   <AIInsightPlaceholder label="AI will understand Nigerian slang — &quot;selfcon in VI&quot;, &quot;boys quarter Ikoyi&quot;" icon={Brain} />
+                   <AIInsightPlaceholder label="Semantic search: describe what you want, not just keywords" icon={Sparkles} />
+                 </div>
 
                  <div data-tour="search-chips" className="flex flex-wrap justify-center gap-2.5 w-full">
                     {dynamicPills.map((suggestion) => (
