@@ -270,6 +270,7 @@ class AdaptiveFetcher:
             "--disable-backgrounding-occluded-windows",
             "--disable-renderer-backgrounding",
             "--disable-features=IsolateOrigins,site-per-process",
+            "--start-maximized",
             "--window-size=1920,1080",
         ]
 
@@ -282,7 +283,7 @@ class AdaptiveFetcher:
         )
 
         ua = get_random_ua()
-        viewport = _random_viewport()
+        viewport = {"width": 1500, "height": 900}
         accept_lang = random.choice(_ACCEPT_LANG_VARIANTS)
         sec_ch_ua = random.choice(_SEC_CH_UA_VARIANTS)
         self._browser_context = await self._browser.new_context(
@@ -306,6 +307,17 @@ class AdaptiveFetcher:
         )
 
         await self._browser_context.add_init_script(STEALTH_SCRIPT)
+
+        # Block images, media, and fonts for faster page loads
+        await self._browser_context.route(
+            "**/*",
+            lambda route, request: (
+                route.abort()
+                if request.resource_type in ("image", "media", "font")
+                else route.continue_()
+            ),
+        )
+
         return self._browser_context
 
     # ── Main fetch method ──
@@ -313,12 +325,12 @@ class AdaptiveFetcher:
     async def fetch(self, url: str, requires_js: bool = False) -> Optional[str]:
         """Fetch a URL with adaptive multi-layer fallback.
 
-        Layer order:
-        1. curl_cffi (if not JS-required) — fastest
-        2. Scrapling StealthyFetcher — anti-bot bypass
-        3. Playwright + stealth — full browser fallback
+        Layer order (browser-first — most Nigerian property sites need JS):
+        1. Playwright + stealth — full browser, handles JS-rendered content
+        2. curl_cffi — fast HTTP fallback if Playwright unavailable/fails
+        3. Scrapling StealthyFetcher — anti-bot bypass fallback
 
-        Note: Crawl4AI (Layer 3 for extraction) is NOT used here for fetching.
+        Note: Crawl4AI (for extraction) is NOT used here for fetching.
         It's used in fetch_as_markdown() for LLM extraction pipeline.
         """
         await rate_limiter.wait(url)
@@ -329,16 +341,28 @@ class AdaptiveFetcher:
             logger.info(f"Backing off {backoff}s due to {self._consecutive_blocks} consecutive blocks")
             await asyncio.sleep(backoff)
 
-        # Layer 1: curl_cffi (fast HTTP with Chrome TLS fingerprint)
+        # Layer 1: Playwright + stealth (full browser — default for all sites)
+        html = await self._fetch_playwright(url)
+        if html and len(html) > 500:
+            block_reason = self._is_blocked(html)
+            if not block_reason:
+                self._consecutive_blocks = 0
+                self._last_successful_layer = "playwright"
+                return html
+            logger.debug(f"Playwright blocked ({block_reason}) for {url}, trying curl_cffi")
+
+        # Layer 2: curl_cffi (fast HTTP with Chrome TLS fingerprint)
         if not requires_js:
             html = await self._fetch_curl(url)
             if html and len(html) > 500:
-                self._consecutive_blocks = 0
-                self._last_successful_layer = "curl_cffi"
-                return html
+                block_reason = self._is_blocked(html)
+                if not block_reason:
+                    self._consecutive_blocks = 0
+                    self._last_successful_layer = "curl_cffi"
+                    return html
             logger.debug(f"curl_cffi insufficient for {url}, trying Scrapling")
 
-        # Layer 2: Scrapling StealthyFetcher (anti-bot bypass)
+        # Layer 3: Scrapling StealthyFetcher (anti-bot bypass)
         scrapling = self._get_scrapling()
         if scrapling:
             html = await scrapling.fetch(url)
@@ -349,14 +373,9 @@ class AdaptiveFetcher:
                     self._last_successful_layer = "scrapling"
                     return html
                 logger.debug(f"Scrapling blocked ({block_reason}) for {url}")
-            logger.debug(f"Scrapling insufficient for {url}, trying Playwright")
 
-        # Layer 3: Playwright + stealth (full browser)
-        html = await self._fetch_playwright(url)
-        if html:
-            self._consecutive_blocks = 0
-            self._last_successful_layer = "playwright"
-        return html
+        logger.warning(f"All fetch layers failed for {url}")
+        return None
 
     async def fetch_as_markdown(self, url: str) -> Optional[str]:
         """Fetch a URL and return clean Markdown via Crawl4AI.
@@ -460,13 +479,21 @@ class AdaptiveFetcher:
             return None
 
     async def _fetch_playwright(self, url: str) -> Optional[str]:
-        """Fetch with Playwright + stealth for JS-rendered content."""
+        """Fetch with Playwright + stealth for JS-rendered content.
+
+        Follows the proven pattern from the old scraper:
+        1. Navigate to URL
+        2. Accept cookies/dismiss overlays
+        3. Wait for list-ready selectors (property-specific)
+        4. Deep scroll (12 steps) to trigger lazy-loaded content
+        5. Return fully-rendered HTML
+        """
         try:
             context = await self._get_browser()
             page = await context.new_page()
 
             try:
-                await asyncio.sleep(random.uniform(1.0, 2.5))
+                await asyncio.sleep(random.uniform(0.5, 1.5))
 
                 response = await page.goto(
                     url,
@@ -482,7 +509,7 @@ class AdaptiveFetcher:
 
                 await self._wait_for_cloudflare(page)
                 await self._dismiss_overlays(page)
-                await self._wait_for_content(page)
+                await self._wait_for_list_ready(page)
                 await self._human_scroll(page)
 
                 html = await page.content()
@@ -521,31 +548,59 @@ class AdaptiveFetcher:
         except Exception:
             pass
 
-    async def _wait_for_content(self, page) -> None:
-        """Wait for content to appear."""
-        content_selectors = [
-            "article", ".property", ".listing", ".card",
+    async def _wait_for_list_ready(self, page) -> None:
+        """Wait for property listing content to appear on the page.
+
+        Uses property-specific selectors first, then falls back to generic
+        content selectors. Ported from old scraper's _wait_list_ready().
+        """
+        # Property/listing-specific selectors (most likely on real estate sites)
+        list_selectors = [
+            "[data-testid*='listing']",
+            ".property-list", ".property-listing", ".listing", ".listings",
+            ".property-grid", ".grid",
+            "section:has(article)", ".results", ".search-results",
+            ".searchResult", ".cards",
+            "article[property]", "article[itemtype*='Offer']",
             "[class*='property']", "[class*='listing']",
-            "main", "#content", ".content", "h1", "h2",
+            "[class*='PropertyCard']", "[class*='propertyCard']",
+            "[class*='ListingCard']", "[class*='listingCard']",
         ]
-        for selector in content_selectors:
+        for selector in list_selectors:
+            try:
+                await page.wait_for_selector(selector, timeout=5000, state="visible")
+                logger.debug(f"List ready: matched selector '{selector}'")
+                return
+            except Exception:
+                continue
+
+        # Generic content fallback
+        generic_selectors = [
+            "article", ".card", "main", "#content", ".content",
+        ]
+        for selector in generic_selectors:
             try:
                 await page.wait_for_selector(selector, timeout=3000)
                 return
             except Exception:
                 continue
-        await page.wait_for_timeout(random.randint(2000, 4000))
 
-    async def _human_scroll(self, page) -> None:
-        """Simulate human-like scrolling."""
+        # Final fallback: just wait for the page to settle
+        await page.wait_for_timeout(3000)
+
+    async def _human_scroll(self, page, steps: int = 12) -> None:
+        """Deep scroll to trigger lazy-loaded content.
+
+        Ported from old scraper: 12 steps of mouse.wheel(0, 1200) covers
+        the full page depth, triggering infinite-scroll and lazy-load
+        content that lighter scrolling misses.
+        """
         try:
-            for _ in range(random.randint(1, 3)):
-                scroll_amount = random.randint(200, 500)
-                await page.evaluate(f"window.scrollBy(0, {scroll_amount})")
-                await page.wait_for_timeout(random.randint(300, 800))
-            if random.random() > 0.7:
-                await page.evaluate(f"window.scrollBy(0, -{random.randint(50, 150)})")
-                await page.wait_for_timeout(random.randint(200, 500))
+            for i in range(steps):
+                await page.mouse.wheel(0, 1200)
+                await page.wait_for_timeout(random.randint(300, 500))
+            # Small pause after scrolling to let final lazy-loads complete
+            await page.wait_for_timeout(1000)
         except Exception:
             pass
 
@@ -581,6 +636,173 @@ class AdaptiveFetcher:
                     return
             except Exception:
                 continue
+
+    # ── Browser-session pagination (ported from old scraper) ──
+
+    # "Next" button selectors for in-browser pagination
+    _NEXT_SELECTORS = [
+        "a[rel='next']",
+        "button[aria-label*='Next' i], a[aria-label*='Next' i]",
+        "a.page-next, a.next, .pagination-next a, .pager-next a",
+        "li.next a, li.pagination-next a, .paginate_button.next",
+        "a:has-text('Next')", "button:has-text('Next')",
+        "a:has-text('»')", "a:has-text('›')",
+    ]
+
+    async def render_and_collect_pages(
+        self,
+        start_url: str,
+        max_pages: int = 30,
+    ) -> list[tuple[str, str]]:
+        """Drive Playwright through paginated listing pages in a single session.
+
+        Ported from old scraper's render_and_collect_pages(). Keeps the browser
+        alive across all pages so session state, cookies, and JS context persist.
+
+        Strategy order:
+        1. Click "Next" buttons within the page
+        2. Discover and follow numeric page links
+        3. Fall back to ?page=N / /page/N URL patterns
+
+        Args:
+            start_url: The first listing page URL.
+            max_pages: Maximum number of pages to collect.
+
+        Returns:
+            List of (url, html) tuples for each page visited.
+        """
+        results: list[tuple[str, str]] = []
+        try:
+            context = await self._get_browser()
+            page = await context.new_page()
+
+            try:
+                # PAGE 1
+                response = await page.goto(
+                    start_url,
+                    wait_until="domcontentloaded",
+                    timeout=45000,
+                )
+                if response and response.status in (403, 401, 429):
+                    logger.warning(f"render_pages: HTTP {response.status} for {start_url}")
+                    return results
+
+                await self._wait_for_cloudflare(page)
+                await self._dismiss_overlays(page)
+                await self._wait_for_list_ready(page)
+                await self._human_scroll(page)
+
+                html = await page.content()
+                if not self._is_blocked(html):
+                    results.append((page.url, html))
+
+                # Strategy A: Click "Next" button repeatedly
+                pages_visited = 1
+                while pages_visited < max_pages:
+                    clicked = await self._click_next_button(page)
+                    if not clicked:
+                        break
+                    await self._wait_for_list_ready(page)
+                    await self._human_scroll(page)
+                    html = await page.content()
+                    if not self._is_blocked(html):
+                        results.append((page.url, html))
+                    pages_visited += 1
+
+                # Strategy B: Numeric page links (if "Next" button only got page 1)
+                if pages_visited == 1:
+                    numeric_urls = await self._discover_numeric_pages(page)
+                    for num_url in numeric_urls[: max_pages - pages_visited]:
+                        try:
+                            await page.goto(num_url, wait_until="domcontentloaded", timeout=40000)
+                            await self._wait_for_list_ready(page)
+                            await self._human_scroll(page)
+                            html = await page.content()
+                            if not self._is_blocked(html):
+                                results.append((page.url, html))
+                            pages_visited += 1
+                        except Exception:
+                            continue
+
+                # Strategy C: URL param fallback (?page=N, /page/N)
+                if pages_visited == 1:
+                    from urllib.parse import urljoin
+                    base = start_url.rstrip("/")
+                    joiner = "&" if "?" in start_url else "?"
+                    for n in range(2, max_pages + 1):
+                        candidates = [
+                            f"{start_url}{joiner}page={n}",
+                            f"{base}/page/{n}",
+                        ]
+                        found = False
+                        for candidate_url in candidates:
+                            try:
+                                await page.goto(candidate_url, wait_until="domcontentloaded", timeout=35000)
+                                await self._wait_for_list_ready(page)
+                                await self._human_scroll(page)
+                                html = await page.content()
+                                if html and len(html) > 2000 and not self._is_blocked(html):
+                                    results.append((page.url, html))
+                                    pages_visited += 1
+                                    found = True
+                                    break
+                            except Exception:
+                                continue
+                        if not found:
+                            break  # No more pages
+
+                logger.info(f"render_and_collect_pages: collected {len(results)} pages from {start_url}")
+
+            finally:
+                await page.close()
+
+        except Exception as e:
+            logger.warning(f"render_and_collect_pages error: {e}")
+
+        return results
+
+    async def _click_next_button(self, page) -> bool:
+        """Try clicking a 'Next' pagination control. Returns True if navigation happened."""
+        for selector in self._NEXT_SELECTORS:
+            try:
+                loc = page.locator(selector).first
+                if await loc.is_visible(timeout=1000) and await loc.is_enabled(timeout=500):
+                    # Wait for navigation after clicking
+                    async with page.expect_navigation(wait_until="domcontentloaded", timeout=15000):
+                        await loc.click()
+                    return True
+            except Exception:
+                continue
+        return False
+
+    async def _discover_numeric_pages(self, page) -> list[str]:
+        """Find numbered pagination links on the current page."""
+        try:
+            from urllib.parse import urljoin
+            urls = []
+            anchors = page.locator("a[href]")
+            count = min(await anchors.count(), 2000)
+            base = page.url
+            for i in range(count):
+                a = anchors.nth(i)
+                href = await a.get_attribute("href") or ""
+                if not href:
+                    continue
+                txt = (await a.inner_text() or "").strip()
+                if any(c.isdigit() for c in txt) and any(
+                    kw in href for kw in ("page", "/p/", "/pg/", "/page/")
+                ):
+                    urls.append(urljoin(base, href))
+            # Deduplicate preserving order
+            seen = set()
+            out = []
+            for u in urls:
+                if u not in seen:
+                    out.append(u)
+                    seen.add(u)
+            return out[:30]
+        except Exception:
+            return []
 
     async def close(self) -> None:
         """Clean up all resources."""

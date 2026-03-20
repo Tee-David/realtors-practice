@@ -204,6 +204,24 @@ class IncrementalTracker:
         """Reset the consecutive-known counter (e.g. when moving to a new page)."""
         self._consecutive_known = 0
 
+    def clear_seen(self) -> None:
+        """Clear ALL seen URLs for this site — forces a full rescrape.
+
+        Clears both Redis and in-memory sets so the next scrape run
+        treats every URL as new.
+        """
+        self._memory_set.clear()
+        self._consecutive_known = 0
+        self._total_new = 0
+        self._total_known = 0
+        if self._redis:
+            try:
+                key = self._redis_key()
+                self._redis.delete(key)
+                logger.info(f"Cleared Redis seen-URLs set: {key}")
+            except Exception as e:
+                logger.debug(f"Redis delete error: {e}")
+
     def get_stats(self) -> dict[str, int]:
         """Return tracker statistics.
 

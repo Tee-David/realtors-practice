@@ -32,7 +32,7 @@ from pipeline.enricher import enrich_property
 from pipeline.page_classifier import should_skip_page, classify_page
 from pipeline.incremental import IncrementalTracker
 from pipeline.relevance_scorer import RelevanceScorer
-from engine.pagination_strategy import PaginationStrategy
+# pagination_strategy no longer used — render_and_collect_pages handles pagination
 from utils.callback import report_progress, report_results, report_error, report_log, report_property
 from utils.robots_checker import is_allowed as robots_allowed, get_crawl_delay
 from utils.url_normalizer import normalize_url, VisitedSet, is_valid_property_url
@@ -265,11 +265,6 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
                 consecutive_threshold=5,
             )
             relevance_scorer = RelevanceScorer(threshold=40)
-            paginator = PaginationStrategy(
-                pagination_type=site.paginationType,
-                pagination_config=dict(site.paginationConfig),
-                max_pages=site.maxPages,
-            )
 
             try:
                 # Check robots.txt before scraping
@@ -306,32 +301,34 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
                     # Reset incremental tracker consecutive counter for each start path
                     incremental.reset_consecutive()
 
-                    # Fetch listing pages for this path
-                    page_num = 0
-                    current_page_url = start_url
-                    while page_num < site.maxPages:
+                    # Collect all listing pages using browser-session pagination.
+                    # This keeps Playwright alive across pages (handles SPAs, JS pagination,
+                    # cookie state). Falls back to per-page fetch if browser pagination fails.
+                    await report_log(job_id, "INFO", f"[{site.name}] Using browser-session pagination for {start_url}")
+                    collected_pages = await fetcher.render_and_collect_pages(
+                        start_url, max_pages=site.maxPages
+                    )
+
+                    if not collected_pages:
+                        # Fallback: single-page fetch (the browser session approach failed)
+                        await report_log(job_id, "WARN", f"[{site.name}] Browser pagination returned nothing, falling back to single fetch")
+                        html = await fetcher.fetch(start_url, requires_js=site.requiresJs)
+                        if html and len(html) > 500:
+                            collected_pages = [(start_url, html)]
+
+                    if not collected_pages:
+                        await report_log(job_id, "ERROR", f"[{site.name}] Could not fetch any pages from {start_url}")
+                        total_errors += 1
+                        continue
+
+                    await report_log(job_id, "INFO", f"[{site.name}] Collected {len(collected_pages)} listing pages")
+
+                    for page_num, (page_url, html) in enumerate(collected_pages):
+                        if len(site_properties) >= request.maxListingsPerSite:
+                            break
                         if (redis_client and redis_client.exists(f"job:stop:{job_id}")):
                             break
 
-                        # Build page URL: first page uses start_url directly,
-                        # subsequent pages use 3-strategy pagination when HTML is available
-                        if page_num == 0:
-                            page_url = start_url
-                        else:
-                            page_url = current_page_url  # Set by paginator at end of loop
-                        await report_log(job_id, "DEBUG", f"[{site.name}] Fetching page {page_num + 1}: {page_url}")
-
-                        html = await fetcher.fetch(page_url, requires_js=site.requiresJs)
-                        if not html:
-                            block_reason = fetcher.last_block_reason
-                            if block_reason:
-                                total_errors += 1
-                                block_count += 1
-                                await report_log(job_id, "ERROR", f"[{site.name}] Blocked on listing page ({block_reason}): {page_url}")
-                            else:
-                                total_errors += 1
-                                await report_log(job_id, "WARN", f"[{site.name}] Empty response from listing page: {page_url}")
-                            break
                         total_pages_fetched += 1
 
                         # Phase 3.5: Category page detection — skip index/directory pages
@@ -386,27 +383,48 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
                                 html, site.baseUrl
                             )
                             if relevance_urls:
-                                # If we're on the base URL (homepage) and found candidate URLs,
-                                # they're likely listing category pages — follow them as new start paths
-                                page_is_homepage = (
-                                    normalize_url(page_url).rstrip("/") == normalize_url(site.baseUrl).rstrip("/")
-                                )
-                                if page_is_homepage:
-                                    valid_paths = [u for u in relevance_urls if is_valid_property_url(u)]
-                                    if valid_paths:
-                                        raw_listing_urls = valid_paths
-                                        await report_log(job_id, "INFO", f"[{site.name}] Relevance scorer found {len(valid_paths)} candidate URLs")
-                                    else:
-                                        # Treat as listing index pages to crawl into
-                                        for rurl in relevance_urls:
-                                            norm_rurl = normalize_url(rurl)
-                                            if norm_rurl not in [normalize_url(su) for su in start_urls] and visited.add(norm_rurl):
-                                                start_urls.append(rurl)
-                                        await report_log(job_id, "INFO",
-                                            f"[{site.name}] Relevance scorer found {len(relevance_urls)} category pages — will crawl them next")
-                                else:
-                                    raw_listing_urls = relevance_urls
-                                    await report_log(job_id, "INFO", f"[{site.name}] Relevance scorer found {len(relevance_urls)} candidate URLs")
+                                raw_listing_urls = relevance_urls
+                                await report_log(job_id, "INFO", f"[{site.name}] Relevance scorer found {len(relevance_urls)} candidate URLs")
+
+                        # Auto-discover listing pages from homepage/index pages
+                        # If we're on the base URL or a page with no property detail URLs,
+                        # scan for internal links that look like listing/category pages
+                        page_is_homepage = (
+                            normalize_url(page_url).rstrip("/") == normalize_url(site.baseUrl).rstrip("/")
+                        )
+                        if not raw_listing_urls and page_is_homepage:
+                            await report_log(job_id, "INFO", f"[{site.name}] Homepage has no listings, auto-discovering listing pages...")
+                            from bs4 import BeautifulSoup
+                            from urllib.parse import urljoin
+                            soup = BeautifulSoup(html, "html.parser")
+                            listing_keywords = [
+                                "propert", "listing", "for-sale", "for-rent", "buy",
+                                "rent", "sell", "estate", "apartment", "house",
+                                "duplex", "flat", "land", "search", "catalog",
+                                "status/", "property-type/", "/city/", "/area/",
+                            ]
+                            discovered_paths = []
+                            for a_tag in soup.find_all("a", href=True):
+                                href = a_tag["href"]
+                                if not href or href.startswith(("#", "javascript:", "mailto:", "tel:")):
+                                    continue
+                                full_url = urljoin(page_url, href)
+                                # Only follow internal links
+                                if urlparse(full_url).netloc != urlparse(site.baseUrl).netloc:
+                                    continue
+                                href_lower = full_url.lower()
+                                link_text = (a_tag.get_text() or "").lower().strip()
+                                # Check if URL or link text contains listing keywords
+                                if any(kw in href_lower or kw in link_text for kw in listing_keywords):
+                                    norm = normalize_url(full_url)
+                                    if norm not in [normalize_url(su) for su in start_urls] and norm not in [normalize_url(su) for su in discovered_paths]:
+                                        discovered_paths.append(full_url)
+                            if discovered_paths:
+                                # Add top matches to start_urls for crawling
+                                for dp in discovered_paths[:10]:
+                                    start_urls.append(dp)
+                                await report_log(job_id, "INFO",
+                                    f"[{site.name}] Discovered {len(discovered_paths)} listing pages from homepage, queued {min(len(discovered_paths), 10)} for crawling")
 
                         # Filter invalid URLs, normalize, and deduplicate via visited set
                         listing_urls = []
@@ -445,6 +463,7 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
                             # Allow advancing past up to 2 empty pages before giving up
                             if page_num < 2:
                                 await report_log(job_id, "DEBUG", f"[{site.name}] No new listings on page {page_num + 1}, trying next page")
+                                continue
                             else:
                                 await report_log(job_id, "INFO", f"[{site.name}] No more listings found on page {page_num + 1}")
                                 break
@@ -599,16 +618,8 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
                                 total_errors += 1
                                 await report_log(job_id, "ERROR", f"[{site.name}] Error processing {listing_url}: {str(e)}")
 
-                        # Phase 3.5: 3-strategy pagination — next button → numeric links → URL param
-                        next_page_url = paginator.get_next_page_url(html, page_url, page_num)
-                        if next_page_url:
-                            current_page_url = next_page_url
-                            if paginator.current_strategy:
-                                await report_log(job_id, "DEBUG", f"[{site.name}] Pagination strategy: {paginator.current_strategy}")
-                        else:
-                            # Fallback to legacy URL builder if 3-strategy pagination found nothing
-                            current_page_url = _build_page_url_for_start(site, start_url, page_num + 1)
-                        page_num += 1
+                        # Pagination is handled by render_and_collect_pages() above —
+                        # no per-page URL building needed here
 
             except Exception as e:
                 total_errors += 1
@@ -639,32 +650,6 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
 
     finally:
         await fetcher.close()
-
-
-def _build_page_url_for_start(site: SiteConfig, start_url: str, page_num: int) -> str:
-    """Build paginated URL from a specific start URL based on site's pagination type."""
-    pc = site.paginationConfig
-
-    if page_num == 0:
-        return start_url
-
-    if site.paginationType == "url_param":
-        param = pc.get("param", "page")
-        separator = "&" if "?" in start_url else "?"
-        offset = pc.get("startFrom", 1)
-        return f"{start_url}{separator}{param}={page_num + offset}"
-
-    elif site.paginationType == "path_segment":
-        suffix = pc.get("suffix", "/page/{page}")
-        return start_url.rstrip("/") + suffix.replace("{page}", str(page_num + 1))
-
-    elif site.paginationType == "offset":
-        param = pc.get("param", "offset")
-        per_page = pc.get("perPage", 20)
-        separator = "&" if "?" in start_url else "?"
-        return f"{start_url}{separator}{param}={page_num * per_page}"
-
-    return start_url
 
 
 if __name__ == "__main__":
