@@ -114,87 +114,68 @@ export class ScrapeService {
       parameters: parameters || {},
     };
 
-    // Map job type to Celery priority (lower = higher priority)
-    const priorityMap: Record<string, number> = {
-      ACTIVE_INTENT: 1,
-      RESCRAPE: 3,
-      PASSIVE_BULK: 7,
-      SCHEDULED: 7,
-    };
-    const taskPriority = priorityMap[type] ?? 5;
-
-    // Dispatch to Python scraper — try direct HTTP first (works both locally and
-    // in production since the scraper runs jobs in-process). Fall back to
-    // Redis/Celery only if direct HTTP fails and a Celery worker is available.
+    // Dispatch scraper — GitHub Actions first (runs Playwright on GH runners),
+    // then direct HTTP to Render scraper as fallback.
     let dispatched = false;
 
-    // Method 1: Direct HTTP to Python scraper (primary — works everywhere)
-    try {
-      const response = await fetch(`${config.scraper.url}/api/jobs`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Internal-Key": config.scraper.internalKey,
-        },
-        body: JSON.stringify(scraperPayload),
-        signal: AbortSignal.timeout(10000),
-      });
+    // Method 1: GitHub Actions (primary — full Playwright + Chromium environment)
+    if (config.github.pat && config.github.repo) {
+      try {
+        const [owner, repo] = config.github.repo.split("/");
+        const response = await fetch(
+          `https://api.github.com/repos/${owner}/${repo}/dispatches`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${config.github.pat}`,
+              Accept: "application/vnd.github.v3+json",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              event_type: "trigger-scrape",
+              client_payload: {
+                jobId: job.id,
+                scraperPayload: JSON.stringify(scraperPayload),
+              },
+            }),
+            signal: AbortSignal.timeout(10000),
+          }
+        );
 
-      if (!response.ok) {
-        const body = await response.text();
-        throw new Error(`Scraper responded ${response.status}: ${body}`);
+        if (response.status === 204 || response.ok) {
+          dispatched = true;
+          Logger.info(`Scrape job ${job.id} dispatched to GitHub Actions (${sites.length} sites)`);
+        } else {
+          const body = await response.text();
+          throw new Error(`GitHub API responded ${response.status}: ${body}`);
+        }
+      } catch (err: any) {
+        Logger.warn(`GitHub Actions dispatch failed: ${err.message}`);
       }
-
-      dispatched = true;
-      Logger.info(`Scrape job ${job.id} dispatched directly to scraper via HTTP (${sites.length} sites)`);
-    } catch (err: any) {
-      Logger.warn(`Direct HTTP dispatch failed, trying Redis/Celery: ${err.message}`);
     }
 
-    // Method 2: Redis/Celery queue (fallback — requires a Celery worker)
-    if (!dispatched && config.redis.url) {
+    // Method 2: Direct HTTP to Python scraper (fallback — Render or local)
+    if (!dispatched) {
       try {
-        const Redis = require("ioredis");
-        const redis = new Redis(config.redis.url, { connectTimeout: 5000, maxRetriesPerRequest: 1 });
-
-        const taskId = `job-${job.id}`;
-
-        // Celery wire protocol v2: body is [args, kwargs, embed]
-        const celeryBody = [
-          [scraperPayload],  // args
-          {},                // kwargs
-          { callbacks: null, errbacks: null, chain: null, chord: null },  // embed
-        ];
-
-        const payload = {
-          body: Buffer.from(JSON.stringify(celeryBody)).toString("base64"),
-          "content-encoding": "utf-8",
-          "content-type": "application/json",
+        const response = await fetch(`${config.scraper.url}/api/jobs`, {
+          method: "POST",
           headers: {
-            lang: "py",
-            task: "tasks.process_job",
-            id: taskId,
-            root_id: taskId,
-            parent_id: null,
-            group: null,
+            "Content-Type": "application/json",
+            "X-Internal-Key": config.scraper.internalKey,
           },
-          properties: {
-            correlation_id: taskId,
-            reply_to: "",
-            delivery_mode: 2,
-            delivery_info: { exchange: "", routing_key: "celery" },
-            priority: taskPriority,
-            body_encoding: "base64",
-            delivery_tag: taskId,
-          },
-        };
+          body: JSON.stringify(scraperPayload),
+          signal: AbortSignal.timeout(10000),
+        });
 
-        await redis.lpush("celery", JSON.stringify(payload));
-        await redis.quit();
+        if (!response.ok) {
+          const body = await response.text();
+          throw new Error(`Scraper responded ${response.status}: ${body}`);
+        }
+
         dispatched = true;
-        Logger.info(`Scrape job ${job.id} dispatched to Celery Redis queue (${sites.length} sites)`);
+        Logger.info(`Scrape job ${job.id} dispatched directly to scraper via HTTP (${sites.length} sites)`);
       } catch (err: any) {
-        Logger.error(`Redis/Celery dispatch also failed: ${err.message}`);
+        Logger.warn(`Direct HTTP dispatch also failed: ${err.message}`);
       }
     }
 
@@ -208,7 +189,7 @@ export class ScrapeService {
         where: { id: job.id },
         data: { status: "FAILED" },
       });
-      throw new Error("Failed to dispatch scrape job: both Redis and direct HTTP failed");
+      throw new Error("Failed to dispatch scrape job: GitHub Actions and direct HTTP both failed");
     }
 
     return job;

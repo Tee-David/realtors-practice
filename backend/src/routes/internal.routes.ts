@@ -145,4 +145,79 @@ router.post("/scrape/scheduled", async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * POST /internal/scrape/create-job
+ * Called by GitHub Actions runner to create a job record and get the scraper payload
+ * WITHOUT dispatching (the GH Action runner will run the scraper itself).
+ */
+router.post("/scrape/create-job", async (req: Request, res: Response) => {
+  try {
+    const sites = await prisma.site.findMany({
+      where: { enabled: true, deletedAt: null },
+    });
+
+    if (sites.length === 0) {
+      return res.status(200).json({ success: true, message: "No enabled sites" });
+    }
+
+    const siteIds = sites.map((s) => s.id);
+
+    const job = await prisma.scrapeJob.create({
+      data: {
+        type: "SCHEDULED",
+        status: "RUNNING",
+        siteIds,
+        sites: { connect: sites.map((s) => ({ id: s.id })) },
+        startedAt: new Date(),
+      },
+      include: {
+        sites: { select: { id: true, name: true, baseUrl: true } },
+      },
+    });
+
+    const callbackUrl = process.env.API_BASE_URL
+      || "https://realtors-practice-new-api.onrender.com/api";
+
+    const scraperPayload = {
+      jobId: job.id,
+      sites: sites.map((site) => {
+        const selectors = (site.selectors || {}) as Record<string, any>;
+        const detailSelectors = (site.detailSelectors || selectors) as Record<string, any>;
+        const listingSelector = selectors.listingSelector
+          || selectors.listing_container
+          || selectors.listing_link
+          || "a[href]";
+
+        return {
+          id: site.id,
+          name: site.name,
+          baseUrl: site.baseUrl,
+          listPaths: (site as any).listPaths || [],
+          listingSelector,
+          selectors: detailSelectors,
+          paginationType: site.paginationType,
+          paginationConfig: selectors.paginationConfig || {},
+          requiresJs: site.requiresBrowser,
+          maxPages: site.maxPages,
+          delayMin: selectors.delayMin || undefined,
+          delayMax: selectors.delayMax || undefined,
+        };
+      }),
+      maxListingsPerSite: 100,
+      callbackUrl,
+      parameters: {},
+    };
+
+    Logger.info(`Created scrape job ${job.id} for GH Actions runner (${siteIds.length} sites)`);
+    return res.json({
+      success: true,
+      jobId: job.id,
+      scraperPayload,
+    });
+  } catch (err: any) {
+    Logger.error(`Create job for runner failed: ${err.message}`);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
