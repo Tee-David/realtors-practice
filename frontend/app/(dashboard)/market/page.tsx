@@ -276,7 +276,7 @@ export default function MarketTrendsPage() {
       {/* AI Market Intelligence */}
       <AIPlaceholderBanner
         title="AI Market Intelligence"
-        description="Investment hotspot detection, neighborhood AI profiles, price heatmaps, and commute isochrone analysis — all powered by free AI APIs."
+        description="Investment hotspot detection, neighborhood AI profiles, price heatmaps, and commute isochrone analysis."
         icon={Brain}
         ctaLabel="View AI roadmap"
       />

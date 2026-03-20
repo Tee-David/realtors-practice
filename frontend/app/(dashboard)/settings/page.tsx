@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { auth, users as usersApi } from "@/lib/api";
+import { auth, users as usersApi, ai } from "@/lib/api";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { usePersistedState } from "@/hooks/use-persisted-state";
@@ -12,9 +12,10 @@ import {
   Info, Users, ChevronRight, ChevronLeft, Upload, Eye, EyeOff,
   ToggleLeft, ToggleRight, Map, Monitor, Server, Download, RefreshCw,
   Trash2, Plus, Check, X, Link, ExternalLink, Shield, Terminal,
-  AlertTriangle, HardDrive, Chrome, Smartphone, ChevronDown,
+  AlertTriangle, HardDrive, Chrome, Smartphone, ChevronDown, Sparkles,
 } from "lucide-react";
 import { EmailTemplateBuilder } from "@/components/dashboard/email-template-builder";
+import { AIProviderStatus } from "@/components/ai/ai-provider-status";
 import { useThemeConfig } from "@/components/theme-config-provider";
 import { useTheme } from "next-themes";
 import dynamic from "next/dynamic";
@@ -28,7 +29,7 @@ import AnimatedList from "@/components/ui/animated-list";
 
 type SettingsSection =
   | "profile" | "security" | "notifications" | "appearance"
-  | "display" | "email" | "backups" | "about" | "users";
+  | "display" | "email" | "backups" | "about" | "users" | "ai";
 
 interface NavItem { key: SettingsSection; label: string; icon: React.ElementType; desc: string; danger?: boolean }
 
@@ -42,6 +43,7 @@ const NAV: NavItem[] = [
   { key: "display",       label: "Data & Display",    icon: LayoutDashboard, desc: "Map, filters, and preferences" },
   { key: "email",         label: "Email Settings",    icon: Mail,          desc: "SMTP, templates, and delivery" },
   { key: "backups",       label: "Backups",           icon: Database,      desc: "Backup and restore data" },
+  { key: "ai",            label: "AI Intelligence",   icon: Sparkles,      desc: "AI features, providers, and usage" },
   { key: "about",         label: "About",             icon: Info,          desc: "Version, credits, and legal" },
   { key: "users",         label: "Users",             icon: Users,         desc: "Manage team members and roles" },
 ];
@@ -1308,6 +1310,102 @@ function UsersSection() {
 
 // ─── Section Renderer ────────────────────────────────────────────────────────
 
+// ─── AI Intelligence ─────────────────────────────────────────────────────
+
+const AI_FEATURES = [
+  { key: "ai_chat", label: "Chat Assistant", desc: "Ask questions about properties and get recommendations" },
+  { key: "ai_nl_search", label: "Smart Search", desc: "Search properties using natural language queries" },
+  { key: "ai_property_scoring", label: "Property Scoring", desc: "Automatic quality and fraud scoring for listings" },
+  { key: "ai_market_reports", label: "Market Reports", desc: "Auto-generated area market summaries and insights" },
+  { key: "ai_enrichment", label: "Listing Enrichment", desc: "Extract extra details from property descriptions" },
+  { key: "ai_duplicate_detection", label: "Duplicate Detection", desc: "Find duplicate listings across sources" },
+  { key: "ai_scraper_diagnosis", label: "Scraper Intelligence", desc: "AI diagnosis and auto-healing for scraper failures" },
+  { key: "ai_smart_notifications", label: "Smart Notifications", desc: "AI-prioritized notification digests" },
+  { key: "ai_investment_analysis", label: "Investment Analysis", desc: "ROI estimates and investment insights" },
+  { key: "ai_neighborhood_profiles", label: "Neighborhood Profiles", desc: "AI-generated area profiles and guides" },
+];
+
+function AISection() {
+  const [masterEnabled, setMasterEnabled] = useState(false);
+  const [features, setFeatures] = useState<Record<string, boolean>>(
+    Object.fromEntries(AI_FEATURES.map(f => [f.key, false]))
+  );
+
+  const toggleFeature = (key: string) => {
+    setFeatures(prev => ({ ...prev, [key]: !prev[key] }));
+    toast.info("Feature toggles will be functional once the AI backend is connected.");
+  };
+
+  const toggleMaster = () => {
+    setMasterEnabled(prev => !prev);
+    if (masterEnabled) {
+      // Turning off master disables all
+      setFeatures(Object.fromEntries(AI_FEATURES.map(f => [f.key, false])));
+    }
+    toast.info("Feature toggles will be functional once the AI backend is connected.");
+  };
+
+  return (
+    <div className="space-y-4 max-w-2xl">
+      {/* Master Toggle */}
+      <Card>
+        <CardHeader icon={Sparkles} title="AI Features" />
+        <div className="rounded-xl border p-4 mb-4" style={{ borderColor: masterEnabled ? "rgba(22,163,74,0.3)" : "var(--border)", backgroundColor: masterEnabled ? "rgba(22,163,74,0.04)" : "transparent" }}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>Enable AI Features</p>
+              <p className="text-xs mt-0.5" style={{ color: "var(--muted-foreground)" }}>
+                Master switch — turns all AI features on or off
+              </p>
+            </div>
+            <button onClick={toggleMaster} className="transition-colors shrink-0 ml-4 outline-offset-2" style={{ color: masterEnabled ? "#16a34a" : "var(--muted-foreground)" }}>
+              {masterEnabled ? <ToggleRight className="w-7 h-7" /> : <ToggleLeft className="w-7 h-7" />}
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-1">
+          {AI_FEATURES.map(feature => (
+            <div
+              key={feature.key}
+              className="flex items-center justify-between py-3 px-3 rounded-xl transition-colors"
+              style={{ opacity: masterEnabled ? 1 : 0.45, pointerEvents: masterEnabled ? "auto" : "none" }}
+            >
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium" style={{ color: "var(--foreground)" }}>{feature.label}</p>
+                <p className="text-xs mt-0.5 truncate" style={{ color: "var(--muted-foreground)" }}>{feature.desc}</p>
+              </div>
+              <button
+                onClick={() => toggleFeature(feature.key)}
+                className="transition-colors shrink-0 ml-4 outline-offset-2"
+                style={{ color: features[feature.key] ? "#16a34a" : "var(--muted-foreground)" }}
+              >
+                {features[feature.key] ? <ToggleRight className="w-6 h-6" /> : <ToggleLeft className="w-6 h-6" />}
+              </button>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Provider Status */}
+      <AIProviderStatus />
+
+      {/* Usage Info */}
+      <Card>
+        <CardHeader icon={Info} title="About AI" />
+        <div className="space-y-2">
+          <p className="text-xs leading-relaxed" style={{ color: "var(--muted-foreground)" }}>
+            AI features enhance your property search, analysis, and market intelligence. All AI features are optional — the app works fully without them.
+          </p>
+          <p className="text-xs leading-relaxed" style={{ color: "var(--muted-foreground)" }}>
+            AI-generated content is always labeled so you know what&apos;s automated versus real data. No property data leaves the system except through secure API calls.
+          </p>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 function SectionContent({ section }: { section: SettingsSection }) {
   const map: Record<SettingsSection, React.ReactNode> = {
     profile: <ProfileSection />,
@@ -1317,6 +1415,7 @@ function SectionContent({ section }: { section: SettingsSection }) {
     display: <DisplaySection />,
     email: <EmailSection />,
     backups: <BackupsSection />,
+    ai: <AISection />,
     about: <AboutSection />,
     users: <UsersSection />,
   };

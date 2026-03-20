@@ -953,7 +953,7 @@ export default function DashboardPage() {
       <div className="space-y-3">
         <AIPlaceholderBanner
           title="AI-Powered Market Intelligence"
-          description="Get real-time market insights, property recommendations, and investment analysis powered by Qwen3 32B."
+          description="Get real-time market insights, property recommendations, and investment analysis."
           icon={Brain}
           ctaLabel="Explore AI features"
         />

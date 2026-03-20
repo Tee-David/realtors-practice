@@ -90,7 +90,7 @@ export function AIChatFab() {
                   Ask me anything about properties
                 </p>
                 <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
-                  Powered by Qwen3 32B via free APIs (Groq, Cerebras, SambaNova)
+                  Search, analyze, and explore properties with AI
                 </p>
               </div>
 
