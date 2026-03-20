@@ -158,4 +158,10 @@ export const ai = {
   providerHealth: (slug: string) => api.get(`/ai/health/${slug}`),
 };
 
+export const aiFeatures = {
+  list: () => api.get("/settings/ai-features"),
+  toggle: (key: string, enabled: boolean) =>
+    api.patch(`/settings/ai-features/${key}`, { enabled }),
+};
+
 export default api;

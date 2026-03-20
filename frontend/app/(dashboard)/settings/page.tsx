@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { EmailTemplateBuilder } from "@/components/dashboard/email-template-builder";
 import { AIProviderStatus } from "@/components/ai/ai-provider-status";
+import { useAIFeatures, useToggleAIFeature } from "@/hooks/useAIFeatures";
 import { useThemeConfig } from "@/components/theme-config-provider";
 import { useTheme } from "next-themes";
 import dynamic from "next/dynamic";
@@ -1326,24 +1327,29 @@ const AI_FEATURES = [
 ];
 
 function AISection() {
-  const [masterEnabled, setMasterEnabled] = useState(false);
-  const [features, setFeatures] = useState<Record<string, boolean>>(
-    Object.fromEntries(AI_FEATURES.map(f => [f.key, false]))
+  const { data: featureList, isLoading } = useAIFeatures();
+  const toggleMutation = useToggleAIFeature();
+
+  const featureMap = Object.fromEntries(
+    (featureList || []).map(f => [f.key, f.value?.enabled ?? false])
   );
+  const masterEnabled = featureMap["ai_master"] ?? false;
 
   const toggleFeature = (key: string) => {
-    setFeatures(prev => ({ ...prev, [key]: !prev[key] }));
-    toast.info("Feature toggles will be functional once the AI backend is connected.");
+    toggleMutation.mutate(
+      { key, enabled: !featureMap[key] },
+      { onError: () => toast.error("Failed to toggle feature") }
+    );
   };
 
   const toggleMaster = () => {
-    setMasterEnabled(prev => !prev);
-    if (masterEnabled) {
-      // Turning off master disables all
-      setFeatures(Object.fromEntries(AI_FEATURES.map(f => [f.key, false])));
-    }
-    toast.info("Feature toggles will be functional once the AI backend is connected.");
+    toggleMutation.mutate(
+      { key: "ai_master", enabled: !masterEnabled },
+      { onError: () => toast.error("Failed to toggle master switch") }
+    );
   };
+
+  if (isLoading) return <div className="text-sm" style={{ color: "var(--muted-foreground)" }}>Loading AI features...</div>;
 
   return (
     <div className="space-y-4 max-w-2xl">
@@ -1378,9 +1384,9 @@ function AISection() {
               <button
                 onClick={() => toggleFeature(feature.key)}
                 className="transition-colors shrink-0 ml-4 outline-offset-2"
-                style={{ color: features[feature.key] ? "#16a34a" : "var(--muted-foreground)" }}
+                style={{ color: featureMap[feature.key] ? "#16a34a" : "var(--muted-foreground)" }}
               >
-                {features[feature.key] ? <ToggleRight className="w-6 h-6" /> : <ToggleLeft className="w-6 h-6" />}
+                {featureMap[feature.key] ? <ToggleRight className="w-6 h-6" /> : <ToggleLeft className="w-6 h-6" />}
               </button>
             </div>
           ))}
