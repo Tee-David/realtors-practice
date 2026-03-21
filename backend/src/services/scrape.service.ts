@@ -497,22 +497,28 @@ export class ScrapeService {
   /**
    * Handle error report from scraper.
    */
-  static async handleError(jobId: string, error: string, details?: string) {
+  static async handleError(jobId: string, error: string, details?: any) {
+    // Check if this is a cancellation (from GH Actions workflow cancel)
+    const isCancelled = typeof details === "object" && details?.status === "CANCELLED";
+    const finalStatus = isCancelled ? "CANCELLED" : "FAILED";
+
     await prisma.scrapeJob.update({
       where: { id: jobId },
-      data: { status: "FAILED", completedAt: new Date() },
+      data: { status: finalStatus, completedAt: new Date() },
     });
 
-    // Update site health
-    const job = await prisma.scrapeJob.findUnique({ where: { id: jobId } });
-    if (job) {
-      for (const siteId of job.siteIds) {
-        await SiteService.updateHealth(siteId, false);
+    if (!isCancelled) {
+      // Update site health only for real failures, not cancellations
+      const job = await prisma.scrapeJob.findUnique({ where: { id: jobId } });
+      if (job) {
+        for (const siteId of job.siteIds) {
+          await SiteService.updateHealth(siteId, false);
+        }
       }
     }
 
     broadcastScrapeError(jobId, error);
-    Logger.error(`Job ${jobId} failed: ${error}`);
+    Logger.error(`Job ${jobId} ${finalStatus}: ${error}`);
   }
 
   /**

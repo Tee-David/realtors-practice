@@ -194,6 +194,32 @@ jobs:
 
           echo "=== Scraper Finished ==="
 
+      - name: Report final status to backend
+        if: always()
+        env:
+          PROD_API_URL: ${{ secrets.PROD_API_URL }}
+          INTERNAL_API_KEY: ${{ secrets.INTERNAL_API_KEY }}
+        run: |
+          JOB_ID="${{ steps.payload.outputs.job_id }}"
+          JOB_STATUS="${{ job.status }}"
+
+          if [ -n "$JOB_ID" ] && [ -n "$PROD_API_URL" ] && [ -n "$INTERNAL_API_KEY" ]; then
+            if [ "$JOB_STATUS" = "cancelled" ]; then
+              # Report cancellation so the app UI updates
+              curl -sf -X POST "$PROD_API_URL/api/internal/scrape-error" \
+                -H "Content-Type: application/json" \
+                -H "X-Internal-Key: $INTERNAL_API_KEY" \
+                -d "{\"jobId\":\"$JOB_ID\",\"error\":\"GitHub Actions workflow was cancelled\",\"details\":{\"status\":\"CANCELLED\"}}" \
+                --max-time 15 || true
+            elif [ "$JOB_STATUS" = "failure" ]; then
+              curl -sf -X POST "$PROD_API_URL/api/internal/scrape-error" \
+                -H "Content-Type: application/json" \
+                -H "X-Internal-Key: $INTERNAL_API_KEY" \
+                -d "{\"jobId\":\"$JOB_ID\",\"error\":\"GitHub Actions workflow failed\",\"details\":{\"status\":\"FAILED\"}}" \
+                --max-time 15 || true
+            fi
+          fi
+
       - name: Generate summary
         if: always()
         run: |
