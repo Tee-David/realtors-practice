@@ -220,4 +220,56 @@ router.post("/scrape/create-job", async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * POST /internal/seed-sites
+ * Bulk upsert sites into the database. Used for initial seeding.
+ * Body: { sites: Array<{ key, name, baseUrl, enabled?, listPaths? }> }
+ */
+router.post("/seed-sites", async (req: Request, res: Response) => {
+  try {
+    const { sites } = req.body;
+    if (!Array.isArray(sites) || sites.length === 0) {
+      return res.status(400).json({ error: "sites array required" });
+    }
+
+    let created = 0;
+    let updated = 0;
+
+    for (const site of sites) {
+      if (!site.key || !site.name || !site.baseUrl) {
+        continue;
+      }
+
+      const data = {
+        name: site.name,
+        baseUrl: site.baseUrl,
+        enabled: site.enabled ?? false,
+        parser: "universal",
+        listPaths: site.listPaths || [],
+        paginationType: "auto",
+        maxPages: site.maxPages ?? 15,
+        requiresBrowser: true,
+      };
+
+      const result = await prisma.site.upsert({
+        where: { key: site.key },
+        create: { key: site.key, ...data },
+        update: data,
+      });
+
+      if (result.createdAt.getTime() === result.updatedAt.getTime()) {
+        created++;
+      } else {
+        updated++;
+      }
+    }
+
+    Logger.info(`Seed-sites: ${created} created, ${updated} updated (${sites.length} total)`);
+    return res.json({ success: true, created, updated, total: sites.length });
+  } catch (err: any) {
+    Logger.error(`Seed-sites error: ${err.message}`);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

@@ -1,16 +1,14 @@
-"""Scraper microservice — FastAPI entry point.
+"""Scraper microservice — LLM-powered, zero-selector property extraction.
 
-Receives scrape jobs from the Node.js API server, runs the scraping pipeline,
-and reports results/progress back via HTTP callbacks.
+Pipeline: Discover listing pages → Paginate → LLM extract → Enrich detail → Report
+Works on ANY real estate website without manual CSS selectors.
 """
 
 import asyncio
 import os
-import glob
 import random
-import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 from urllib.parse import urlparse
 
@@ -18,9 +16,13 @@ from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from config import config
-from bs4 import BeautifulSoup
 from engine.adaptive_fetcher import AdaptiveFetcher
-from extractors.universal_extractor import UniversalExtractor
+from engine.page_discovery import discover_listing_pages, is_listing_page
+from extractors.llm_extractor import (
+    extract_listings_from_page,
+    extract_detail_from_page,
+    merge_listing_detail,
+)
 from extractors.universal_nlp import detect_listing_type
 from extractors.price_parser import parse_price
 from extractors.location_parser import parse_location
@@ -29,13 +31,12 @@ from pipeline.validator import validate_property
 from pipeline.deduplicator import Deduplicator
 from pipeline.normalizer import normalize_property
 from pipeline.enricher import enrich_property
-from pipeline.page_classifier import should_skip_page, classify_page
-from pipeline.incremental import IncrementalTracker
-from pipeline.relevance_scorer import RelevanceScorer
-# pagination_strategy no longer used — render_and_collect_pages handles pagination
-from utils.callback import report_progress, report_results, report_error, report_log, report_property
+from utils.callback import (
+    report_progress, report_results, report_error,
+    report_log, report_property, set_api_base_url,
+)
 from utils.robots_checker import is_allowed as robots_allowed, get_crawl_delay
-from utils.url_normalizer import normalize_url, VisitedSet, is_valid_property_url
+from utils.url_normalizer import normalize_url, VisitedSet
 from utils.logger import get_logger
 
 import redis
@@ -48,51 +49,22 @@ try:
     redis_client.ping()
     logger.info("Redis connected")
 except Exception as _redis_err:
-    logger.warning(f"Redis unavailable ({_redis_err}) — stop-job and selector cache disabled")
     redis_client = None
+    logger.warning(f"Redis unavailable ({_redis_err}) — stop-job disabled")
 
 
-def _purge_old_snapshots():
-    """Delete HTML snapshots older than retention period."""
-    snapshot_dir = config.raw_html_dir
-    if not os.path.exists(snapshot_dir):
-        return
-    cutoff = datetime.now() - timedelta(days=config.raw_html_retention_days)
-    for filepath in glob.glob(os.path.join(snapshot_dir, "*.html")):
-        try:
-            file_mtime = datetime.fromtimestamp(os.path.getmtime(filepath))
-            if file_mtime < cutoff:
-                os.remove(filepath)
-                logger.info(f"Purged old snapshot: {filepath}")
-        except OSError:
-            pass
-
-
-def _save_snapshot(site_name: str, url: str, html: str):
-    """Save raw HTML for debugging failed extractions."""
-    snapshot_dir = config.raw_html_dir
-    os.makedirs(snapshot_dir, exist_ok=True)
-    safe_name = site_name.replace(" ", "_").replace("/", "_")[:30]
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"{safe_name}_{timestamp}.html"
-    filepath = os.path.join(snapshot_dir, filename)
-    with open(filepath, "w", encoding="utf-8") as f:
-        f.write(f"<!-- Source URL: {url} -->\n")
-        f.write(html)
-    logger.info(f"Saved HTML snapshot: {filepath}")
-
+# --- App ---
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info(f"Scraper service starting on {config.host}:{config.port}")
-    _purge_old_snapshots()
     yield
     logger.info("Scraper service shutting down")
 
 
 app = FastAPI(
     title="Realtors' Practice Scraper",
-    version="1.0.0",
+    version="2.0.0",
     lifespan=lifespan,
 )
 
@@ -104,9 +76,9 @@ class SiteConfig(BaseModel):
     name: str
     baseUrl: str
     listPaths: list[str] = Field(default_factory=list)
-    listingSelector: str
-    selectors: dict[str, Any]
-    paginationType: str = "url_param"
+    listingSelector: str = ""
+    selectors: dict[str, Any] = Field(default_factory=dict)
+    paginationType: str = "auto"
     paginationConfig: dict[str, Any] = Field(default_factory=dict)
     requiresJs: bool = False
     maxPages: int = 10
@@ -130,7 +102,6 @@ class ScrapeJobRequest(BaseModel):
         parsed = urlparse(v)
         if parsed.scheme not in ("http", "https"):
             raise ValueError("callbackUrl must use http or https scheme")
-        # Allow localhost in dev, restrict to known hosts in production
         allowed_hosts = [
             "localhost", "127.0.0.1",
             urlparse(config.api_base_url).hostname,
@@ -140,7 +111,6 @@ class ScrapeJobRequest(BaseModel):
         return v
 
     def get_api_base_url(self) -> str:
-        """Return the callback URL from payload, or fall back to config."""
         if self.callbackUrl:
             return self.callbackUrl.rstrip("/")
         return config.api_base_url
@@ -175,10 +145,13 @@ def verify_internal_key(x_internal_key: str = Header(...)):
 
 @app.get("/health")
 async def health():
+    from engine.llm_providers import get_available_providers
     return {
         "status": "OK",
         "service": "scraper",
-        "redis_connected": redis_client.ping() if redis_client else False
+        "version": "2.0.0-llm",
+        "redis_connected": redis_client.ping() if redis_client else False,
+        "llm_providers": get_available_providers(),
     }
 
 
@@ -188,11 +161,8 @@ async def start_job(
     x_internal_key: str = Header(...),
 ):
     verify_internal_key(x_internal_key)
-
-    # Track job status and run in-process
     _update_job_status(request.jobId, status="running")
     asyncio.create_task(_run_scrape_job(request))
-
     return {"jobId": request.jobId, "status": "STARTED"}
 
 
@@ -202,7 +172,12 @@ async def get_job_status(job_id: str, x_internal_key: str = Header(...)):
     info = _job_statuses.get(job_id, {})
     is_stopped = (redis_client and redis_client.exists(f"job:stop:{job_id}")) if redis_client else False
     status = "STOPPING" if is_stopped else info.get("status", "unknown")
-    return JobStatus(jobId=job_id, status=status, processed=info.get("processed", 0), total=info.get("total", 0), errors=info.get("errors", 0))
+    return JobStatus(
+        jobId=job_id, status=status,
+        processed=info.get("processed", 0),
+        total=info.get("total", 0),
+        errors=info.get("errors", 0),
+    )
 
 
 @app.get("/api/jobs/{job_id}/status")
@@ -216,54 +191,116 @@ async def get_job_status_simple(job_id: str):
 async def stop_job(job_id: str, x_internal_key: str = Header(...)):
     verify_internal_key(x_internal_key)
     if redis_client:
-        redis_client.setex(f"job:stop:{job_id}", 86400, "1")  # Expire after 24h
+        redis_client.setex(f"job:stop:{job_id}", 86400, "1")
     return {"jobId": job_id, "status": "STOPPING"}
+
+
+# --- Helpers ---
+
+def _is_stopped(job_id: str) -> bool:
+    return bool(redis_client and redis_client.exists(f"job:stop:{job_id}"))
+
+
+def _to_property_dict(listing: dict, site_name: str) -> dict:
+    """Convert LLM-extracted listing to the property format expected by the backend."""
+    raw = {
+        "title": listing.get("title", ""),
+        "listingUrl": listing.get("listing_url", ""),
+        "source": site_name,
+        "price_text": listing.get("price", ""),
+        "location_text": listing.get("location", ""),
+        "description": listing.get("description", ""),
+        "bedrooms": listing.get("bedrooms"),
+        "bathrooms": listing.get("bathrooms"),
+        "toilets": listing.get("toilets"),
+        "propertyType": listing.get("property_type", ""),
+        "area": listing.get("area", ""),
+        "state": listing.get("state", "") or "Lagos",
+        "images": listing.get("images", []),
+        "agentName": listing.get("agent_name", ""),
+        "agentPhone": listing.get("agent_phone", ""),
+        "agencyName": listing.get("agency_name", ""),
+        "features_text": ", ".join(listing.get("features", [])),
+        "landSize": listing.get("land_size", ""),
+        "buildingSize": listing.get("building_size", ""),
+        "furnishing": listing.get("furnishing", ""),
+        "serviceCharge": listing.get("service_charge", ""),
+    }
+
+    # Detect listing type
+    raw["listingType"] = listing.get("listing_type", "") or detect_listing_type(
+        raw.get("title", ""), raw.get("description", ""), raw.get("price_text", ""),
+    )
+
+    # Parse price
+    price_info = parse_price(raw.get("price_text", ""))
+    raw.update(price_info)
+
+    # Parse location
+    location_info = parse_location(raw.get("location_text", ""))
+    raw.update(location_info)
+
+    # Extract features
+    features = extract_features(
+        raw.get("description", ""), raw.get("features_text", ""),
+    )
+    raw["features"] = features
+
+    return raw
 
 
 # --- Scrape Pipeline ---
 
 async def _run_scrape_job(request: ScrapeJobRequest) -> None:
-    """Run a scrape job with a hard timeout of 30 minutes."""
+    """Run a scrape job with a hard timeout of 45 minutes."""
     try:
         await asyncio.wait_for(
             _run_scrape_job_inner(request),
-            timeout=1800,  # 30 minutes max
+            timeout=2700,  # 45 minutes max
         )
         _update_job_status(request.jobId, status="completed")
     except asyncio.TimeoutError:
-        logger.error(f"Job {request.jobId} exceeded 30-minute timeout")
+        logger.error(f"Job {request.jobId} exceeded 45-minute timeout")
         _update_job_status(request.jobId, status="failed")
-        await report_error(request.jobId, "Job timed out after 30 minutes")
+        await report_error(request.jobId, "Job timed out after 45 minutes")
     except Exception as e:
         logger.exception(f"Job {request.jobId} wrapper error: {e}")
         _update_job_status(request.jobId, status="failed")
+        await report_error(request.jobId, str(e))
 
 
 async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
+    """Core scrape pipeline: Discover → Paginate → LLM Extract → Enrich → Report.
+
+    For each site:
+    1. If listPaths configured: use those directly
+    2. Otherwise: fetch homepage, auto-discover listing pages
+    3. For each listing page: paginate through all pages
+    4. For each page: LLM extracts ALL property listings (no CSS selectors)
+    5. For each listing with a detail URL: fetch detail page, LLM enriches
+    6. Normalize, validate, deduplicate, report
+    """
     job_id = request.jobId
     all_properties: list[dict[str, Any]] = []
     deduplicator = Deduplicator()
     fetcher = AdaptiveFetcher()
     visited = VisitedSet()
     total_errors = 0
-    block_count = 0
     total_pages_fetched = 0
 
-    # Use callbackUrl from payload if provided (so production callbacks go to the right place)
     if request.callbackUrl:
-        from utils.callback import set_api_base_url
         set_api_base_url(request.callbackUrl)
 
     try:
         await report_log(job_id, "INFO", f"Starting scrape job with {len(request.sites)} site(s)")
+        await report_log(job_id, "INFO", "Using LLM-powered extraction (zero selectors)")
 
         for site_idx, site in enumerate(request.sites):
-            if (redis_client and redis_client.exists(f"job:stop:{job_id}")):
+            if _is_stopped(job_id):
                 await report_log(job_id, "WARN", "Job stopped by user")
                 break
 
             await report_log(job_id, "INFO", f"Scraping site: {site.name} ({site.baseUrl})")
-            # Report initial progress for this site so frontend moves past "Initialising"
             await report_progress(
                 job_id,
                 processed=len(all_properties),
@@ -273,341 +310,167 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
                 max_pages=site.maxPages,
                 pages_fetched=total_pages_fetched,
                 properties_found=len(all_properties),
-                duplicates=0,
+                duplicates=deduplicator.duplicate_count,
                 errors=total_errors,
             )
+
             site_properties: list[dict[str, Any]] = []
 
-            # Initialize per-site pipeline improvements
-            incremental = IncrementalTracker(
-                redis_client=redis_client,
-                site_id=site.id,
-                consecutive_threshold=5,
-            )
-            relevance_scorer = RelevanceScorer(threshold=40)
-
             try:
-                # Check robots.txt before scraping
+                # Check robots.txt
                 if not robots_allowed(site.baseUrl):
-                    await report_log(job_id, "WARN", f"robots.txt disallows scraping {site.baseUrl} — skipping site")
+                    await report_log(job_id, "WARN", f"robots.txt disallows {site.baseUrl} — skipping")
                     continue
 
-                # Respect Crawl-Delay from robots.txt if set
                 crawl_delay = get_crawl_delay(site.baseUrl)
-                if crawl_delay:
-                    await report_log(job_id, "INFO", f"robots.txt Crawl-Delay: {crawl_delay}s for {site.name}")
 
-                # Build starting URLs from listPaths (fall back to baseUrl if none)
-                start_urls = []
-                if site.listPaths:
+                # ─── PHASE 1: Determine listing page URLs ───
+                listing_page_urls: list[str] = []
+
+                if site.listPaths and any(lp.strip() for lp in site.listPaths):
+                    # Use configured listPaths
                     for lp in site.listPaths:
+                        lp = lp.strip()
+                        if not lp:
+                            continue
                         if lp.startswith("http"):
-                            start_urls.append(lp)
+                            listing_page_urls.append(lp)
                         else:
-                            start_urls.append(site.baseUrl.rstrip("/") + "/" + lp.lstrip("/"))
+                            listing_page_urls.append(site.baseUrl.rstrip("/") + "/" + lp.lstrip("/"))
+                    await report_log(job_id, "INFO", f"[{site.name}] Using {len(listing_page_urls)} configured list paths")
                 else:
-                    start_urls = [site.baseUrl]
+                    # Auto-discover listing pages from homepage
+                    await report_log(job_id, "INFO", f"[{site.name}] No listPaths — auto-discovering listing pages...")
+                    homepage_html = await fetcher.fetch(site.baseUrl, requires_js=True)
 
-                await report_log(job_id, "INFO", f"Starting URLs for {site.name}: {start_urls}")
+                    if homepage_html:
+                        total_pages_fetched += 1
 
-                for start_url in start_urls:
-                    if len(site_properties) >= request.maxListingsPerSite:
-                        break
-                    if (redis_client and redis_client.exists(f"job:stop:{job_id}")):
-                        break
-
-                    await report_log(job_id, "INFO", f"Crawling path: {start_url}")
-
-                    # Reset incremental tracker consecutive counter for each start path
-                    incremental.reset_consecutive()
-
-                    # Collect all listing pages using browser-session pagination.
-                    # This keeps Playwright alive across pages (handles SPAs, JS pagination,
-                    # cookie state). Falls back to per-page fetch if browser pagination fails.
-                    await report_log(job_id, "INFO", f"[{site.name}] Using browser-session pagination for {start_url}")
-                    collected_pages = await fetcher.render_and_collect_pages(
-                        start_url, max_pages=site.maxPages
-                    )
-
-                    if not collected_pages:
-                        # Fallback: single-page fetch (the browser session approach failed)
-                        await report_log(job_id, "WARN", f"[{site.name}] Browser pagination returned nothing, falling back to single fetch")
-                        html = await fetcher.fetch(start_url, requires_js=site.requiresJs)
-                        if html and len(html) > 500:
-                            collected_pages = [(start_url, html)]
-
-                    if not collected_pages:
-                        await report_log(job_id, "ERROR", f"[{site.name}] Could not fetch any pages from {start_url}")
+                        # Check if homepage itself has listings
+                        if is_listing_page(homepage_html):
+                            listing_page_urls.append(site.baseUrl)
+                            await report_log(job_id, "INFO", f"[{site.name}] Homepage has listings, scraping directly")
+                        else:
+                            # Discover listing pages from links
+                            discovered = discover_listing_pages(homepage_html, site.baseUrl, max_results=8)
+                            if discovered:
+                                listing_page_urls.extend(discovered)
+                                await report_log(job_id, "INFO",
+                                    f"[{site.name}] Discovered {len(discovered)} listing pages")
+                            else:
+                                # Last resort: try the homepage anyway
+                                listing_page_urls.append(site.baseUrl)
+                                await report_log(job_id, "WARN",
+                                    f"[{site.name}] No listing pages discovered, trying homepage")
+                    else:
+                        await report_log(job_id, "ERROR", f"[{site.name}] Could not fetch homepage")
                         total_errors += 1
                         continue
 
-                    await report_log(job_id, "INFO", f"[{site.name}] Collected {len(collected_pages)} listing pages")
+                await report_log(job_id, "INFO", f"[{site.name}] Listing pages to crawl: {listing_page_urls[:5]}")
+
+                # ─── PHASE 2: Crawl listing pages with pagination ───
+                for lp_url in listing_page_urls:
+                    if len(site_properties) >= request.maxListingsPerSite:
+                        break
+                    if _is_stopped(job_id):
+                        break
+
+                    await report_log(job_id, "INFO", f"[{site.name}] Crawling: {lp_url}")
+
+                    # Use browser-session pagination to collect all pages
+                    collected_pages = await fetcher.render_and_collect_pages(
+                        lp_url, max_pages=site.maxPages,
+                    )
+
+                    if not collected_pages:
+                        # Fallback: single page fetch
+                        html = await fetcher.fetch(lp_url, requires_js=True)
+                        if html and len(html) > 500:
+                            collected_pages = [(lp_url, html)]
+                        else:
+                            await report_log(job_id, "WARN", f"[{site.name}] Could not fetch {lp_url}")
+                            total_errors += 1
+                            continue
+
+                    await report_log(job_id, "INFO",
+                        f"[{site.name}] Collected {len(collected_pages)} pages from {lp_url}")
+                    total_pages_fetched += len(collected_pages)
+
+                    # ─── PHASE 3: LLM extraction from each page ───
+                    consecutive_empty = 0
 
                     for page_num, (page_url, html) in enumerate(collected_pages):
                         if len(site_properties) >= request.maxListingsPerSite:
                             break
-                        if (redis_client and redis_client.exists(f"job:stop:{job_id}")):
+                        if _is_stopped(job_id):
                             break
 
-                        total_pages_fetched += 1
-
-                        # Phase 3.5: Category page detection — skip index/directory pages
-                        # But on first pages, don't break — they might be homepages
-                        # that need auto-discovery of listing subpages
-                        if should_skip_page(html, page_url):
-                            if page_num == 0:
-                                await report_log(job_id, "INFO", f"[{site.name}] Page looks like category/index, will auto-discover listings")
-                            else:
-                                await report_log(job_id, "INFO", f"[{site.name}] Skipping category/index page: {page_url}")
+                        # Check if page looks like it has listings
+                        if page_num > 0 and not is_listing_page(html):
+                            await report_log(job_id, "DEBUG",
+                                f"[{site.name}] Page {page_num + 1} doesn't look like listings, skipping")
+                            consecutive_empty += 1
+                            if consecutive_empty >= 2:
                                 break
+                            continue
 
-                        # Check for cached LLM-discovered selectors (self-healing)
-                        effective_selectors = dict(site.selectors)
-                        try:
-                            from extractors.selector_cache import get_cached_selectors
-                            domain = urlparse(site.baseUrl).netloc
-                            cached = get_cached_selectors(domain)
-                            if cached:
-                                # Merge cached selectors (cached take priority for fields that exist)
-                                for field, sel in cached.items():
-                                    if field in effective_selectors:
-                                        # Prepend cached selector as higher-priority fallback
-                                        effective_selectors[field] = f"{sel} | {effective_selectors[field]}"
-                                    else:
-                                        effective_selectors[field] = sel
-                                await report_log(job_id, "DEBUG", f"Using {len(cached)} cached selectors for {domain}")
-                        except Exception:
-                            pass
+                        # LLM extraction — the core: reads the page and returns structured data
+                        await report_log(job_id, "INFO",
+                            f"[{site.name}] LLM extracting listings from page {page_num + 1}...")
 
-                        # Extract listing URLs from the page
-                        extractor = UniversalExtractor(effective_selectors)
+                        listings = await extract_listings_from_page(
+                            html, page_url, site_name=site.name,
+                        )
 
-                        # First try JSON-LD for listing URLs
-                        json_ld_list = extractor.extract_json_ld(html)
-                        json_ld_properties = extractor.harvest_properties_from_json_ld(json_ld_list, page_url)
-                        json_ld_urls = [
-                            p["listingUrl"] for p in json_ld_properties
-                            if p.get("listingUrl") and p["listingUrl"] != page_url
-                        ]
-
-                        # Then try CSS selectors
-                        raw_listing_urls = extractor.extract_listing_urls(html, site.baseUrl, site.listingSelector)
-
-                        # Merge: JSON-LD URLs first (higher confidence), then CSS URLs
-                        all_raw_urls = json_ld_urls.copy()
-                        for u in raw_listing_urls:
-                            if u not in all_raw_urls:
-                                all_raw_urls.append(u)
-                        raw_listing_urls = all_raw_urls if all_raw_urls else raw_listing_urls
-
-                        # Phase 3.5: Relevance scoring fallback — if CSS selectors found nothing,
-                        # use multi-signal element scoring to find property listing URLs
-                        if not raw_listing_urls:
-                            await report_log(job_id, "DEBUG", f"[{site.name}] CSS selectors found nothing, trying relevance scorer")
-                            relevance_urls = relevance_scorer.extract_listing_urls_by_relevance(
-                                html, site.baseUrl
-                            )
-                            if relevance_urls:
-                                raw_listing_urls = relevance_urls
-                                await report_log(job_id, "INFO", f"[{site.name}] Relevance scorer found {len(relevance_urls)} candidate URLs")
-
-                        # Auto-discover listing pages when no property URLs found
-                        # This triggers on homepages, category pages, or any page
-                        # that doesn't have direct property listing links
-                        if not raw_listing_urls and page_num == 0:
-                            await report_log(job_id, "INFO", f"[{site.name}] Homepage has no listings, auto-discovering listing pages...")
-                            from bs4 import BeautifulSoup
-                            from urllib.parse import urljoin
-                            soup = BeautifulSoup(html, "html.parser")
-                            listing_keywords = [
-                                "propert", "listing", "for-sale", "for-rent", "buy",
-                                "rent", "sell", "estate", "apartment", "house",
-                                "duplex", "flat", "land", "search", "catalog",
-                                "status/", "property-type/", "/city/", "/area/",
-                            ]
-                            discovered_paths = []
-                            for a_tag in soup.find_all("a", href=True):
-                                href = a_tag["href"]
-                                if not href or href.startswith(("#", "javascript:", "mailto:", "tel:")):
-                                    continue
-                                full_url = urljoin(page_url, href)
-                                # Only follow internal links
-                                if urlparse(full_url).netloc != urlparse(site.baseUrl).netloc:
-                                    continue
-                                href_lower = full_url.lower()
-                                link_text = (a_tag.get_text() or "").lower().strip()
-                                # Check if URL or link text contains listing keywords
-                                if any(kw in href_lower or kw in link_text for kw in listing_keywords):
-                                    norm = normalize_url(full_url)
-                                    if norm not in [normalize_url(su) for su in start_urls] and norm not in [normalize_url(su) for su in discovered_paths]:
-                                        discovered_paths.append(full_url)
-                            if discovered_paths:
-                                # Add top matches to start_urls for crawling
-                                for dp in discovered_paths[:10]:
-                                    start_urls.append(dp)
+                        if not listings:
+                            await report_log(job_id, "WARN",
+                                f"[{site.name}] No listings extracted from page {page_num + 1}")
+                            consecutive_empty += 1
+                            if consecutive_empty >= 2:
                                 await report_log(job_id, "INFO",
-                                    f"[{site.name}] Discovered {len(discovered_paths)} listing pages from homepage, queued {min(len(discovered_paths), 10)} for crawling")
-                            else:
-                                # Last resort: try common property listing URL patterns
-                                base = site.baseUrl.rstrip("/")
-                                common_paths = [
-                                    "/properties", "/listings", "/for-sale", "/for-rent",
-                                    "/buy", "/rent", "/search", "/all-properties",
-                                    "/real-estate", "/homes", "/property",
-                                ]
-                                await report_log(job_id, "INFO", f"[{site.name}] Trying common listing URL patterns...")
-                                for cp in common_paths:
-                                    candidate = base + cp
-                                    if normalize_url(candidate) not in [normalize_url(su) for su in start_urls]:
-                                        start_urls.append(candidate)
-                                await report_log(job_id, "INFO", f"[{site.name}] Queued {len(common_paths)} common paths to try")
-
-                        # Filter invalid URLs, normalize, and deduplicate via visited set
-                        listing_urls = []
-                        incremental_stop = False
-                        for u in raw_listing_urls:
-                            if not is_valid_property_url(u):
-                                continue
-                            normalized = normalize_url(u)
-                            if not visited.add(normalized):
-                                continue
-
-                            # Phase 3.5: Incremental scraping — track seen URLs,
-                            # stop after N consecutive already-known URLs
-                            is_new = incremental.check_and_track(normalized)
-                            if incremental.should_stop:
-                                await report_log(
-                                    job_id, "INFO",
-                                    f"[{site.name}] Incremental stop: {incremental.consecutive_known} "
-                                    f"consecutive known URLs — assuming remaining pages are old"
-                                )
-                                incremental_stop = True
+                                    f"[{site.name}] 2 consecutive empty pages, moving to next path")
                                 break
+                            continue
 
-                            if is_new:
-                                listing_urls.append(normalized)
+                        consecutive_empty = 0
+                        await report_log(job_id, "INFO",
+                            f"[{site.name}] Found {len(listings)} listings on page {page_num + 1}")
 
-                        if incremental_stop:
-                            # Don't stop on page 1 — there may be new listings on later pages
-                            if page_num == 0:
-                                await report_log(job_id, "INFO", f"[{site.name}] Incremental stop on page 1, continuing to check next pages")
-                                incremental.reset_consecutive()
-                            else:
-                                break
-
-                        if not listing_urls:
-                            # Allow advancing past up to 2 empty pages before giving up
-                            if page_num < 2:
-                                await report_log(job_id, "DEBUG", f"[{site.name}] No new listings on page {page_num + 1}, trying next page")
-                                continue
-                            else:
-                                await report_log(job_id, "INFO", f"[{site.name}] No more listings found on page {page_num + 1}")
-                                break
-
-                        skipped = len(raw_listing_urls) - len(listing_urls)
-                        if skipped:
-                            await report_log(job_id, "DEBUG", f"Skipped {skipped} already-visited/known URLs on page {page_num + 1}")
-                        await report_log(job_id, "INFO", f"[{site.name}] Found {len(listing_urls)} new listings on page {page_num + 1}")
-
-                        # Process each listing
-                        for listing_url in listing_urls:
+                        # ─── PHASE 4: Detail enrichment ───
+                        for listing in listings:
                             if len(site_properties) >= request.maxListingsPerSite:
                                 break
-                            if (redis_client and redis_client.exists(f"job:stop:{job_id}")):
+                            if _is_stopped(job_id):
                                 break
 
                             try:
-                                listing_html = await fetcher.fetch(listing_url, requires_js=site.requiresJs)
-                                if not listing_html:
-                                    total_errors += 1
-                                    if fetcher.last_block_reason:
-                                        block_count += 1
-                                        await report_log(job_id, "WARN", f"Blocked ({fetcher.last_block_reason}): {listing_url}")
-                                        if block_count >= 3:
-                                            await report_log(job_id, "WARN", f"Multiple blocks detected for {site.name} — slowing down")
-                                            await asyncio.sleep(random.uniform(10, 20))
-                                    continue
+                                detail_url = listing.get("listing_url", "")
 
-                                # Extract raw data — JSON-LD first, CSS selectors as fallback
-                                raw_data = extractor.extract_property_with_json_ld(listing_html, listing_url)
-                                if not raw_data:
-                                    total_errors += 1
-                                    _save_snapshot(site.name, listing_url, listing_html)
-                                    await report_log(job_id, "WARN", f"No data extracted from {listing_url}, snapshot saved")
-                                    continue
+                                # Enrich from detail page if we have a URL and it's not the listing page itself
+                                if (detail_url
+                                    and detail_url != page_url
+                                    and normalize_url(detail_url) not in visited):
+                                    visited.add(normalize_url(detail_url))
 
-                                # LLM Fallback if crucial data is missing (Layer 3: Crawl4AI + Gemini)
-                                if not raw_data.get("price_text") or not raw_data.get("bedrooms") or not raw_data.get("location_text"):
-                                    await report_log(job_id, "DEBUG", f"Missing data for {listing_url}, attempting LLM fallback...")
-                                    try:
-                                        # Try Crawl4AI → Markdown → Gemini extraction first
-                                        markdown = await fetcher.fetch_as_markdown(listing_url)
-                                        if markdown:
-                                            from extractors.llm_schema_extractor import extract_property_from_markdown, discover_selectors
-                                            llm_data = extract_property_from_markdown(markdown, listing_url)
-                                            if llm_data:
-                                                # Merge LLM data into existing (fill gaps only)
-                                                for key, value in llm_data.items():
-                                                    if value is not None and not raw_data.get(key):
-                                                        raw_data[key] = value
-                                                await report_log(job_id, "INFO", f"LLM extraction filled gaps for {listing_url}")
+                                    # Rate limiting
+                                    if crawl_delay:
+                                        await asyncio.sleep(crawl_delay)
+                                    else:
+                                        await asyncio.sleep(random.uniform(
+                                            site.delayMin or 1.0,
+                                            site.delayMax or 3.0,
+                                        ))
 
-                                                # Self-healing: discover CSS selectors for next time
-                                                discovered = discover_selectors(listing_html, llm_data)
-                                                if discovered:
-                                                    from extractors.selector_cache import save_selectors
-                                                    domain = urlparse(site.baseUrl).netloc
-                                                    save_selectors(domain, discovered)
-                                                    await report_log(job_id, "INFO", f"Self-healed: cached {len(discovered)} selectors for {domain}")
-                                            else:
-                                                # Fall back to plain text extraction
-                                                from extractors.llm_schema_extractor import extract_with_llm
-                                                page_text = BeautifulSoup(listing_html, "lxml").get_text(separator=" ", strip=True)
-                                                raw_data = extract_with_llm(page_text, raw_data)
-                                        else:
-                                            # Crawl4AI unavailable, fall back to plain text
-                                            from extractors.llm_schema_extractor import extract_with_llm
-                                            page_text = BeautifulSoup(listing_html, "lxml").get_text(separator=" ", strip=True)
-                                            raw_data = extract_with_llm(page_text, raw_data)
-                                    except Exception as llm_err:
-                                        await report_log(job_id, "DEBUG", f"LLM fallback error: {str(llm_err)[:200]}")
+                                    detail_html = await fetcher.fetch(detail_url, requires_js=True)
+                                    if detail_html:
+                                        detail_data = await extract_detail_from_page(
+                                            detail_html, detail_url, site_name=site.name,
+                                        )
+                                        listing = merge_listing_detail(listing, detail_data)
 
-                                # NLP: detect listing type
-                                raw_data["listingType"] = detect_listing_type(
-                                    raw_data.get("title", ""),
-                                    raw_data.get("description", ""),
-                                    raw_data.get("price_text", ""),
-                                )
-
-                                # Parse price
-                                price_info = parse_price(raw_data.get("price_text", ""))
-                                raw_data.update(price_info)
-
-                                # Parse location
-                                location_info = parse_location(raw_data.get("location_text", ""))
-                                raw_data.update(location_info)
-
-                                # Extract features
-                                features = extract_features(
-                                    raw_data.get("description", ""),
-                                    raw_data.get("features_text", ""),
-                                )
-                                raw_data["features"] = features
-
-                                # LLM normalization for fields that regex parsers couldn't handle
-                                # Only calls LLM when key fields are still missing or raw text
-                                if (
-                                    not raw_data.get("price")
-                                    or not isinstance(raw_data.get("bedrooms"), int)
-                                    or not raw_data.get("state")
-                                    or not raw_data.get("area")
-                                    or (not raw_data.get("landSizeSqm") and not raw_data.get("buildingSizeSqm") and raw_data.get("area_size_text"))
-                                ):
-                                    try:
-                                        from extractors.llm_schema_extractor import normalize_with_llm
-                                        raw_data = normalize_with_llm(raw_data)
-                                    except Exception as norm_err:
-                                        await report_log(job_id, "DEBUG", f"LLM normalization error: {str(norm_err)[:200]}")
+                                # Convert to property dict and process
+                                raw_data = _to_property_dict(listing, site.name)
 
                                 # Normalize
                                 normalized = normalize_property(raw_data, site.name)
@@ -617,15 +480,11 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
 
                                 # Dedup check
                                 if deduplicator.is_duplicate(validated):
-                                    await report_log(job_id, "DEBUG", f"Duplicate skipped: {validated.get('title', '')[:50]}")
                                     continue
 
                                 site_properties.append(validated)
 
-                                # Phase 3.5: Mark URL as scraped for incremental tracking
-                                incremental.mark_scraped(listing_url)
-
-                                # Report property to frontend for live feed
+                                # Report live property to frontend
                                 await report_property(job_id, {
                                     "title": validated.get("title"),
                                     "price": validated.get("price"),
@@ -652,21 +511,21 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
 
                             except Exception as e:
                                 total_errors += 1
-                                await report_log(job_id, "ERROR", f"[{site.name}] Error processing {listing_url}: {str(e)}")
-
-                        # Pagination is handled by render_and_collect_pages() above —
-                        # no per-page URL building needed here
+                                await report_log(job_id, "ERROR",
+                                    f"[{site.name}] Error processing listing: {str(e)[:200]}")
 
             except Exception as e:
                 total_errors += 1
                 await report_log(job_id, "ERROR", f"Error scraping site {site.name}: {str(e)}")
 
-            await report_log(job_id, "INFO", f"Site {site.name}: scraped {len(site_properties)} properties")
+            await report_log(job_id, "INFO",
+                f"Site {site.name}: scraped {len(site_properties)} properties")
             all_properties.extend(site_properties)
 
         # Enrich all properties (geocoding)
         if all_properties:
-            await report_log(job_id, "INFO", f"Enriching {len(all_properties)} properties (geocoding)...")
+            await report_log(job_id, "INFO",
+                f"Enriching {len(all_properties)} properties (geocoding)...")
             all_properties = await enrich_property(all_properties)
 
         # Report final results
@@ -678,7 +537,8 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
         }
 
         await report_results(job_id, all_properties, stats)
-        await report_log(job_id, "INFO", f"Job complete: {len(all_properties)} properties, {total_errors} errors")
+        await report_log(job_id, "INFO",
+            f"Job complete: {len(all_properties)} properties, {total_errors} errors")
 
     except Exception as e:
         logger.exception(f"Fatal error in job {job_id}")
