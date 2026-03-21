@@ -287,12 +287,13 @@ def _is_stopped(job_id: str) -> bool:
     return bool(redis_client and redis_client.exists(f"job:stop:{job_id}"))
 
 
-def _to_property_dict(listing: dict, site_name: str) -> dict:
+def _to_property_dict(listing: dict, site_name: str, site_id: str = "") -> dict:
     """Convert LLM-extracted listing to the property format expected by the backend."""
     raw = {
         "title": listing.get("title", ""),
         "listingUrl": listing.get("listing_url", ""),
         "source": site_name,
+        "siteId": site_id,
         "price_text": listing.get("price", ""),
         "location_text": listing.get("location", ""),
         "description": listing.get("description", ""),
@@ -314,9 +315,12 @@ def _to_property_dict(listing: dict, site_name: str) -> dict:
     }
 
     # Detect listing type
-    raw["listingType"] = listing.get("listing_type", "") or detect_listing_type(
+    raw_type = listing.get("listing_type", "") or detect_listing_type(
         raw.get("title", ""), raw.get("description", ""), raw.get("price_text", ""),
     )
+    # Map to valid backend enum (SALE, RENT, LEASE, SHORTLET)
+    type_map = {"sale": "SALE", "rent": "RENT", "lease": "LEASE", "shortlet": "SHORTLET", "land": "SALE"}
+    raw["listingType"] = type_map.get(raw_type.lower(), "SALE") if raw_type else "SALE"
 
     # Parse price
     price_info = parse_price(raw.get("price_text", ""))
@@ -507,7 +511,7 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
                                 probe_html, lp_url, site_name=site.name,
                             )
                             if detail_data:
-                                raw_data = _to_property_dict(detail_data, site.name)
+                                raw_data = _to_property_dict(detail_data, site.name, site.id)
                                 normalized = normalize_property(raw_data, site.name)
                                 validated = validate_property(normalized)
                                 if not deduplicator.is_duplicate(validated):
@@ -678,7 +682,7 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
                                         listing = merge_listing_detail(listing, detail_data)
 
                                 # Convert to property dict and process
-                                raw_data = _to_property_dict(listing, site.name)
+                                raw_data = _to_property_dict(listing, site.name, site.id)
 
                                 # Normalize
                                 normalized = normalize_property(raw_data, site.name)
