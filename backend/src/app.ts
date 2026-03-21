@@ -72,7 +72,13 @@ app.use(
         return callback(new Error("Not allowed by CORS"), false);
       }
 
-      if (!origin || allowedOrigins.includes(origin)) {
+      // Allow Vercel preview deployments for this project
+      const isVercelPreview = origin && (
+        origin.endsWith(".vercel.app") &&
+        origin.includes("realtors-practice")
+      );
+
+      if (!origin || allowedOrigins.includes(origin) || isVercelPreview) {
         callback(null, true);
       } else {
         callback(new Error("Not allowed by CORS"), false);
