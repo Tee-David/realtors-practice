@@ -382,7 +382,7 @@ IMPORTANT:
     )
 
     if result is None:
-        logger.warning(f"[LLM Extractor] No response from LLM for {site_name}")
+        logger.error(f"[LLM Extractor] LLM FAILED for {site_name} — all providers down or rate-limited. Check API keys.")
         return []
 
     if isinstance(result, list) and len(result) == 0:

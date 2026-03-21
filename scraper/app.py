@@ -62,6 +62,16 @@ except Exception as _redis_err:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info(f"Scraper service starting on {config.host}:{config.port}")
+    # Log LLM provider status at startup
+    from engine.llm_providers import PROVIDERS
+    for p in PROVIDERS:
+        status = "CONFIGURED" if p.api_key else "NO KEY"
+        logger.info(f"  LLM: {p.name} ({p.model}) — {status}")
+    configured = [p.name for p in PROVIDERS if p.api_key]
+    if not configured:
+        logger.error("WARNING: No LLM API keys configured — extraction will fail!")
+    else:
+        logger.info(f"  Available LLM providers: {', '.join(configured)}")
     yield
     logger.info("Scraper service shutting down")
 
@@ -149,13 +159,17 @@ def verify_internal_key(x_internal_key: str = Header(...)):
 
 @app.get("/health")
 async def health():
-    from engine.llm_providers import get_available_providers
+    from engine.llm_providers import get_available_providers, PROVIDERS
+    configured = [p.name for p in PROVIDERS if p.api_key]
+    available = get_available_providers()
     return {
-        "status": "OK",
+        "status": "OK" if configured else "DEGRADED",
         "service": "scraper",
         "version": "2.0.0-llm",
         "redis_connected": redis_client.ping() if redis_client else False,
-        "llm_providers": get_available_providers(),
+        "llm_providers_configured": configured,
+        "llm_providers_available": available,
+        "llm_warning": None if configured else "No LLM API keys configured — extraction will fail",
     }
 
 
@@ -225,6 +239,15 @@ async def _run_learn_job(request: LearnSiteRequest) -> None:
 
     try:
         from pipeline.site_learner import learn_site
+        from engine.llm_providers import PROVIDERS
+
+        configured = [p.name for p in PROVIDERS if p.api_key]
+        if not configured:
+            error_msg = "No LLM API keys configured — cannot learn site"
+            logger.error(error_msg)
+            _update_job_status(request.jobId, status="failed")
+            await report_error(request.jobId, error_msg)
+            return
 
         fetcher = AdaptiveFetcher()
         try:
@@ -355,8 +378,17 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
         set_api_base_url(request.callbackUrl)
 
     try:
+        # Check LLM providers upfront — no point scraping if we can't extract
+        from engine.llm_providers import get_available_providers, PROVIDERS
+        avail = get_available_providers()
+        configured = [p.name for p in PROVIDERS if p.api_key]
+        if not configured:
+            error_msg = "FATAL: No LLM API keys configured. Set at least one: GROQ_API_KEY, CEREBRAS_API_KEY, SAMBANOVA_API_KEY, GEMINI_API_KEY"
+            await report_log(job_id, "ERROR", error_msg)
+            await report_error(job_id, error_msg)
+            return
         await report_log(job_id, "INFO", f"Starting scrape job with {len(request.sites)} site(s)")
-        await report_log(job_id, "INFO", "Using LLM-powered extraction (zero selectors)")
+        await report_log(job_id, "INFO", f"LLM providers configured: {', '.join(configured)} (available now: {', '.join(avail)})")
 
         for site_idx, site in enumerate(request.sites):
             if _is_stopped(job_id):
@@ -561,8 +593,16 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
 
                         # Fall back to LLM extraction
                         if listings is None:
+                            from engine.llm_providers import get_available_providers
+                            avail = get_available_providers()
+                            if not avail:
+                                await report_log(job_id, "ERROR",
+                                    f"[{site.name}] No LLM providers available! Check API keys (GROQ_API_KEY, CEREBRAS_API_KEY, SAMBANOVA_API_KEY, GEMINI_API_KEY)")
+                                total_errors += 1
+                                break
+
                             await report_log(job_id, "INFO",
-                                f"[{site.name}] LLM extracting listings from page {page_num + 1}...")
+                                f"[{site.name}] LLM extracting listings from page {page_num + 1} (providers: {', '.join(avail)})...")
 
                             listings = await extract_listings_from_page(
                                 html, page_url, site_name=site.name,

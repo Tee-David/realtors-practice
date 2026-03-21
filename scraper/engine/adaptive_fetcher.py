@@ -242,6 +242,7 @@ class AdaptiveFetcher:
                 timeout=25,
                 allow_redirects=True,
                 max_redirects=5,
+                verify=False,
                 proxies={"http": proxy, "https": proxy} if proxy else None,
             )
             return self._curl_session
@@ -321,6 +322,7 @@ class AdaptiveFetcher:
             has_touch=False,
             is_mobile=False,
             color_scheme="light",
+            ignore_https_errors=True,
             extra_http_headers={
                 "Accept-Language": accept_lang,
                 "Accept-Encoding": "gzip, deflate, br",
@@ -486,6 +488,7 @@ class AdaptiveFetcher:
                 timeout=20.0,
                 follow_redirects=True,
                 proxy=proxy,
+                verify=False,
             ) as client:
                 headers = self._randomized_headers()
                 resp = await client.get(url, headers=headers)
