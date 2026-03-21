@@ -492,6 +492,21 @@ export class ScrapeService {
     }
   ) {
     broadcastScrapeProgress(jobId, data);
+
+    // Persist progress so it survives page navigation
+    try {
+      await prisma.scrapeJob.update({
+        where: { id: jobId },
+        data: {
+          progressData: data as any,
+          totalListings: data.propertiesFound ?? undefined,
+          duplicates: data.duplicates ?? undefined,
+          errors: data.errors ?? undefined,
+        },
+      });
+    } catch {
+      // Non-critical — don't block socket broadcast
+    }
   }
 
   /**

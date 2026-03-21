@@ -265,6 +265,21 @@ export default function ScraperPage() {
     }
   }, [activeJob, jobs, pageState]);
 
+  // ── Restore persisted progress when returning to page with a running job
+  const hasRestoredProgress = useRef(false);
+  useEffect(() => {
+    if (activeJob && !liveProgress && !hasRestoredProgress.current) {
+      const pd = (activeJob as any).progressData;
+      if (pd && typeof pd === "object") {
+        setLiveProgress(pd as LiveProgress);
+        hasRestoredProgress.current = true;
+      }
+    }
+    if (!activeJob) {
+      hasRestoredProgress.current = false;
+    }
+  }, [activeJob, liveProgress]);
+
   // ── Load saved config on mount
   useEffect(() => {
     const cfg = loadSavedConfig();

@@ -381,6 +381,7 @@ model ScrapeJob {
   startedAt     DateTime?
   completedAt   DateTime?
   durationMs    Int?
+  progressData  Json?
 
   logs          ScrapeLog[]
 
