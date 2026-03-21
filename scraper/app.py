@@ -22,6 +22,7 @@ from extractors.llm_extractor import (
     extract_listings_from_page,
     extract_detail_from_page,
     merge_listing_detail,
+    llm_navigate,
 )
 from extractors.universal_nlp import detect_listing_type
 from extractors.price_parser import parse_price
@@ -339,29 +340,37 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
                             listing_page_urls.append(site.baseUrl.rstrip("/") + "/" + lp.lstrip("/"))
                     await report_log(job_id, "INFO", f"[{site.name}] Using {len(listing_page_urls)} configured list paths")
                 else:
-                    # Auto-discover listing pages from homepage
-                    await report_log(job_id, "INFO", f"[{site.name}] No listPaths — auto-discovering listing pages...")
+                    # Fetch homepage and let LLM navigate to listing pages
+                    await report_log(job_id, "INFO", f"[{site.name}] No listPaths — LLM navigating to find listing pages...")
                     homepage_html = await fetcher.fetch(site.baseUrl, requires_js=True)
 
                     if homepage_html:
                         total_pages_fetched += 1
 
-                        # Check if homepage itself has listings
-                        if is_listing_page(homepage_html):
-                            listing_page_urls.append(site.baseUrl)
-                            await report_log(job_id, "INFO", f"[{site.name}] Homepage has listings, scraping directly")
+                        # Strategy 1: LLM Navigator — reads all links, picks best listing pages
+                        llm_urls = await llm_navigate(homepage_html, site.baseUrl, site_name=site.name)
+                        if llm_urls:
+                            listing_page_urls.extend(llm_urls[:5])
+                            await report_log(job_id, "INFO",
+                                f"[{site.name}] LLM identified {len(llm_urls)} listing pages")
                         else:
-                            # Discover listing pages from links
-                            discovered = discover_listing_pages(homepage_html, site.baseUrl, max_results=8)
+                            # Strategy 2: Keyword-based discovery (fallback)
+                            discovered = discover_listing_pages(homepage_html, site.baseUrl, max_results=5)
                             if discovered:
                                 listing_page_urls.extend(discovered)
                                 await report_log(job_id, "INFO",
-                                    f"[{site.name}] Discovered {len(discovered)} listing pages")
+                                    f"[{site.name}] Keyword discovery found {len(discovered)} listing pages")
                             else:
-                                # Last resort: try the homepage anyway
-                                listing_page_urls.append(site.baseUrl)
-                                await report_log(job_id, "WARN",
-                                    f"[{site.name}] No listing pages discovered, trying homepage")
+                                # Strategy 3: Check if homepage itself has listings
+                                if is_listing_page(homepage_html):
+                                    listing_page_urls.append(site.baseUrl)
+                                    await report_log(job_id, "INFO",
+                                        f"[{site.name}] Homepage itself has listings")
+                                else:
+                                    await report_log(job_id, "WARN",
+                                        f"[{site.name}] Could not find listing pages — skipping")
+                                    total_errors += 1
+                                    continue
                     else:
                         await report_log(job_id, "ERROR", f"[{site.name}] Could not fetch homepage")
                         total_errors += 1
