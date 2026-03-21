@@ -55,21 +55,21 @@ PROVIDERS = [
         name="Groq",
         base_url="https://api.groq.com/openai/v1",
         api_key_env="GROQ_API_KEY",
-        model="qwen-qwq-32b",
+        model="llama-3.3-70b-versatile",  # Fast, reliable, no <think> overhead
         rpm_limit=30,
     ),
     LLMProvider(
         name="Cerebras",
         base_url="https://api.cerebras.ai/v1",
         api_key_env="CEREBRAS_API_KEY",
-        model="qwen-3-32b",
+        model="llama-3.3-70b",
         rpm_limit=30,
     ),
     LLMProvider(
         name="SambaNova",
         base_url="https://api.sambanova.ai/v1",
         api_key_env="SAMBANOVA_API_KEY",
-        model="Qwen3-32B",
+        model="Meta-Llama-3.3-70B-Instruct",
         rpm_limit=10,
     ),
     LLMProvider(
@@ -82,7 +82,7 @@ PROVIDERS = [
 ]
 
 
-_client = httpx.AsyncClient(timeout=60.0)
+_client = httpx.AsyncClient(timeout=120.0)
 
 
 async def llm_extract(
@@ -97,9 +97,12 @@ async def llm_extract(
     Returns the response text, or None if all providers fail.
     """
     errors = []
+    available = [p.name for p in PROVIDERS if p.available]
+    logger.info(f"[LLM] Calling LLM ({len(prompt)} char prompt). Available providers: {available}")
 
     for provider in PROVIDERS:
         if not provider.available:
+            logger.debug(f"[LLM] {provider.name} unavailable (no key or cooling down)")
             continue
 
         try:
@@ -110,9 +113,14 @@ async def llm_extract(
 
             # Enforce minimum interval between calls (rate limit safety)
             min_interval = 60.0 / provider.rpm_limit
-            elapsed = time.time() - provider._last_call
-            if elapsed < min_interval:
-                await asyncio.sleep(min_interval - elapsed)
+            elapsed_since = time.time() - provider._last_call
+            if elapsed_since < min_interval:
+                wait_time = min_interval - elapsed_since
+                logger.debug(f"[LLM] Rate limit wait {wait_time:.1f}s for {provider.name}")
+                await asyncio.sleep(wait_time)
+
+            logger.info(f"[LLM] Trying {provider.name} ({provider.model})...")
+            start_time = time.time()
 
             resp = await _client.post(
                 f"{provider.base_url}/chat/completions",
@@ -128,14 +136,18 @@ async def llm_extract(
                 },
             )
 
+            duration = time.time() - start_time
+
             if resp.status_code == 429:
                 provider.mark_failure()
-                logger.info(f"[LLM] {provider.name} rate limited, trying next provider")
+                logger.info(f"[LLM] {provider.name} rate limited ({duration:.1f}s), trying next provider")
                 continue
 
             if resp.status_code >= 400:
                 provider.mark_failure()
-                errors.append(f"{provider.name}: HTTP {resp.status_code}")
+                body_preview = resp.text[:200] if resp.text else ""
+                errors.append(f"{provider.name}: HTTP {resp.status_code} - {body_preview}")
+                logger.warning(f"[LLM] {provider.name} HTTP {resp.status_code} ({duration:.1f}s): {body_preview}")
                 continue
 
             data = resp.json()
@@ -147,12 +159,14 @@ async def llm_extract(
                 content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
 
             provider.mark_success()
-            logger.debug(f"[LLM] {provider.name} responded ({len(content)} chars)")
+            logger.info(f"[LLM] {provider.name} responded ({len(content)} chars in {duration:.1f}s)")
             return content
 
         except Exception as e:
+            duration = time.time() - start_time
             provider.mark_failure()
             errors.append(f"{provider.name}: {e}")
+            logger.warning(f"[LLM] {provider.name} exception ({duration:.1f}s): {e}")
             continue
 
     logger.error(f"[LLM] All providers failed: {errors}")
