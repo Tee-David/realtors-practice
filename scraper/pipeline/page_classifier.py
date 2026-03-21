@@ -82,13 +82,14 @@ _LISTING_CARD_SELECTORS = [
 # --- Signals for detail pages ---
 
 _DETAIL_SELECTORS = [
-    "[class*='detail']",
     "[class*='single-property']",
     "[class*='property-detail']",
     "[class*='listing-detail']",
+    "[class*='property-single']",
     ".property-description",
     ".listing-description",
     "#property-details",
+    "#property-detail",
 ]
 
 
@@ -119,24 +120,23 @@ def classify_page(html: str, url: str) -> PageType:
 
     soup = BeautifulSoup(html, "lxml")
 
-    # Check for detail page signals first (single-property view)
-    if _is_detail_page(soup):
+    is_listing = _is_listing_page(soup)
+    is_detail = _is_detail_page(soup)
+
+    # Listing signals take priority over detail signals.
+    # Many listing pages have elements with "detail" in class names or a single H1
+    # with a carousel, which fools _is_detail_page. But if the page also has multiple
+    # property cards or multiple prices, it's clearly a listing page.
+    if is_listing:
+        return "listing"
+
+    if is_detail:
         return "detail"
 
     # Check for category/index page signals
-    # BUT: many Nigerian property sites have "category" pages (e.g. /properties-for-sale-in-lagos)
-    # that ARE listing pages with actual property cards + prices. If a page has both
-    # category signals AND listing signals, it's a listing page.
     if _is_category_page(soup, url):
-        if _is_listing_page(soup):
-            logger.debug(f"Hybrid page (category + listings): {url} — treating as listing")
-            return "listing"
         logger.debug(f"Category/index page detected: {url}")
         return "category"
-
-    # Check for listing page signals (search results with property cards)
-    if _is_listing_page(soup):
-        return "listing"
 
     return "unknown"
 
