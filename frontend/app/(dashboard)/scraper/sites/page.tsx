@@ -4,13 +4,18 @@ import { useState, useMemo, useEffect } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import { useSites, useToggleSite, useDeleteSite, useAddSite, useBulkToggleSites, useBulkDeleteSites, type Site } from "@/hooks/use-sites";
+import { useLearnSite, useBulkLearnSites, useSiteProfile, type SiteProfile } from "@/hooks/use-site-intelligence";
 import {
   Plus, Search, MoreVertical, Trash2, Power, Globe, RefreshCcw, Database,
   Code, Zap, X, Copy, CheckSquare, Square, Layers, ListPlus, Download,
   Upload, List, LayoutGrid, ChevronLeft, ChevronRight, ToggleLeft, ToggleRight,
-  Check, Grid2X2, Grid3X3
+  Check, Grid2X2, Grid3X3, Brain, Eye, Sparkles
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  SideSheet,
+  SideSheetContent,
+} from "@/components/ui/side-sheet";
 import ModernLoader from "@/components/ui/modern-loader";
 import {
   DropdownMenu,
@@ -61,6 +66,10 @@ export default function SitesPage() {
   const addSite = useAddSite();
   const bulkToggle = useBulkToggleSites();
   const bulkDelete = useBulkDeleteSites();
+  const learnSite = useLearnSite();
+  const bulkLearn = useBulkLearnSites();
+  const [profileSiteId, setProfileSiteId] = useState<string | null>(null);
+  const { data: profileData } = useSiteProfile(profileSiteId || "");
 
   // Responsive
   useEffect(() => {
@@ -147,11 +156,17 @@ export default function SitesPage() {
         enabled: true,
         selectors: {},
       }, {
-        onSuccess: () => {
+        onSuccess: (data: any) => {
           toast.success("Site added!");
           setIsAddModalOpen(false);
           setNewSiteName("");
           setNewSiteUrlPath("");
+          // Auto-learn the new site
+          if (data?.id) {
+            learnSite.mutate(data.id, {
+              onSuccess: () => toast.success("Auto-learning site structure..."),
+            });
+          }
         },
         onError: (err: any) => {
           const msg = err.response?.data?.message || err.response?.data?.error || err.message || "Failed to add site.";
@@ -240,7 +255,61 @@ export default function SitesPage() {
     }
   };
 
+  const handleLearn = (id: string, name: string) => {
+    learnSite.mutate(id, {
+      onSuccess: () => toast.success(`Learning ${name}...`),
+      onError: (err: any) => toast.error(err.response?.data?.error || "Failed to start learning"),
+    });
+  };
+
+  const handleBulkLearn = () => {
+    bulkLearn.mutate(selectedSites, {
+      onSuccess: () => { toast.success(`Learning ${selectedSites.length} sites...`); setSelectedSites([]); },
+      onError: () => toast.error("Bulk learn failed"),
+    });
+  };
+
   const gridColOptions = isMobile ? GRID_OPTIONS_MOBILE : GRID_OPTIONS_DESKTOP;
+
+  // ===== Learn Status Badge =====
+  const LearnBadge = ({ site }: { site: Site }) => {
+    const status = site.learnStatus || "NOT_LEARNED";
+    const profile = site.siteProfile as SiteProfile | null | undefined;
+    const confidence = profile?.validation?.confidence;
+
+    switch (status) {
+      case "LEARNING":
+        return (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-orange-500">
+            <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" />
+            Learning...
+          </span>
+        );
+      case "LEARNED":
+        return (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-green-600">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+            {confidence != null ? `${Math.round(confidence * 100)}%` : "Learned"}
+          </span>
+        );
+      case "FAILED":
+        return (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-500">
+            <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+            Failed
+          </span>
+        );
+      case "STALE":
+        return (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-yellow-500">
+            <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
+            Stale
+          </span>
+        );
+      default:
+        return null; // NOT_LEARNED — no badge, keeps it clean
+    }
+  };
 
   // ===== SITE CARD (Grid View) =====
   const SiteGridCard = ({ site }: { site: Site }) => {
@@ -279,6 +348,14 @@ export default function SitesPage() {
                 <DropdownMenuItem onClick={() => handleToggle(site.id, site.enabled)} className="gap-2 cursor-pointer">
                   <Power className="w-3.5 h-3.5" /> {site.enabled ? 'Disable' : 'Enable'}
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleLearn(site.id, site.name)} className="gap-2 cursor-pointer">
+                  <Brain className="w-3.5 h-3.5" /> Learn Site
+                </DropdownMenuItem>
+                {site.learnStatus === "LEARNED" && (
+                  <DropdownMenuItem onClick={() => setProfileSiteId(site.id)} className="gap-2 cursor-pointer">
+                    <Eye className="w-3.5 h-3.5" /> View Profile
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem onClick={() => { navigator.clipboard.writeText(site.id); toast.success("ID copied"); }} className="gap-2 cursor-pointer">
                   <Copy className="w-3.5 h-3.5" /> Copy ID
                 </DropdownMenuItem>
@@ -290,12 +367,15 @@ export default function SitesPage() {
             </DropdownMenu>
           </div>
 
-          {/* Status + toggle */}
+          {/* Status + learn badge + toggle */}
           <div className="flex items-center justify-between mt-auto pt-2">
-            <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider ${site.enabled ? 'text-green-600' : 'text-muted-foreground'}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${site.enabled ? 'bg-green-500 animate-pulse' : 'bg-zinc-400'}`} />
-              {site.enabled ? 'Active' : 'Disabled'}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider ${site.enabled ? 'text-green-600' : 'text-muted-foreground'}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${site.enabled ? 'bg-green-500 animate-pulse' : 'bg-zinc-400'}`} />
+                {site.enabled ? 'Active' : 'Disabled'}
+              </span>
+              <LearnBadge site={site} />
+            </div>
             <button
               onClick={() => handleToggle(site.id, site.enabled)}
               className="transition-colors"
@@ -356,6 +436,11 @@ export default function SitesPage() {
           {site.enabled ? 'Active' : 'Disabled'}
         </span>
 
+        {/* Learn badge */}
+        <span className="hidden md:block shrink-0">
+          <LearnBadge site={site} />
+        </span>
+
         {/* Selectors */}
         <span className="hidden md:flex items-center gap-1 text-xs text-muted-foreground shrink-0">
           <Code className="w-3 h-3" /> {Object.keys(site.selectors || {}).length}
@@ -383,6 +468,14 @@ export default function SitesPage() {
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuItem onClick={() => handleLearn(site.id, site.name)} className="gap-2 cursor-pointer">
+              <Brain className="w-3.5 h-3.5" /> Learn Site
+            </DropdownMenuItem>
+            {site.learnStatus === "LEARNED" && (
+              <DropdownMenuItem onClick={() => setProfileSiteId(site.id)} className="gap-2 cursor-pointer">
+                <Eye className="w-3.5 h-3.5" /> View Profile
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem onClick={() => { navigator.clipboard.writeText(site.id); toast.success("ID copied"); }} className="gap-2 cursor-pointer">
               <Copy className="w-3.5 h-3.5" /> Copy ID
             </DropdownMenuItem>
@@ -712,6 +805,10 @@ export default function SitesPage() {
               className="px-3 py-1.5 rounded-full hover:bg-background/20 transition-colors text-sm font-semibold flex items-center gap-1.5 text-zinc-400">
               <span className="hidden sm:inline">Disable</span>
             </button>
+            <button onClick={handleBulkLearn} disabled={bulkLearn.isPending}
+              className="px-3 py-1.5 rounded-full hover:bg-background/20 transition-colors text-sm font-semibold flex items-center gap-1.5">
+              <Brain className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Learn</span>
+            </button>
             <div className="w-px h-4 bg-background/20" />
             <button onClick={handleBulkDelete} disabled={bulkDelete.isPending}
               className="px-3 py-1.5 rounded-full hover:bg-red-500/20 text-red-400 transition-colors text-sm font-semibold flex items-center gap-1.5">
@@ -723,6 +820,199 @@ export default function SitesPage() {
           </div>
         </div>
       )}
+
+      {/* Profile SideSheet */}
+      <SideSheet open={!!profileSiteId} onOpenChange={(open) => { if (!open) setProfileSiteId(null); }} side="right" width="420px">
+        <SideSheetContent>
+          <div className="flex flex-col h-full bg-card">
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary to-accent z-20" />
+
+            <div className="px-6 pb-4 pt-6 border-b border-border/50 shrink-0 flex justify-between items-start">
+              <div className="min-w-0">
+                <h3 className="font-display font-bold text-lg flex items-center gap-2">
+                  <Brain className="w-5 h-5 text-primary shrink-0" />
+                  <span>Site Profile</span>
+                </h3>
+                <p className="text-xs text-muted-foreground mt-1">{profileData?.name || "Loading..."}</p>
+              </div>
+              <button onClick={() => setProfileSiteId(null)} className="p-2 rounded-full hover:bg-secondary/80 transition-colors text-muted-foreground shrink-0 bg-secondary/30">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+              {profileData ? (() => {
+                const sp = profileData.siteProfile as SiteProfile | null;
+                if (!sp) return <p className="text-sm text-muted-foreground">No profile data yet. Run Learn Site first.</p>;
+                return (
+                  <>
+                    {/* Confidence */}
+                    {sp.validation && (
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Confidence</label>
+                        <div className="flex items-center gap-3">
+                          <div className="flex-1 h-2 bg-secondary rounded-full overflow-hidden">
+                            <div className="h-full rounded-full" style={{ width: `${Math.round(sp.validation.confidence * 100)}%`, backgroundColor: "var(--primary)" }} />
+                          </div>
+                          <span className="text-sm font-bold">{Math.round(sp.validation.confidence * 100)}%</span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">{sp.validation.samplesValid}/{sp.validation.samplesExtracted} samples valid</p>
+                      </div>
+                    )}
+
+                    {/* Entry Points */}
+                    {sp.entryPoints && sp.entryPoints.length > 0 && (
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Entry Points ({sp.entryPoints.length})</label>
+                        <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                          {sp.entryPoints.map((ep, i) => (
+                            <div key={i} className="text-xs p-2.5 rounded-lg bg-secondary/30 border border-border/30">
+                              <p className="font-medium truncate">{ep.category || ep.path}</p>
+                              <div className="flex items-center gap-2 mt-1 text-muted-foreground">
+                                <span>{ep.listingType}</span>
+                                <span className="w-1 h-1 rounded-full bg-border" />
+                                <span>~{ep.estimatedListings} listings</span>
+                                <span className="w-1 h-1 rounded-full bg-border" />
+                                <span>{ep.estimatedPages} pages</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Pagination */}
+                    {sp.pagination && (
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Pagination</label>
+                        <div className="text-sm p-2.5 rounded-lg bg-secondary/30 border border-border/30">
+                          <span className="font-medium capitalize">{sp.pagination.type.replace(/-/g, " ")}</span>
+                          {sp.pagination.urlPattern && <span className="text-muted-foreground ml-2 text-xs">{sp.pagination.urlPattern}</span>}
+                          <span className="text-muted-foreground ml-2 text-xs">({sp.pagination.maxPagesDetected} pages detected)</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Fetching / Anti-bot */}
+                    {sp.fetching && (
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Fetching</label>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div className="p-2.5 rounded-lg bg-secondary/30 border border-border/30">
+                            <p className="text-muted-foreground">Anti-bot</p>
+                            <p className="font-medium capitalize">{sp.fetching.antiBot}</p>
+                          </div>
+                          <div className="p-2.5 rounded-lg bg-secondary/30 border border-border/30">
+                            <p className="text-muted-foreground">Strategy</p>
+                            <p className="font-medium capitalize">{sp.fetching.strategy}</p>
+                          </div>
+                          <div className="p-2.5 rounded-lg bg-secondary/30 border border-border/30">
+                            <p className="text-muted-foreground">Requires JS</p>
+                            <p className="font-medium">{sp.fetching.requiresJs ? "Yes" : "No"}</p>
+                          </div>
+                          <div className="p-2.5 rounded-lg bg-secondary/30 border border-border/30">
+                            <p className="text-muted-foreground">Delay</p>
+                            <p className="font-medium">{sp.fetching.recommendedDelay}s</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* CSS Selectors */}
+                    {sp.cssSelectors && (
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">CSS Selectors</label>
+                        <div className="text-sm p-2.5 rounded-lg bg-secondary/30 border border-border/30 flex items-center justify-between">
+                          <span>{sp.cssSelectors.hasListingSelectors ? `${sp.cssSelectors.fieldCount} fields learned` : "Not available"}</span>
+                          {sp.cssSelectors.hasListingSelectors && (
+                            <span className="text-xs text-muted-foreground">{Math.round(sp.cssSelectors.confidence * 100)}% confidence</span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Estimates */}
+                    {sp.estimates && (
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Estimates</label>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div className="p-2.5 rounded-lg bg-secondary/30 border border-border/30">
+                            <p className="text-muted-foreground">Total Listings</p>
+                            <p className="text-sm font-bold">{sp.estimates.totalListings}</p>
+                          </div>
+                          <div className="p-2.5 rounded-lg bg-secondary/30 border border-border/30">
+                            <p className="text-muted-foreground">Scrape Time</p>
+                            <p className="text-sm font-bold">~{sp.estimates.scrapeTimeMinutes} min</p>
+                          </div>
+                          <div className="p-2.5 rounded-lg bg-secondary/30 border border-border/30">
+                            <p className="text-muted-foreground">Total Pages</p>
+                            <p className="text-sm font-bold">{sp.estimates.totalPages}</p>
+                          </div>
+                          <div className="p-2.5 rounded-lg bg-secondary/30 border border-border/30">
+                            <p className="text-muted-foreground">LLM Calls</p>
+                            <p className="text-sm font-bold">{sp.estimates.llmCallsNeeded}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Price Formats */}
+                    {sp.priceFormats && sp.priceFormats.length > 0 && (
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Price Formats</label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {sp.priceFormats.map((fmt, i) => (
+                            <span key={i} className="px-2 py-1 rounded-md bg-accent/10 text-accent text-xs font-mono">{fmt}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Sample Titles */}
+                    {sp.validation?.sampleTitles && sp.validation.sampleTitles.length > 0 && (
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Sample Properties</label>
+                        <div className="space-y-1">
+                          {sp.validation.sampleTitles.map((title, i) => (
+                            <p key={i} className="text-xs text-muted-foreground truncate">{title}</p>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Meta */}
+                    <div className="pt-2 border-t border-border/30 text-[10px] text-muted-foreground space-y-0.5">
+                      {sp.learnDurationMs != null && <p>Learned in {Math.round(sp.learnDurationMs / 1000)}s</p>}
+                      {sp.llmCallsUsed != null && <p>{sp.llmCallsUsed} LLM calls used</p>}
+                      {profileData.learnedAt && <p>Last learned: {formatDistanceToNow(new Date(profileData.learnedAt), { addSuffix: true })}</p>}
+                    </div>
+                  </>
+                );
+              })() : (
+                <div className="flex items-center justify-center py-12">
+                  <RefreshCcw className="w-5 h-5 animate-spin text-muted-foreground" />
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-border/50 shrink-0 bg-secondary/10 flex gap-2">
+              <button onClick={() => setProfileSiteId(null)} className="flex-1 px-4 py-2.5 rounded-xl font-semibold border hover:bg-secondary transition-colors text-sm">
+                Close
+              </button>
+              {profileSiteId && (
+                <button
+                  onClick={() => { handleLearn(profileSiteId, profileData?.name || ""); setProfileSiteId(null); }}
+                  className="flex-1 px-4 py-2.5 rounded-xl font-bold text-white transition-all text-sm flex items-center justify-center gap-1.5"
+                  style={{ background: "var(--primary)" }}
+                >
+                  <Brain className="w-3.5 h-3.5" /> Re-Learn
+                </button>
+              )}
+            </div>
+          </div>
+        </SideSheetContent>
+      </SideSheet>
     </div>
   );
 }

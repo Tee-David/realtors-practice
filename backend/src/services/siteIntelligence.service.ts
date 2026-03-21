@@ -1,0 +1,283 @@
+import prisma from "../prismaClient";
+import { Prisma } from "@prisma/client";
+import { config } from "../config/env";
+import { Logger } from "../utils/logger.util";
+
+export class SiteIntelligenceService {
+  /**
+   * Trigger a learn job for a single site.
+   * Creates a ScrapeJob with type LEARN_SITE and dispatches to the Python scraper.
+   */
+  static async learnSite(siteId: string, userId?: string) {
+    const site = await prisma.site.findUnique({ where: { id: siteId } });
+    if (!site) throw new Error("Site not found");
+    if (site.deletedAt) throw new Error("Site has been deleted");
+
+    // Create a LEARN_SITE job
+    const job = await prisma.scrapeJob.create({
+      data: {
+        type: "LEARN_SITE",
+        status: "PENDING",
+        siteIds: [siteId],
+        sites: { connect: [{ id: siteId }] },
+        createdById: userId || undefined,
+        startedAt: new Date(),
+      },
+    });
+
+    // Mark site as learning
+    await prisma.site.update({
+      where: { id: siteId },
+      data: { learnStatus: "LEARNING", learnJobId: job.id },
+    });
+
+    // Build learn payload
+    const selectors = (site.selectors || {}) as Record<string, any>;
+    const learnPayload = {
+      jobId: job.id,
+      site: {
+        id: site.id,
+        name: site.name,
+        baseUrl: site.baseUrl,
+        listPaths: site.listPaths || [],
+        listingSelector: selectors.listingSelector || selectors.listing_container || "",
+        selectors: (site.detailSelectors || selectors) as Record<string, any>,
+        paginationType: site.paginationType,
+        paginationConfig: selectors.paginationConfig || {},
+        requiresJs: site.requiresBrowser,
+        maxPages: site.maxPages,
+        delayMin: selectors.delayMin || undefined,
+        delayMax: selectors.delayMax || undefined,
+      },
+      callbackUrl:
+        config.env === "production"
+          ? process.env.API_BASE_URL || "https://realtors-practice-new-api.onrender.com/api"
+          : `http://localhost:${config.port}/api`,
+    };
+
+    // Dispatch — GitHub Actions first, direct HTTP fallback
+    let dispatched = false;
+
+    if (config.github.pat && config.github.repo) {
+      try {
+        const [owner, repo] = config.github.repo.split("/");
+        const response = await fetch(
+          `https://api.github.com/repos/${owner}/${repo}/dispatches`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${config.github.pat}`,
+              Accept: "application/vnd.github.v3+json",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              event_type: "trigger-learn",
+              client_payload: {
+                jobId: job.id,
+                type: "learn",
+                learnPayload: JSON.stringify(learnPayload),
+              },
+            }),
+            signal: AbortSignal.timeout(10000),
+          }
+        );
+
+        if (response.status === 204 || response.ok) {
+          dispatched = true;
+          Logger.info(`Learn job ${job.id} dispatched to GitHub Actions for site ${site.name}`);
+        } else {
+          const body = await response.text();
+          throw new Error(`GitHub API responded ${response.status}: ${body}`);
+        }
+      } catch (err: any) {
+        Logger.warn(`GitHub Actions learn dispatch failed: ${err.message}`);
+      }
+    }
+
+    // Fallback: direct HTTP
+    if (!dispatched) {
+      try {
+        const response = await fetch(`${config.scraper.url}/api/learn`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Internal-Key": config.scraper.internalKey,
+          },
+          body: JSON.stringify(learnPayload),
+          signal: AbortSignal.timeout(10000),
+        });
+
+        if (response.ok) {
+          dispatched = true;
+          Logger.info(`Learn job ${job.id} dispatched via HTTP for site ${site.name}`);
+        } else {
+          const body = await response.text();
+          throw new Error(`Scraper responded ${response.status}: ${body}`);
+        }
+      } catch (err: any) {
+        Logger.warn(`Direct HTTP learn dispatch failed: ${err.message}`);
+      }
+    }
+
+    if (dispatched) {
+      await prisma.scrapeJob.update({
+        where: { id: job.id },
+        data: { status: "RUNNING" },
+      });
+    } else {
+      await prisma.scrapeJob.update({
+        where: { id: job.id },
+        data: { status: "FAILED" },
+      });
+      await prisma.site.update({
+        where: { id: siteId },
+        data: { learnStatus: "FAILED" },
+      });
+      throw new Error("Failed to dispatch learn job");
+    }
+
+    return job;
+  }
+
+  /**
+   * Trigger learn for multiple sites (sequentially dispatched).
+   */
+  static async bulkLearnSites(siteIds: string[], userId?: string) {
+    const results: Array<{ siteId: string; jobId: string; error?: string }> = [];
+
+    for (const siteId of siteIds) {
+      try {
+        const job = await this.learnSite(siteId, userId);
+        results.push({ siteId, jobId: job.id });
+      } catch (err: any) {
+        results.push({ siteId, jobId: "", error: err.message });
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Handle learn results from Python scraper.
+   */
+  static async handleLearnResults(
+    jobId: string,
+    siteId: string,
+    data: {
+      siteProfile?: Record<string, any>;
+      selectors?: Record<string, any>;
+      detailSelectors?: Record<string, any>;
+      listPaths?: string[];
+    }
+  ) {
+    const updateData: Record<string, any> = {
+      learnStatus: "LEARNED",
+      learnedAt: new Date(),
+    };
+
+    if (data.siteProfile) {
+      updateData.siteProfile = data.siteProfile as Prisma.InputJsonValue;
+    }
+
+    if (data.selectors) {
+      updateData.selectors = data.selectors as Prisma.InputJsonValue;
+    }
+
+    if (data.detailSelectors) {
+      updateData.detailSelectors = data.detailSelectors as Prisma.InputJsonValue;
+    }
+
+    if (data.listPaths && data.listPaths.length > 0) {
+      // Merge with existing listPaths
+      const existing = await prisma.site.findUnique({
+        where: { id: siteId },
+        select: { listPaths: true },
+      });
+      const allPaths = new Set([...(existing?.listPaths || []), ...data.listPaths]);
+      updateData.listPaths = Array.from(allPaths);
+    }
+
+    await prisma.site.update({
+      where: { id: siteId },
+      data: updateData,
+    });
+
+    // Mark job as completed
+    await prisma.scrapeJob.update({
+      where: { id: jobId },
+      data: {
+        status: "COMPLETED",
+        completedAt: new Date(),
+        durationMs: data.siteProfile?.learnDurationMs || null,
+      },
+    });
+
+    Logger.info(`Learn results saved for site ${siteId} (job ${jobId})`);
+  }
+
+  /**
+   * Get scrape time estimate for selected sites.
+   */
+  static async estimateScrape(siteIds: string[]) {
+    const sites = await prisma.site.findMany({
+      where: { id: { in: siteIds }, deletedAt: null },
+      select: {
+        id: true,
+        name: true,
+        learnStatus: true,
+        siteProfile: true,
+        avgListings: true,
+        maxPages: true,
+      },
+    });
+
+    let totalEstimatedMinutes = 0;
+    let totalEstimatedListings = 0;
+    let unlearnedCount = 0;
+
+    const perSite = sites.map((site) => {
+      const profile = site.siteProfile as Record<string, any> | null;
+
+      if (site.learnStatus !== "LEARNED" || !profile?.estimates) {
+        unlearnedCount++;
+        // Rough estimate for unlearned sites
+        const roughMinutes = 8; // ~8 min per unlearned site (LLM navigation + extraction)
+        const roughListings = site.avgListings || 30;
+        totalEstimatedMinutes += roughMinutes;
+        totalEstimatedListings += roughListings;
+        return {
+          siteId: site.id,
+          siteName: site.name,
+          learned: false,
+          estimatedMinutes: roughMinutes,
+          estimatedListings: roughListings,
+          confidence: null,
+        };
+      }
+
+      const estimates = profile.estimates as Record<string, number>;
+      const minutes = estimates.scrapeTimeMinutes || 5;
+      const listings = estimates.totalListings || site.avgListings || 0;
+      const confidence = (profile.validation as Record<string, number>)?.confidence || 0;
+
+      totalEstimatedMinutes += minutes;
+      totalEstimatedListings += listings;
+
+      return {
+        siteId: site.id,
+        siteName: site.name,
+        learned: true,
+        estimatedMinutes: Math.round(minutes),
+        estimatedListings: listings,
+        confidence: Math.round(confidence * 100),
+      };
+    });
+
+    return {
+      totalEstimatedMinutes: Math.round(totalEstimatedMinutes),
+      totalEstimatedListings,
+      perSite,
+      unlearnedCount,
+    };
+  }
+}

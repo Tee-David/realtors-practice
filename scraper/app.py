@@ -18,11 +18,13 @@ from pydantic import BaseModel, Field, field_validator
 from config import config
 from engine.adaptive_fetcher import AdaptiveFetcher
 from engine.page_discovery import discover_listing_pages, is_listing_page
+from pipeline.page_classifier import classify_page
 from extractors.llm_extractor import (
     extract_listings_from_page,
     extract_detail_from_page,
     merge_listing_detail,
     llm_navigate,
+    prioritize_nav_results,
 )
 from extractors.universal_nlp import detect_listing_type
 from extractors.price_parser import parse_price
@@ -34,7 +36,8 @@ from pipeline.normalizer import normalize_property
 from pipeline.enricher import enrich_property
 from utils.callback import (
     report_progress, report_results, report_error,
-    report_log, report_property, set_api_base_url,
+    report_log, report_property, report_learned_data,
+    report_learn_results, set_api_base_url,
 )
 from utils.robots_checker import is_allowed as robots_allowed, get_crawl_delay
 from utils.url_normalizer import normalize_url, VisitedSet
@@ -196,6 +199,65 @@ async def stop_job(job_id: str, x_internal_key: str = Header(...)):
     return {"jobId": job_id, "status": "STOPPING"}
 
 
+# --- Learn Site Endpoint ---
+
+class LearnSiteRequest(BaseModel):
+    jobId: str
+    site: SiteConfig
+    callbackUrl: str | None = None
+
+
+@app.post("/api/learn", dependencies=[])
+async def learn_site_endpoint(
+    request: LearnSiteRequest,
+    x_internal_key: str = Header(...),
+):
+    verify_internal_key(x_internal_key)
+    _update_job_status(request.jobId, status="running")
+    asyncio.create_task(_run_learn_job(request))
+    return {"jobId": request.jobId, "status": "STARTED"}
+
+
+async def _run_learn_job(request: LearnSiteRequest) -> None:
+    """Run a site learning job with a 15-minute timeout."""
+    if request.callbackUrl:
+        set_api_base_url(request.callbackUrl)
+
+    try:
+        from pipeline.site_learner import learn_site
+
+        fetcher = AdaptiveFetcher()
+        try:
+            result = await asyncio.wait_for(
+                learn_site(request.site, request.jobId, fetcher),
+                timeout=900,  # 15 minutes max
+            )
+
+            # Report results back to backend
+            await report_learn_results(
+                job_id=request.jobId,
+                site_id=result.site_id,
+                site_profile=result.site_profile,
+                selectors=result.selectors,
+                detail_selectors=result.detail_selectors,
+                list_paths=result.list_paths,
+            )
+            _update_job_status(request.jobId, status="completed")
+            logger.info(f"Learn job {request.jobId} completed for site {request.site.name}")
+
+        finally:
+            await fetcher.close()
+
+    except asyncio.TimeoutError:
+        logger.error(f"Learn job {request.jobId} timed out after 15 minutes")
+        _update_job_status(request.jobId, status="failed")
+        await report_error(request.jobId, "Learn job timed out after 15 minutes")
+    except Exception as e:
+        logger.exception(f"Learn job {request.jobId} failed: {e}")
+        _update_job_status(request.jobId, status="failed")
+        await report_error(request.jobId, str(e))
+
+
 # --- Helpers ---
 
 def _is_stopped(job_id: str) -> bool:
@@ -316,6 +378,7 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
             )
 
             site_properties: list[dict[str, Any]] = []
+            urls_with_successful_extraction: set[str] = set()
 
             try:
                 # Check robots.txt
@@ -348,11 +411,20 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
                         total_pages_fetched += 1
 
                         # Strategy 1: LLM Navigator — reads all links, picks best listing pages
-                        llm_urls = await llm_navigate(homepage_html, site.baseUrl, site_name=site.name)
-                        if llm_urls:
-                            listing_page_urls.extend(llm_urls[:5])
+                        # Pass existing listPaths so LLM finds NEW paths
+                        nav_results = await llm_navigate(
+                            homepage_html, site.baseUrl,
+                            site_name=site.name,
+                            existing_list_paths=site.listPaths if site.listPaths else None,
+                        )
+                        if nav_results:
+                            llm_urls = prioritize_nav_results(nav_results, max_urls=8)
+                            listing_page_urls.extend(llm_urls)
+                            # Log the categories found
+                            categories = set(r.get("listing_type", "?") for r in nav_results)
                             await report_log(job_id, "INFO",
-                                f"[{site.name}] LLM identified {len(llm_urls)} listing pages")
+                                f"[{site.name}] LLM identified {len(llm_urls)} listing pages "
+                                f"(categories: {', '.join(categories)})")
                         else:
                             # Strategy 2: Keyword-based discovery (fallback)
                             discovered = discover_listing_pages(homepage_html, site.baseUrl, max_results=5)
@@ -387,6 +459,38 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
 
                     await report_log(job_id, "INFO", f"[{site.name}] Crawling: {lp_url}")
 
+                    # Classification gate: skip non-listing pages before investing in pagination
+                    probe_html = await fetcher.fetch(lp_url, requires_js=True)
+                    if probe_html:
+                        page_type = classify_page(probe_html, lp_url)
+                        if page_type == "category":
+                            await report_log(job_id, "INFO",
+                                f"[{site.name}] Skipping category/directory page: {lp_url}")
+                            continue
+                        if page_type == "detail":
+                            # Single property page — extract directly, skip pagination
+                            await report_log(job_id, "INFO",
+                                f"[{site.name}] URL is a detail page, extracting directly: {lp_url}")
+                            detail_data = await extract_detail_from_page(
+                                probe_html, lp_url, site_name=site.name,
+                            )
+                            if detail_data:
+                                raw_data = _to_property_dict(detail_data, site.name)
+                                normalized = normalize_property(raw_data, site.name)
+                                validated = validate_property(normalized)
+                                if not deduplicator.is_duplicate(validated):
+                                    site_properties.append(validated)
+                                    await report_property(job_id, {
+                                        "title": validated.get("title"),
+                                        "price": validated.get("price"),
+                                        "location": validated.get("area") or validated.get("state"),
+                                        "bedrooms": validated.get("bedrooms"),
+                                        "bathrooms": validated.get("bathrooms"),
+                                        "image": (validated.get("images") or [None])[0],
+                                        "source": site.name,
+                                    })
+                            continue
+
                     # Use browser-session pagination to collect all pages
                     collected_pages = await fetcher.render_and_collect_pages(
                         lp_url, max_pages=site.maxPages,
@@ -415,8 +519,16 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
                         if _is_stopped(job_id):
                             break
 
-                        # Check if page looks like it has listings
-                        if page_num > 0 and not is_listing_page(html):
+                        # Classification gate: skip non-listing pages before expensive LLM call
+                        page_type = classify_page(html, page_url)
+                        if page_type in ("category", "detail"):
+                            await report_log(job_id, "DEBUG",
+                                f"[{site.name}] Page {page_num + 1} classified as '{page_type}', skipping LLM extraction")
+                            consecutive_empty += 1
+                            if consecutive_empty >= 2:
+                                break
+                            continue
+                        if page_num > 0 and page_type == "unknown" and not is_listing_page(html):
                             await report_log(job_id, "DEBUG",
                                 f"[{site.name}] Page {page_num + 1} doesn't look like listings, skipping")
                             consecutive_empty += 1
@@ -424,13 +536,59 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
                                 break
                             continue
 
-                        # LLM extraction — the core: reads the page and returns structured data
-                        await report_log(job_id, "INFO",
-                            f"[{site.name}] LLM extracting listings from page {page_num + 1}...")
+                        # ─── Extraction: CSS fast path → LLM fallback ───
+                        listings = None
 
-                        listings = await extract_listings_from_page(
-                            html, page_url, site_name=site.name,
-                        )
+                        # Try CSS selectors first (free, fast) if site has learned selectors
+                        stored_selectors = site.selectors or {}
+                        container_sel = stored_selectors.get("listing_container", "")
+                        field_sels = {
+                            k: v for k, v in stored_selectors.items()
+                            if k not in ("listing_container", "_confidence", "_learned_at", "_stale",
+                                         "listingSelector", "listing_link", "paginationConfig",
+                                         "delayMin", "delayMax")
+                            and isinstance(v, str) and v
+                        }
+
+                        if container_sel and field_sels and not stored_selectors.get("_stale"):
+                            from extractors.selector_learner import extract_with_selectors
+                            css_listings = extract_with_selectors(html, container_sel, field_sels)
+                            if css_listings and len(css_listings) >= 2:
+                                listings = css_listings
+                                await report_log(job_id, "INFO",
+                                    f"[{site.name}] CSS selectors extracted {len(listings)} listings "
+                                    f"from page {page_num + 1} (no LLM needed)")
+
+                        # Fall back to LLM extraction
+                        if listings is None:
+                            await report_log(job_id, "INFO",
+                                f"[{site.name}] LLM extracting listings from page {page_num + 1}...")
+
+                            listings = await extract_listings_from_page(
+                                html, page_url, site_name=site.name,
+                            )
+
+                            # Learn selectors from successful LLM extraction
+                            if listings and len(listings) >= 2:
+                                try:
+                                    from extractors.selector_learner import learn_selectors_from_extraction
+                                    learned = learn_selectors_from_extraction(html, listings, page_url)
+                                    if learned and learned.confidence >= 0.5:
+                                        await report_learned_data(
+                                            job_id=job_id,
+                                            site_id=site.id,
+                                            selectors={
+                                                "listing_container": learned.listing_container,
+                                                **learned.fields,
+                                                "_confidence": learned.confidence,
+                                                "_learned_at": learned.learned_at,
+                                            },
+                                        )
+                                        await report_log(job_id, "INFO",
+                                            f"[{site.name}] Learned {len(learned.fields)} CSS selectors "
+                                            f"(confidence: {learned.confidence:.0%})")
+                                except Exception as e:
+                                    logger.debug(f"Selector learning failed for {site.name}: {e}")
 
                         if not listings:
                             await report_log(job_id, "WARN",
@@ -443,6 +601,7 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
                             continue
 
                         consecutive_empty = 0
+                        urls_with_successful_extraction.add(page_url)
                         await report_log(job_id, "INFO",
                             f"[{site.name}] Found {len(listings)} listings on page {page_num + 1}")
 
@@ -526,6 +685,29 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
             except Exception as e:
                 total_errors += 1
                 await report_log(job_id, "ERROR", f"Error scraping site {site.name}: {str(e)}")
+
+            # ─── PHASE 5: Persist learned listPaths ───
+            # If we discovered listing URLs via LLM and they produced results,
+            # save them as listPaths so the next scrape skips navigation
+            if (site_properties
+                and urls_with_successful_extraction
+                and not (site.listPaths and any(lp.strip() for lp in site.listPaths))):
+                validated_paths = []
+                for url in urls_with_successful_extraction:
+                    path = urlparse(url).path
+                    if path and path != "/":
+                        validated_paths.append(path)
+                if validated_paths:
+                    try:
+                        await report_learned_data(
+                            job_id=job_id,
+                            site_id=site.id,
+                            list_paths=validated_paths,
+                        )
+                        await report_log(job_id, "INFO",
+                            f"[{site.name}] Saved {len(validated_paths)} validated listPaths for future scrapes")
+                    except Exception as e:
+                        logger.warning(f"Failed to persist listPaths for {site.name}: {e}")
 
             await report_log(job_id, "INFO",
                 f"Site {site.name}: scraped {len(site_properties)} properties")

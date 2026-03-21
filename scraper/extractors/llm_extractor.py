@@ -72,14 +72,22 @@ RULES:
 - features: list amenities, facilities, specifications
 - Return ONLY valid JSON object. No explanation, no markdown."""
 
-NAVIGATOR_SYSTEM_PROMPT = """You are a web navigation expert for real estate websites. Your job is to look at a website's links and identify which URLs lead to property LISTING pages (pages showing multiple properties for sale or rent).
+NAVIGATOR_SYSTEM_PROMPT = """You are a navigation expert for Nigerian real estate websites. Your job is to find ALL property listing category URLs on a website — covering different transaction types and property types.
+
+Nigerian real estate sites typically organize listings by:
+1. Transaction type: For Sale, For Rent, Shortlet (short-term rental)
+2. Property type: Houses, Apartments/Flats, Land, Commercial, Duplex
+3. Location: Lagos (Lekki, Ikeja, Ikoyi, Ajah, VI), Abuja, Port Harcourt
 
 RULES:
-- Return a JSON array of objects: [{"url": "...", "reason": "..."}, ...]
-- Pick the BEST 3-5 URLs that are most likely to show property listings
-- Prefer URLs with words like: properties, for-sale, for-rent, listings, houses, apartments, flats, buy, rent
-- Prefer URLs that seem to be browse/search/catalog pages (NOT individual property pages, NOT blog posts, NOT about pages)
-- If the site is Nigerian real estate, look for Lagos-specific listing pages
+- Return a JSON array: [{"url": "...", "category": "...", "listing_type": "sale|rent|shortlet", "property_type": "general|houses|apartments|land|commercial", "reason": "..."}]
+- Find 5-10 URLs covering DIFFERENT categories (don't pick 5 "for sale" URLs)
+- Prioritize diversity: include sale listings, rent listings, and shortlet if available
+- Prefer URLs with location filters (especially Lagos — the most active market)
+- Look for browse/search/catalog pages showing MULTIPLE properties
+- Do NOT include: individual property pages, blog posts, about pages, agent profiles, login/register, contact pages
+- Do NOT include the homepage itself
+- If the site has search/filter pages, prefer those with pre-set filters (e.g. /properties-for-sale-in-lagos)
 - Return ONLY valid JSON array. No explanation."""
 
 
@@ -217,11 +225,17 @@ def html_to_clean_text(html: str, base_url: str = "") -> str:
     return text
 
 
-async def llm_navigate(html: str, base_url: str, site_name: str = "") -> list[str]:
-    """Ask the LLM to identify the best listing page URLs from a homepage.
+async def llm_navigate(
+    html: str,
+    base_url: str,
+    site_name: str = "",
+    existing_list_paths: list[str] | None = None,
+) -> list[dict[str, str]]:
+    """Ask the LLM to identify listing category URLs from a homepage.
 
-    The LLM reads all links on the page and picks the ones most likely
-    to lead to property listing pages. This is smarter than keyword matching.
+    Returns list of dicts with: url, category, listing_type, property_type, reason.
+    The LLM is category-aware — it tries to find URLs for sale, rent, AND shortlet
+    listings rather than picking 5 URLs all pointing to the same listing type.
     """
     links_text = html_to_links_text(html, base_url)
 
@@ -229,12 +243,17 @@ async def llm_navigate(html: str, base_url: str, site_name: str = "") -> list[st
         logger.warning(f"[LLM Navigator] Too few links on {site_name} homepage")
         return []
 
-    prompt = f"""Look at this {site_name} real estate website and identify the URLs that lead to property LISTING pages (pages showing multiple properties for sale or rent).
+    existing_note = ""
+    if existing_list_paths:
+        paths_str = ", ".join(existing_list_paths[:10])
+        existing_note = f"\n\nNOTE: These paths are already known: {paths_str}\nFind ADDITIONAL listing pages the site offers beyond these."
 
-{links_text}
+    prompt = f"""Look at this {site_name} Nigerian real estate website and identify URLs that lead to property LISTING pages (pages showing multiple properties).
 
-Return the 3-5 best URLs as a JSON array of objects: [{{"url": "full_url", "reason": "why this is a listing page"}}]
-Only include URLs that likely show MULTIPLE property listings. Do NOT include individual property pages, blog posts, about pages, or contact pages."""
+{links_text}{existing_note}
+
+Return 5-10 URLs as a JSON array covering DIFFERENT listing categories (sale, rent, shortlet, different property types).
+Each object: {{"url": "full_url", "category": "descriptive name", "listing_type": "sale|rent|shortlet", "property_type": "general|houses|apartments|land|commercial", "reason": "why"}}"""
 
     result = await llm_extract_json(
         prompt=prompt,
@@ -249,15 +268,76 @@ Only include URLs that likely show MULTIPLE property listings. Do NOT include in
     if isinstance(result, dict):
         result = [result]
 
-    urls = []
+    nav_results = []
+    seen_urls = set()
+    base_domain = urlparse(base_url).netloc
+
     for item in result:
-        if isinstance(item, dict) and item.get("url"):
-            url = item["url"]
-            if not url.startswith("http"):
-                url = urljoin(base_url, url)
-            urls.append(url)
-            reason = item.get("reason", "")
-            logger.info(f"[LLM Navigator] {site_name}: {url} — {reason}")
+        if not isinstance(item, dict) or not item.get("url"):
+            continue
+
+        url = item["url"]
+        if not url.startswith("http"):
+            url = urljoin(base_url, url)
+
+        # Skip external URLs
+        if urlparse(url).netloc != base_domain:
+            continue
+
+        # Deduplicate
+        normalized = url.rstrip("/").lower()
+        if normalized in seen_urls:
+            continue
+        seen_urls.add(normalized)
+
+        nav_results.append({
+            "url": url,
+            "category": item.get("category", ""),
+            "listing_type": item.get("listing_type", "sale"),
+            "property_type": item.get("property_type", "general"),
+            "reason": item.get("reason", ""),
+        })
+
+        logger.info(
+            f"[LLM Navigator] {site_name}: {url} — "
+            f"{item.get('listing_type', '?')}/{item.get('property_type', '?')} — "
+            f"{item.get('reason', '')}"
+        )
+
+    return nav_results
+
+
+def prioritize_nav_results(results: list[dict[str, str]], max_urls: int = 8) -> list[str]:
+    """Prioritize navigation results to cover diverse listing categories.
+
+    Ensures at least one URL per listing_type (sale, rent, shortlet)
+    rather than all URLs pointing to the same type.
+    """
+    if not results:
+        return []
+
+    # Group by listing_type
+    by_type: dict[str, list[str]] = {}
+    for r in results:
+        lt = r.get("listing_type", "sale")
+        by_type.setdefault(lt, []).append(r["url"])
+
+    urls: list[str] = []
+    seen: set[str] = set()
+
+    # Round-robin: take 1-2 from each type to ensure diversity
+    type_order = ["sale", "rent", "shortlet"]
+    for lt in type_order:
+        for url in by_type.get(lt, [])[:2]:
+            if url not in seen and len(urls) < max_urls:
+                urls.append(url)
+                seen.add(url)
+
+    # Fill remaining slots with any remaining URLs
+    for r in results:
+        if r["url"] not in seen and len(urls) < max_urls:
+            urls.append(r["url"])
+            seen.add(r["url"])
 
     return urls
 

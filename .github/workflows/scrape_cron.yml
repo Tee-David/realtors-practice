@@ -13,9 +13,9 @@ on:
         required: false
         default: ''
 
-  # Triggered from backend API (user clicks "Scrape" in the app)
+  # Triggered from backend API (user clicks "Scrape" or "Learn Site" in the app)
   repository_dispatch:
-    types: [trigger-scrape]
+    types: [trigger-scrape, trigger-learn]
 
 jobs:
   scrape:
@@ -56,17 +56,27 @@ jobs:
           if [ "$EVENT_NAME" = "repository_dispatch" ]; then
             # Manual trigger from app — payload already contains the job info
             echo "Triggered from app (repository_dispatch)"
-            SCRAPER_PAYLOAD=$(echo "$CLIENT_PAYLOAD" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('scraperPayload',''))")
+            JOB_TYPE=$(echo "$CLIENT_PAYLOAD" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('type','scrape'))")
             JOB_ID=$(echo "$CLIENT_PAYLOAD" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('jobId',''))")
 
+            if [ "$JOB_TYPE" = "learn" ]; then
+              # Learn job — payload is in learnPayload
+              SCRAPER_PAYLOAD=$(echo "$CLIENT_PAYLOAD" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('learnPayload',''))")
+              echo "job_type=learn" >> "$GITHUB_OUTPUT"
+            else
+              # Scrape job — payload is in scraperPayload
+              SCRAPER_PAYLOAD=$(echo "$CLIENT_PAYLOAD" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('scraperPayload',''))")
+              echo "job_type=scrape" >> "$GITHUB_OUTPUT"
+            fi
+
             if [ -z "$SCRAPER_PAYLOAD" ] || [ "$SCRAPER_PAYLOAD" = "None" ]; then
-              echo "::error::No scraperPayload in repository_dispatch"
+              echo "::error::No payload in repository_dispatch"
               exit 1
             fi
 
             echo "$SCRAPER_PAYLOAD" > /tmp/scraper_payload.json
             echo "job_id=$JOB_ID" >> "$GITHUB_OUTPUT"
-            echo "Job ID: $JOB_ID"
+            echo "Job ID: $JOB_ID (type: $JOB_TYPE)"
           else
             # Scheduled or manual GH trigger — ask backend to create the job
             echo "Triggered by $EVENT_NAME — creating job via backend API"
@@ -89,6 +99,7 @@ jobs:
             python3 -c "import json; d=json.load(open('/tmp/create_response.json')); json.dump(d['scraperPayload'], open('/tmp/scraper_payload.json','w'))"
 
             echo "job_id=$JOB_ID" >> "$GITHUB_OUTPUT"
+            echo "job_type=scrape" >> "$GITHUB_OUTPUT"
             echo "Job ID: $JOB_ID"
           fi
 
@@ -134,10 +145,18 @@ jobs:
             exit 1
           fi
 
-          # Submit the scrape job to the local scraper
-          echo "Submitting scrape job..."
+          # Determine endpoint based on job type (learn vs scrape)
+          JOB_TYPE="${{ steps.payload.outputs.job_type }}"
+          if [ "$JOB_TYPE" = "learn" ]; then
+            ENDPOINT="http://127.0.0.1:8000/api/learn"
+            echo "Submitting learn job..."
+          else
+            ENDPOINT="http://127.0.0.1:8000/api/jobs"
+            echo "Submitting scrape job..."
+          fi
+
           HTTP_STATUS=$(curl -s -o /tmp/job_response.json -w "%{http_code}" \
-            -X POST "http://127.0.0.1:8000/api/jobs" \
+            -X POST "$ENDPOINT" \
             -H "Content-Type: application/json" \
             -H "X-Internal-Key: $INTERNAL_API_KEY" \
             -d @/tmp/scraper_payload.json)
@@ -156,7 +175,11 @@ jobs:
 
           # Poll the scraper's job status until complete
           JOB_ID="${{ steps.payload.outputs.job_id }}"
-          MAX_WAIT=6000  # 100 minutes max
+          if [ "$JOB_TYPE" = "learn" ]; then
+            MAX_WAIT=1200  # 20 minutes max for learn jobs
+          else
+            MAX_WAIT=6000  # 100 minutes max for scrape jobs
+          fi
           ELAPSED=0
           POLL_INTERVAL=15
 

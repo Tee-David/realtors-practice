@@ -11,6 +11,9 @@ export interface Site {
   enabled: boolean;
   selectors: Record<string, string>;
   lastScrapeAt: string | null;
+  learnStatus?: "NOT_LEARNED" | "LEARNING" | "LEARNED" | "FAILED" | "STALE";
+  learnedAt?: string | null;
+  siteProfile?: Record<string, unknown> | null;
   createdAt: string;
   updatedAt: string;
 }

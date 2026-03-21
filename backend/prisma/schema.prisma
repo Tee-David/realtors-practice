@@ -68,6 +68,7 @@ enum ScrapeJobType {
   ACTIVE_INTENT
   RESCRAPE
   SCHEDULED
+  LEARN_SITE
 }
 
 enum UserRole {
@@ -168,6 +169,12 @@ model Site {
   avgListings     Int       @default(0)
   healthScore     Float     @default(100)
 
+  // Site Intelligence (learn-once, scrape-fast)
+  learnStatus     String    @default("NOT_LEARNED")
+  learnedAt       DateTime?
+  learnJobId      String?
+  siteProfile     Json?
+
   properties      Property[]
   scrapeJobs      ScrapeJob[]
   scrapeLogs      ScrapeLog[]
@@ -178,6 +185,7 @@ model Site {
 
   @@index([key])
   @@index([enabled])
+  @@index([learnStatus])
   @@index([deletedAt])
 }
 

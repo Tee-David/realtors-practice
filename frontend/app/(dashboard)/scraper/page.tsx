@@ -38,6 +38,7 @@ import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { useSites, type Site } from "@/hooks/use-sites";
+import { useScrapeEstimate, useBulkLearnSites, type ScrapeEstimate } from "@/hooks/use-site-intelligence";
 import {
   SideSheet,
   SideSheetContent,
@@ -196,6 +197,9 @@ export default function ScraperPage() {
   }, [sitesData]);
 
   const { socket, isConnected } = useSocket({ namespace: "/scrape" });
+  const scrapeEstimate = useScrapeEstimate();
+  const bulkLearnSites = useBulkLearnSites();
+  const [estimate, setEstimate] = useState<ScrapeEstimate | null>(null);
 
   // ── Live state
   const [logs, setLogs] = useState<{ id: number; message: string; timestamp: string; level: string }[]>([]);
@@ -419,6 +423,22 @@ export default function ScraperPage() {
   }, [logs]);
 
   // ── Site helpers
+  // ── Fetch estimate when selected sites change
+  useEffect(() => {
+    if (scrapeMode === "PASSIVE_BULK" && selectedSiteIds.length > 0 && isConfigOpen) {
+      scrapeEstimate.mutate(selectedSiteIds, { onSuccess: setEstimate });
+    } else {
+      setEstimate(null);
+    }
+  }, [selectedSiteIds, scrapeMode, isConfigOpen]);
+
+  const unlearnedSites = useMemo(() =>
+    selectedSiteIds
+      .map(id => allSites.find((s: Site) => s.id === id))
+      .filter((s): s is Site => !!s && (!s.learnStatus || s.learnStatus === "NOT_LEARNED")),
+    [selectedSiteIds, allSites]
+  );
+
   const enabledSites = useMemo(() => allSites.filter((s: Site) => s.enabled), [allSites]);
   const filteredSources = useMemo(() => {
     if (!sourceSearch) return enabledSites;
@@ -727,6 +747,7 @@ export default function ScraperPage() {
                         <span className="text-sm font-medium truncate block">{site.name}</span>
                         <span className="text-[10px] text-muted-foreground truncate block">
                           {new URL(site.baseUrl).hostname}
+                          {site.learnStatus === "LEARNED" ? " · Profiled" : site.learnStatus === "LEARNING" ? " · Learning..." : ""}
                         </span>
                       </div>
                       <input
@@ -796,6 +817,65 @@ export default function ScraperPage() {
           />
           <p className="text-[10px] text-muted-foreground pl-1">Leave empty to run immediately.</p>
         </div>
+
+        {/* Unlearned Sites Warning */}
+        {scrapeMode === "PASSIVE_BULK" && unlearnedSites.length > 0 && (
+          <div className="p-3 rounded-xl bg-yellow-500/10 border border-yellow-500/20 space-y-2 animate-in fade-in">
+            <div className="flex items-start gap-2">
+              <Sparkles className="w-4 h-4 text-yellow-500 mt-0.5 shrink-0" />
+              <div className="text-xs">
+                <p className="font-semibold text-yellow-600">
+                  {unlearnedSites.length} site{unlearnedSites.length > 1 ? "s haven't" : " hasn't"} been learned yet
+                </p>
+                <p className="text-muted-foreground mt-0.5">Scrape may be slower and less accurate without a site profile.</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const ids = unlearnedSites.map(s => s.id);
+                  bulkLearnSites.mutate(ids, {
+                    onSuccess: () => toast.success(`Learning ${ids.length} site${ids.length > 1 ? "s" : ""}...`),
+                    onError: () => toast.error("Failed to start learning"),
+                  });
+                }}
+                disabled={bulkLearnSites.isPending}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold border border-yellow-500/30 hover:bg-yellow-500/10 transition-colors"
+                style={{ color: "var(--foreground)" }}
+              >
+                Learn Now
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Scrape Estimate */}
+        {scrapeMode === "PASSIVE_BULK" && estimate && selectedSiteIds.length > 0 && (
+          <div className="space-y-2 animate-in fade-in">
+            <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+              Estimate
+            </label>
+            <div className="rounded-xl border bg-secondary/10 divide-y divide-border/30 text-xs">
+              {estimate.perSite.map(ps => (
+                <div key={ps.siteId} className="flex items-center justify-between px-3 py-2">
+                  <span className="font-medium truncate flex-1 mr-2">{ps.siteName}</span>
+                  {ps.learned ? (
+                    <span className="text-muted-foreground shrink-0">
+                      ~{ps.estimatedListings} listings &middot; ~{ps.estimatedMinutes} min
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground/60 italic shrink-0">Unknown</span>
+                  )}
+                </div>
+              ))}
+              <div className="flex items-center justify-between px-3 py-2.5 font-bold text-sm bg-secondary/20">
+                <span>Total</span>
+                <span>~{estimate.totalEstimatedListings} listings &middot; ~{estimate.totalEstimatedMinutes} min</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Footer */}

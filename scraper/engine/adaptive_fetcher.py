@@ -13,12 +13,15 @@ so future scrapes use fast Layer 2 instead of expensive Layer 3.
 """
 
 import asyncio
+import hashlib
 import random
 import re
 import threading
 from http.cookiejar import CookieJar
 from typing import Optional
 from urllib.parse import urlparse
+
+from bs4 import BeautifulSoup
 
 from config import config
 from utils.logger import get_logger
@@ -140,6 +143,27 @@ def _random_viewport() -> dict:
     height = random.randint(720, 1080)
     height = (height // 20) * 20
     return {"width": width, "height": height}
+
+
+def _page_fingerprint(html: str) -> str:
+    """Compute a content fingerprint for duplicate page detection.
+
+    Extracts visible text from the body, normalizes whitespace, and hashes
+    the first 5000 chars. Two pages with the same fingerprint have
+    identical visible content (even if raw HTML differs slightly).
+    """
+    try:
+        soup = BeautifulSoup(html, "lxml")
+        # Remove scripts/styles that don't contribute to visible content
+        for tag in soup.find_all(["script", "style", "noscript"]):
+            tag.decompose()
+        text = (soup.body or soup).get_text(separator=" ", strip=True)
+    except Exception:
+        # Fallback: strip tags naively
+        text = re.sub(r"<[^>]+>", " ", html)
+    # Normalize whitespace and take first 5000 chars
+    text = re.sub(r"\s+", " ", text).strip()[:5000]
+    return hashlib.md5(text.encode("utf-8", errors="ignore")).hexdigest()
 
 
 class AdaptiveFetcher:
@@ -668,6 +692,7 @@ class AdaptiveFetcher:
             List of (url, html) tuples for each page visited.
         """
         results: list[tuple[str, str]] = []
+        seen_fingerprints: set[str] = set()
         try:
             context = await self._get_browser()
             page = await context.new_page()
@@ -696,6 +721,8 @@ class AdaptiveFetcher:
                 if block_reason:
                     logger.warning(f"render_pages: page 1 blocked ({block_reason})")
                 else:
+                    fp = _page_fingerprint(html)
+                    seen_fingerprints.add(fp)
                     results.append((page.url, html))
 
                 # Strategy A: Click "Next" button repeatedly
@@ -709,6 +736,11 @@ class AdaptiveFetcher:
                     await self._human_scroll(page)
                     html = await page.content()
                     if not self._is_blocked(html):
+                        fp = _page_fingerprint(html)
+                        if fp in seen_fingerprints:
+                            logger.info(f"render_pages: duplicate page detected at page {pages_visited + 1}, stopping pagination")
+                            break
+                        seen_fingerprints.add(fp)
                         results.append((page.url, html))
                     pages_visited += 1
                     logger.info(f"render_pages: collected page {pages_visited} via Next button")
@@ -725,6 +757,11 @@ class AdaptiveFetcher:
                             await self._human_scroll(page)
                             html = await page.content()
                             if not self._is_blocked(html):
+                                fp = _page_fingerprint(html)
+                                if fp in seen_fingerprints:
+                                    logger.info(f"render_pages: duplicate page detected (numeric), stopping")
+                                    break
+                                seen_fingerprints.add(fp)
                                 results.append((page.url, html))
                             pages_visited += 1
                         except Exception as e:
@@ -749,6 +786,12 @@ class AdaptiveFetcher:
                                 await self._human_scroll(page)
                                 html = await page.content()
                                 if html and len(html) > 2000 and not self._is_blocked(html):
+                                    fp = _page_fingerprint(html)
+                                    if fp in seen_fingerprints:
+                                        logger.info(f"render_pages: duplicate page detected (URL param), stopping")
+                                        found = False
+                                        break
+                                    seen_fingerprints.add(fp)
                                     results.append((page.url, html))
                                     pages_visited += 1
                                     found = True
@@ -758,7 +801,7 @@ class AdaptiveFetcher:
                         if not found:
                             break
 
-                logger.info(f"render_and_collect_pages: collected {len(results)} pages from {start_url}")
+                logger.info(f"render_and_collect_pages: collected {len(results)} unique pages from {start_url}")
 
             finally:
                 await page.close()

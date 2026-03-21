@@ -12,7 +12,7 @@ import {
   Info, Users, ChevronRight, ChevronLeft, Upload, Eye, EyeOff,
   ToggleLeft, ToggleRight, Map, Monitor, Server, Download, RefreshCw,
   Trash2, Plus, Check, X, Link, ExternalLink, Shield, Terminal,
-  AlertTriangle, HardDrive, Chrome, Smartphone, ChevronDown, Sparkles,
+  AlertTriangle, HardDrive, Chrome, Smartphone, ChevronDown, Sparkles, Brain,
 } from "lucide-react";
 import { EmailTemplateBuilder } from "@/components/dashboard/email-template-builder";
 import { AIProviderStatus } from "@/components/ai/ai-provider-status";
@@ -30,7 +30,7 @@ import AnimatedList from "@/components/ui/animated-list";
 
 type SettingsSection =
   | "profile" | "security" | "notifications" | "appearance"
-  | "display" | "email" | "backups" | "about" | "users" | "ai";
+  | "display" | "email" | "backups" | "about" | "users" | "ai" | "scraper";
 
 interface NavItem { key: SettingsSection; label: string; icon: React.ComponentType<any>; desc: string; danger?: boolean }
 
@@ -44,6 +44,7 @@ const NAV: NavItem[] = [
   { key: "display",       label: "Data & Display",    icon: LayoutDashboard, desc: "Map, filters, and preferences" },
   { key: "email",         label: "Email Settings",    icon: Mail,          desc: "SMTP, templates, and delivery" },
   { key: "backups",       label: "Backups",           icon: Database,      desc: "Backup and restore data" },
+  { key: "scraper",       label: "Site Intelligence", icon: Brain,         desc: "Auto-learn, CSS selectors, and scrape optimization" },
   { key: "ai",            label: "AI Intelligence",   icon: Sparkles,      desc: "AI features, providers, and usage" },
   { key: "about",         label: "About",             icon: Info,          desc: "Version, credits, and legal" },
   { key: "users",         label: "Users",             icon: Users,         desc: "Manage team members and roles" },
@@ -1311,6 +1312,125 @@ function UsersSection() {
 
 // ─── Section Renderer ────────────────────────────────────────────────────────
 
+// ─── Site Intelligence ───────────────────────────────────────────────────
+
+const SI_SETTINGS = [
+  { key: "si_auto_learn_on_create", label: "Auto-learn on site creation", desc: "Automatically learn a site's structure when it's first added" },
+  { key: "si_auto_learn_before_scrape", label: "Auto-learn before scrape", desc: "Learn unlearned sites automatically before starting a scrape job" },
+  { key: "si_relearn_interval_days", label: "Periodic re-learn", desc: "Re-learn site profiles after this many days (0 = disabled)", type: "number" as const },
+  { key: "si_css_confidence_threshold", label: "CSS selector confidence", desc: "Minimum confidence to use learned CSS selectors instead of LLM extraction", type: "slider" as const },
+];
+
+function ScraperIntelligenceSection() {
+  const [settings, setSettings] = usePersistedState<Record<string, boolean | number>>("si-settings", {
+    si_auto_learn_on_create: true,
+    si_auto_learn_before_scrape: true,
+    si_relearn_interval_days: 0,
+    si_css_confidence_threshold: 50,
+  });
+
+  const toggleSetting = (key: string) => {
+    setSettings(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const setNumber = (key: string, val: number) => {
+    setSettings(prev => ({ ...prev, [key]: val }));
+  };
+
+  return (
+    <div className="space-y-4 max-w-2xl">
+      <Card>
+        <CardHeader icon={Brain} title="Site Intelligence" />
+        <p className="text-xs mb-4" style={{ color: "var(--muted-foreground)" }}>
+          Configure how the scraper learns site structure, navigation patterns, and extraction selectors.
+          Learning a site before scraping makes future scrapes faster and more accurate.
+        </p>
+
+        <div className="space-y-1">
+          {SI_SETTINGS.map(setting => {
+            if (setting.type === "number") {
+              return (
+                <div key={setting.key} className="flex items-center justify-between py-3 px-3 rounded-xl">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium" style={{ color: "var(--foreground)" }}>{setting.label}</p>
+                    <p className="text-xs mt-0.5" style={{ color: "var(--muted-foreground)" }}>{setting.desc}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0 ml-4">
+                    <input
+                      type="number"
+                      min={0}
+                      max={365}
+                      value={Number(settings[setting.key]) || 0}
+                      onChange={e => setNumber(setting.key, parseInt(e.target.value) || 0)}
+                      className="w-16 px-2 py-1 rounded-lg border text-sm text-center outline-none focus:ring-2 focus:ring-primary/50"
+                      style={{ backgroundColor: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" }}
+                    />
+                    <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>days</span>
+                  </div>
+                </div>
+              );
+            }
+            if (setting.type === "slider") {
+              const val = Number(settings[setting.key]) || 50;
+              return (
+                <div key={setting.key} className="py-3 px-3 rounded-xl">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium" style={{ color: "var(--foreground)" }}>{setting.label}</p>
+                      <p className="text-xs mt-0.5" style={{ color: "var(--muted-foreground)" }}>{setting.desc}</p>
+                    </div>
+                    <span className="text-sm font-bold shrink-0 ml-4" style={{ color: "var(--foreground)" }}>{val}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={10}
+                    max={95}
+                    step={5}
+                    value={val}
+                    onChange={e => setNumber(setting.key, parseInt(e.target.value))}
+                    className="w-full accent-primary"
+                  />
+                </div>
+              );
+            }
+            // Toggle
+            const isOn = !!settings[setting.key];
+            return (
+              <div key={setting.key} className="flex items-center justify-between py-3 px-3 rounded-xl">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium" style={{ color: "var(--foreground)" }}>{setting.label}</p>
+                  <p className="text-xs mt-0.5" style={{ color: "var(--muted-foreground)" }}>{setting.desc}</p>
+                </div>
+                <button
+                  onClick={() => toggleSetting(setting.key)}
+                  className="transition-colors shrink-0 ml-4 outline-offset-2"
+                  style={{ color: isOn ? "#16a34a" : "var(--muted-foreground)" }}
+                >
+                  {isOn ? <ToggleRight className="w-6 h-6" /> : <ToggleLeft className="w-6 h-6" />}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader icon={Info} title="How It Works" />
+        <div className="space-y-2">
+          <p className="text-xs leading-relaxed" style={{ color: "var(--muted-foreground)" }}>
+            When you add a new site or trigger &ldquo;Learn Site&rdquo;, the system crawls the site to discover navigation structure,
+            listing entry points, pagination patterns, and price formats. It validates findings by extracting sample properties.
+          </p>
+          <p className="text-xs leading-relaxed" style={{ color: "var(--muted-foreground)" }}>
+            Learned sites scrape faster because the system skips navigation discovery and can use CSS selectors
+            instead of LLM extraction when confidence is high enough.
+          </p>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 // ─── AI Intelligence ─────────────────────────────────────────────────────
 
 const AI_FEATURES = [
@@ -1421,6 +1541,7 @@ function SectionContent({ section }: { section: SettingsSection }) {
     display: <DisplaySection />,
     email: <EmailSection />,
     backups: <BackupsSection />,
+    scraper: <ScraperIntelligenceSection />,
     ai: <AISection />,
     about: <AboutSection />,
     users: <UsersSection />,

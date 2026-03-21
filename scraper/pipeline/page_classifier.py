@@ -124,7 +124,13 @@ def classify_page(html: str, url: str) -> PageType:
         return "detail"
 
     # Check for category/index page signals
+    # BUT: many Nigerian property sites have "category" pages (e.g. /properties-for-sale-in-lagos)
+    # that ARE listing pages with actual property cards + prices. If a page has both
+    # category signals AND listing signals, it's a listing page.
     if _is_category_page(soup, url):
+        if _is_listing_page(soup):
+            logger.debug(f"Hybrid page (category + listings): {url} — treating as listing")
+            return "listing"
         logger.debug(f"Category/index page detected: {url}")
         return "category"
 

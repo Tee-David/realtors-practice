@@ -122,6 +122,59 @@ async def report_log(
         pass  # Don't log failures for log reports to avoid recursion
 
 
+async def report_learned_data(
+    job_id: str,
+    site_id: str,
+    selectors: dict[str, Any] | None = None,
+    detail_selectors: dict[str, Any] | None = None,
+    list_paths: list[str] | None = None,
+) -> None:
+    """Report learned selectors and/or validated listPaths back to the backend for persistent storage."""
+    url = f"{_base_url()}/internal/scrape-learned"
+    payload: dict[str, Any] = {"jobId": job_id, "siteId": site_id}
+    if selectors:
+        payload["selectors"] = selectors
+    if detail_selectors:
+        payload["detailSelectors"] = detail_selectors
+    if list_paths:
+        payload["listPaths"] = list_paths
+    try:
+        resp = await _client.post(url, json=payload, headers=_headers())
+        resp.raise_for_status()
+        logger.info(f"Reported learned data for site {site_id}")
+    except Exception as e:
+        logger.warning(f"Failed to report learned data for site {site_id}: {e}")
+
+
+async def report_learn_results(
+    job_id: str,
+    site_id: str,
+    site_profile: dict[str, Any],
+    selectors: dict[str, Any] | None = None,
+    detail_selectors: dict[str, Any] | None = None,
+    list_paths: list[str] | None = None,
+) -> None:
+    """Send site intelligence learn results to the backend."""
+    url = f"{_base_url()}/internal/learn-results"
+    payload: dict[str, Any] = {
+        "jobId": job_id,
+        "siteId": site_id,
+        "siteProfile": site_profile,
+    }
+    if selectors:
+        payload["selectors"] = selectors
+    if detail_selectors:
+        payload["detailSelectors"] = detail_selectors
+    if list_paths:
+        payload["listPaths"] = list_paths
+    try:
+        resp = await _client.post(url, json=payload, headers=_headers())
+        resp.raise_for_status()
+        logger.info(f"Reported learn results for site {site_id} (job {job_id})")
+    except Exception as e:
+        logger.error(f"Failed to report learn results for site {site_id}: {e}")
+
+
 async def report_property(
     job_id: str,
     property_data: dict[str, Any],

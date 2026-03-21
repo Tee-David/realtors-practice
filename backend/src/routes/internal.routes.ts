@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { internalAuth } from "../middlewares/internal.middleware";
 import { ScrapeService } from "../services/scrape.service";
+import { SiteIntelligenceService } from "../services/siteIntelligence.service";
 import { Logger } from "../utils/logger.util";
 import { withCallbackRetry } from "../utils/callbackRetry.util";
 import prisma from "../prismaClient";
@@ -216,6 +217,76 @@ router.post("/scrape/create-job", async (req: Request, res: Response) => {
     });
   } catch (err: any) {
     Logger.error(`Create job for runner failed: ${err.message}`);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /internal/learn-results
+ * Receive site intelligence profile from the Python site learner.
+ */
+router.post("/learn-results", async (req: Request, res: Response) => {
+  try {
+    const { jobId, siteId, siteProfile, selectors, detailSelectors, listPaths } = req.body;
+    if (!jobId || !siteId) {
+      return res.status(400).json({ error: "jobId and siteId required" });
+    }
+
+    await SiteIntelligenceService.handleLearnResults(jobId, siteId, {
+      siteProfile,
+      selectors,
+      detailSelectors,
+      listPaths,
+    });
+
+    return res.json({ success: true });
+  } catch (err: any) {
+    Logger.error(`learn-results error: ${err.message}`);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /internal/scrape-learned
+ * Receive learned selectors and/or validated listPaths from the Python scraper.
+ * Persists to the Site model so future scrapes can skip LLM navigation/extraction.
+ */
+router.post("/scrape-learned", async (req: Request, res: Response) => {
+  try {
+    const { siteId, selectors, detailSelectors, listPaths } = req.body;
+    if (!siteId) {
+      return res.status(400).json({ error: "siteId required" });
+    }
+
+    const updateData: Record<string, any> = {};
+    if (selectors && typeof selectors === "object") {
+      updateData.selectors = selectors;
+    }
+    if (detailSelectors && typeof detailSelectors === "object") {
+      updateData.detailSelectors = detailSelectors;
+    }
+    if (Array.isArray(listPaths) && listPaths.length > 0) {
+      // Merge with existing listPaths (don't overwrite)
+      const existing = await prisma.site.findUnique({
+        where: { id: siteId },
+        select: { listPaths: true },
+      });
+      const existingPaths = new Set((existing?.listPaths as string[]) || []);
+      for (const p of listPaths) {
+        existingPaths.add(p);
+      }
+      updateData.listPaths = Array.from(existingPaths);
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return res.json({ success: true, message: "Nothing to update" });
+    }
+
+    await prisma.site.update({ where: { id: siteId }, data: updateData });
+    Logger.info(`Learned data saved for site ${siteId}: ${Object.keys(updateData).join(", ")}`);
+    return res.json({ success: true });
+  } catch (err: any) {
+    Logger.error(`scrape-learned error: ${err.message}`);
     return res.status(500).json({ error: err.message });
   }
 });

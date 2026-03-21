@@ -110,6 +110,10 @@ export const sites = {
   update: (id: string, data: Record<string, unknown>) => api.put(`/sites/${id}`, data),
   toggle: (id: string) => api.patch(`/sites/${id}/toggle`),
   delete: (id: string) => api.delete(`/sites/${id}`),
+  learn: (id: string) => api.post(`/sites/${id}/learn`),
+  learnBulk: (siteIds: string[]) => api.post("/sites/learn-bulk", { siteIds }),
+  profile: (id: string) => api.get(`/sites/${id}/profile`),
+  estimate: (siteIds: string[]) => api.post("/sites/estimate", { siteIds }),
 };
 
 export const search = {
