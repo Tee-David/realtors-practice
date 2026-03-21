@@ -327,13 +327,34 @@ export default function ScraperPage() {
     };
   }, [socket, activeJob?.id]);
 
-  // ── Socket events
+  // ── Refs for socket callbacks (avoid re-registering listeners on every state change)
+  const liveProgressRef = useRef(liveProgress);
+  liveProgressRef.current = liveProgress;
+  const elapsedMsRef = useRef(elapsedMs);
+  elapsedMsRef.current = elapsedMs;
+  const selectedSiteIdsRef = useRef(selectedSiteIds);
+  selectedSiteIdsRef.current = selectedSiteIds;
+
+  // ── Socket events (stable deps — only re-register when socket/refetch change)
   useEffect(() => {
     if (!socket) return;
 
+    const handleLog = (data: any) => {
+      const msg = data.message ?? String(data);
+      setLatestLogMessage(msg);
+      setLogs(prev => {
+        const entry = {
+          id: Date.now() + Math.random(),
+          message: msg,
+          timestamp: new Date().toISOString(),
+          level: data.level ?? "info",
+        };
+        return [...prev, entry].slice(-200);
+      });
+    };
+
     socket.on("job:progress", (data: LiveProgress) => {
       setLiveProgress(data);
-      // Track per-site pipeline
       if (data.currentSite) {
         setPipelineSites(prev => ({
           ...prev,
@@ -345,52 +366,25 @@ export default function ScraperPage() {
       }
     });
 
-    socket.on("job:log", (data: any) => {
-      const msg = data.message ?? String(data);
-      setLatestLogMessage(msg);
-      setLogs(prev => {
-        const entry = {
-          id: Date.now() + Math.random(),
-          message: msg,
-          timestamp: new Date().toISOString(),
-          level: data.level ?? "info",
-        };
-        return [...prev, entry].slice(-200);
-      });
-    });
-
-    socket.on("scrape_log", (data: any) => {
-      const msg = data.message ?? String(data);
-      setLatestLogMessage(msg);
-      setLogs(prev => {
-        const entry = {
-          id: Date.now() + Math.random(),
-          message: msg,
-          timestamp: new Date().toISOString(),
-          level: data.level ?? "info",
-        };
-        return [...prev, entry].slice(-200);
-      });
-    });
+    socket.on("job:log", handleLog);
+    socket.on("scrape_log", handleLog);
 
     socket.on("job:property", (data: any) => {
-      // Backend sends { jobId, property, timestamp } — extract the property
       const prop: LiveProperty = data.property ?? data;
       setLiveProperties(prev => [prop, ...prev].slice(0, 100));
     });
 
     socket.on("job:completed", (data: any) => {
-      // Stats may be nested under data.stats (from broadcastScrapeComplete) or flat
       const s = data.stats || data;
+      const lp = liveProgressRef.current;
       setCompletionStats({
-        propertiesFound: s.totalListings ?? s.propertiesFound ?? liveProgress?.propertiesFound ?? 0,
-        duplicates: s.duplicates ?? liveProgress?.duplicates ?? 0,
-        errors: s.errors ?? liveProgress?.errors ?? 0,
-        elapsed: elapsedMs,
-        sites: s.sites ?? selectedSiteIds.length,
+        propertiesFound: s.totalListings ?? s.propertiesFound ?? lp?.propertiesFound ?? 0,
+        duplicates: s.duplicates ?? lp?.duplicates ?? 0,
+        errors: s.errors ?? lp?.errors ?? 0,
+        elapsed: elapsedMsRef.current,
+        sites: s.sites ?? selectedSiteIdsRef.current.length,
       });
       setPageState("complete");
-      // Mark all pipeline sites as done
       setPipelineSites(prev => {
         const next = { ...prev };
         Object.keys(next).forEach(k => { next[k] = { ...next[k], status: "done" }; });
@@ -414,7 +408,7 @@ export default function ScraperPage() {
       socket.off("job:error");
       socket.off("job_update");
     };
-  }, [socket, refetch, liveProgress, elapsedMs, selectedSiteIds.length]);
+  }, [socket, refetch]);
 
   // ── Auto-scroll logs (within container, not page)
   useEffect(() => {
