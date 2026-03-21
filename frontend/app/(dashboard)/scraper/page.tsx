@@ -189,7 +189,7 @@ export default function ScraperPage() {
   const { data: jobs, isLoading, refetch } = useScrapeJobs();
   const startScrape = useStartScrape();
   const stopScrape = useStopScrape();
-  const { data: sitesData, isLoading: isSitesLoading } = useSites(1, 100);
+  const { data: sitesData, isLoading: isSitesLoading } = useSites(1, 100, undefined, true);
   const allSites = useMemo(() => {
     if (!sitesData) return [];
     return (sitesData as any).sites ?? (sitesData as unknown as Site[]);
