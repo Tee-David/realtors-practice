@@ -378,7 +378,7 @@ IMPORTANT:
         prompt=prompt,
         system_prompt=LISTING_SYSTEM_PROMPT,
         temperature=0.1,
-        max_tokens=4096,
+        max_tokens=8192,
     )
 
     if result is None:
@@ -409,10 +409,16 @@ IMPORTANT:
         if not isinstance(item, dict):
             continue
 
-        # Resolve listing URL
+        # Resolve listing URL — fallback to base_url if empty/invalid
         url = item.get("listing_url", "")
         if url and not url.startswith("http"):
             url = urljoin(base_url, url)
+        # Reject non-http URLs (javascript:, mailto:, etc.)
+        if url and not url.startswith("http"):
+            url = ""
+        # If no listing URL at all, use the page URL as fallback
+        if not url:
+            url = base_url
         item["listing_url"] = url
 
         # Resolve image URLs
@@ -470,7 +476,7 @@ IMPORTANT:
         prompt=prompt,
         system_prompt=DETAIL_SYSTEM_PROMPT,
         temperature=0.1,
-        max_tokens=4096,
+        max_tokens=8192,
     )
 
     if not result:

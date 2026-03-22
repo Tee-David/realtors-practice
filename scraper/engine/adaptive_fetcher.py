@@ -359,6 +359,7 @@ class AdaptiveFetcher:
         Note: Crawl4AI (for extraction) is NOT used here for fetching.
         It's used in fetch_as_markdown() for LLM extraction pipeline.
         """
+        MAX_HTML_SIZE = 10_000_000  # 10MB — reject absurdly large pages
         await rate_limiter.wait(url)
 
         # Back off if getting blocked repeatedly
@@ -369,6 +370,9 @@ class AdaptiveFetcher:
 
         # Layer 1: Playwright + stealth (full browser — default for all sites)
         html = await self._fetch_playwright(url)
+        if html and len(html) > MAX_HTML_SIZE:
+            logger.warning(f"Page too large ({len(html)} bytes), skipping: {url}")
+            return None
         if html and len(html) > 500:
             block_reason = self._is_blocked(html)
             if not block_reason:

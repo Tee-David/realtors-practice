@@ -10,7 +10,7 @@ from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-REQUIRED_FIELDS = ("title", "listingUrl", "source")
+REQUIRED_FIELDS = ("title", "source")
 
 
 def validate_property(data: dict[str, Any]) -> dict[str, Any]:

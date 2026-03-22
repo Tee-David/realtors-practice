@@ -302,7 +302,7 @@ def _to_property_dict(listing: dict, site_name: str, site_id: str = "") -> dict:
         "toilets": listing.get("toilets"),
         "propertyType": listing.get("property_type", ""),
         "area": listing.get("area", ""),
-        "state": listing.get("state", "") or "Lagos",
+        "state": listing.get("state", ""),
         "images": listing.get("images", []),
         "agentName": listing.get("agent_name", ""),
         "agentPhone": listing.get("agent_phone", ""),
