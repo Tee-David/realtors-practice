@@ -307,7 +307,7 @@ def _to_property_dict(listing: dict, site_name: str, site_id: str = "") -> dict:
         "agentName": listing.get("agent_name", ""),
         "agentPhone": listing.get("agent_phone", ""),
         "agencyName": listing.get("agency_name", ""),
-        "features_text": ", ".join(listing.get("features", [])),
+        "features_text": ", ".join(listing.get("features", []) if isinstance(listing.get("features"), list) else [str(listing.get("features", ""))]),
         "landSize": listing.get("land_size", ""),
         "buildingSize": listing.get("building_size", ""),
         "furnishing": listing.get("furnishing", ""),
@@ -342,38 +342,305 @@ def _to_property_dict(listing: dict, site_name: str, site_id: str = "") -> dict:
 # --- Scrape Pipeline ---
 
 async def _run_scrape_job(request: ScrapeJobRequest) -> None:
-    """Run a scrape job with a hard timeout of 45 minutes."""
+    """Run a scrape job with a hard timeout scaled to site count."""
+    # Scale timeout: 10 min per site, minimum 15 min, max 90 min
+    per_site_budget = 600  # 10 minutes
+    job_timeout = max(900, min(len(request.sites) * per_site_budget, 5400))
     try:
         await asyncio.wait_for(
             _run_scrape_job_inner(request),
-            timeout=2700,  # 45 minutes max
+            timeout=job_timeout,
         )
         _update_job_status(request.jobId, status="completed")
     except asyncio.TimeoutError:
-        logger.error(f"Job {request.jobId} exceeded 45-minute timeout")
+        mins = job_timeout // 60
+        logger.error(f"Job {request.jobId} exceeded {mins}-minute timeout")
         _update_job_status(request.jobId, status="failed")
-        await report_error(request.jobId, "Job timed out after 45 minutes")
+        await report_error(request.jobId, f"Job timed out after {mins} minutes")
     except Exception as e:
         logger.exception(f"Job {request.jobId} wrapper error: {e}")
         _update_job_status(request.jobId, status="failed")
         await report_error(request.jobId, str(e))
 
 
-async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
-    """Core scrape pipeline: Discover → Paginate → LLM Extract → Enrich → Report.
+async def _scrape_single_site(
+    site: "SiteDef",
+    request: ScrapeJobRequest,
+    job_id: str,
+    fetcher: AdaptiveFetcher,
+    deduplicator: Deduplicator,
+    visited: VisitedSet,
+) -> tuple[list[dict[str, Any]], int, int]:
+    """Scrape one site. Returns (properties, errors, pages_fetched)."""
+    site_properties: list[dict[str, Any]] = []
+    urls_with_successful_extraction: set[str] = set()
+    errors = 0
+    pages_fetched = 0
 
-    For each site:
-    1. If listPaths configured: use those directly
-    2. Otherwise: fetch homepage, auto-discover listing pages
-    3. For each listing page: paginate through all pages
-    4. For each page: LLM extracts ALL property listings (no CSS selectors)
-    5. For each listing with a detail URL: fetch detail page, LLM enriches
-    6. Normalize, validate, deduplicate, report
+    # Check robots.txt
+    if not robots_allowed(site.baseUrl):
+        await report_log(job_id, "WARN", f"robots.txt disallows {site.baseUrl} — skipping")
+        return site_properties, errors, pages_fetched
+
+    crawl_delay = get_crawl_delay(site.baseUrl)
+
+    # ─── PHASE 1: Determine listing page URLs ───
+    listing_page_urls: list[str] = []
+
+    if site.listPaths and any(lp.strip() for lp in site.listPaths):
+        for lp in site.listPaths:
+            lp = lp.strip()
+            if not lp:
+                continue
+            if lp.startswith("http"):
+                listing_page_urls.append(lp)
+            else:
+                listing_page_urls.append(site.baseUrl.rstrip("/") + "/" + lp.lstrip("/"))
+        await report_log(job_id, "INFO", f"[{site.name}] Using {len(listing_page_urls)} configured list paths")
+    else:
+        await report_log(job_id, "INFO", f"[{site.name}] No listPaths — LLM navigating to find listing pages...")
+        homepage_html = await fetcher.fetch(site.baseUrl, requires_js=True)
+
+        if homepage_html:
+            pages_fetched += 1
+            nav_results = await llm_navigate(
+                homepage_html, site.baseUrl,
+                site_name=site.name,
+                existing_list_paths=site.listPaths if site.listPaths else None,
+            )
+            if nav_results:
+                llm_urls = prioritize_nav_results(nav_results, max_urls=8)
+                listing_page_urls.extend(llm_urls)
+                categories = set(r.get("listing_type", "?") for r in nav_results)
+                await report_log(job_id, "INFO",
+                    f"[{site.name}] LLM identified {len(llm_urls)} listing pages "
+                    f"(categories: {', '.join(categories)})")
+            else:
+                discovered = discover_listing_pages(homepage_html, site.baseUrl, max_results=5)
+                if discovered:
+                    listing_page_urls.extend(discovered)
+                    await report_log(job_id, "INFO",
+                        f"[{site.name}] Keyword discovery found {len(discovered)} listing pages")
+                elif is_listing_page(homepage_html):
+                    listing_page_urls.append(site.baseUrl)
+                    await report_log(job_id, "INFO", f"[{site.name}] Homepage itself has listings")
+                else:
+                    await report_log(job_id, "WARN", f"[{site.name}] Could not find listing pages — skipping")
+                    return site_properties, errors + 1, pages_fetched
+        else:
+            await report_log(job_id, "ERROR", f"[{site.name}] Could not fetch homepage")
+            return site_properties, errors + 1, pages_fetched
+
+    await report_log(job_id, "INFO", f"[{site.name}] Listing pages to crawl: {listing_page_urls[:5]}")
+
+    # ─── PHASE 2: Crawl listing pages with pagination ───
+    for lp_url in listing_page_urls:
+        if len(site_properties) >= request.maxListingsPerSite:
+            break
+        if _is_stopped(job_id):
+            break
+
+        await report_log(job_id, "INFO", f"[{site.name}] Crawling: {lp_url}")
+
+        probe_html = await fetcher.fetch(lp_url, requires_js=True)
+        if probe_html:
+            page_type = classify_page(probe_html, lp_url)
+            if page_type == "category":
+                await report_log(job_id, "DEBUG",
+                    f"[{site.name}] Page classified as category (will still attempt extraction): {lp_url}")
+
+        collected_pages = await fetcher.render_and_collect_pages(
+            lp_url, max_pages=site.maxPages,
+        )
+
+        if not collected_pages:
+            html = probe_html if (probe_html and len(probe_html) > 500) else await fetcher.fetch(lp_url, requires_js=True)
+            if html and len(html) > 500:
+                collected_pages = [(lp_url, html)]
+            else:
+                await report_log(job_id, "WARN", f"[{site.name}] Could not fetch {lp_url}")
+                errors += 1
+                continue
+
+        await report_log(job_id, "INFO",
+            f"[{site.name}] Collected {len(collected_pages)} pages from {lp_url}")
+        pages_fetched += len(collected_pages)
+
+        # ─── PHASE 3: LLM extraction from each page ───
+        consecutive_empty = 0
+
+        for page_num, (page_url, html) in enumerate(collected_pages):
+
+            if len(site_properties) >= request.maxListingsPerSite:
+                break
+            if _is_stopped(job_id):
+                break
+
+            page_type = classify_page(html, page_url)
+            if page_type == "category":
+                await report_log(job_id, "DEBUG",
+                    f"[{site.name}] Page {page_num + 1} classified as category (attempting extraction anyway)")
+
+            listings = None
+
+            # Try CSS selectors first (free, fast)
+            stored_selectors = site.selectors or {}
+            container_sel = stored_selectors.get("listing_container", "")
+            field_sels = {
+                k: v for k, v in stored_selectors.items()
+                if k not in ("listing_container", "_confidence", "_learned_at", "_stale",
+                             "listingSelector", "listing_link", "paginationConfig",
+                             "delayMin", "delayMax")
+                and isinstance(v, str) and v
+            }
+
+            if container_sel and field_sels and not stored_selectors.get("_stale"):
+                from extractors.selector_learner import extract_with_selectors
+                css_listings = extract_with_selectors(html, container_sel, field_sels)
+                if css_listings and len(css_listings) >= 2:
+                    listings = css_listings
+                    await report_log(job_id, "INFO",
+                        f"[{site.name}] CSS selectors extracted {len(listings)} listings "
+                        f"from page {page_num + 1} (no LLM needed)")
+
+            # Fall back to LLM extraction
+            if listings is None:
+                from engine.llm_providers import get_available_providers
+                avail = get_available_providers()
+                if not avail:
+                    await report_log(job_id, "ERROR",
+                        f"[{site.name}] No LLM providers available!")
+                    errors += 1
+                    break
+
+                await report_log(job_id, "INFO",
+                    f"[{site.name}] LLM extracting listings from page {page_num + 1} (providers: {', '.join(avail)})...")
+
+                listings = await extract_listings_from_page(
+                    html, page_url, site_name=site.name,
+                )
+
+                # Learn selectors from successful LLM extraction
+                if listings and len(listings) >= 2:
+                    try:
+                        from extractors.selector_learner import learn_selectors_from_extraction
+                        learned = learn_selectors_from_extraction(html, listings, page_url)
+                        if learned and learned.confidence >= 0.5:
+                            await report_learned_data(
+                                job_id=job_id, site_id=site.id,
+                                selectors={
+                                    "listing_container": learned.listing_container,
+                                    **learned.fields,
+                                    "_confidence": learned.confidence,
+                                    "_learned_at": learned.learned_at,
+                                },
+                            )
+                            await report_log(job_id, "INFO",
+                                f"[{site.name}] Learned {len(learned.fields)} CSS selectors "
+                                f"(confidence: {learned.confidence:.0%})")
+                    except Exception as e:
+                        logger.debug(f"Selector learning failed for {site.name}: {e}")
+
+
+            if not listings:
+
+                await report_log(job_id, "WARN",
+                    f"[{site.name}] No listings extracted from page {page_num + 1}")
+                consecutive_empty += 1
+                if consecutive_empty >= 3:
+                    await report_log(job_id, "INFO",
+                        f"[{site.name}] 3 consecutive empty pages, moving to next path")
+                    break
+                continue
+
+            consecutive_empty = 0
+            urls_with_successful_extraction.add(page_url)
+
+            logger.info(f"[{site.name}] Found {len(listings)} listings on page {page_num + 1}")
+            await report_log(job_id, "INFO",
+                f"[{site.name}] Found {len(listings)} listings on page {page_num + 1}")
+
+            # ─── PHASE 4: Process listings ───
+            for listing in listings:
+                if len(site_properties) >= request.maxListingsPerSite:
+                    break
+                if _is_stopped(job_id):
+                    break
+
+                try:
+                    raw_data = _to_property_dict(listing, site.name, site.id)
+                    normalized = normalize_property(raw_data, site.name)
+                    validated = validate_property(normalized)
+
+                    if deduplicator.is_duplicate(validated):
+                        logger.debug(f"Duplicate detected: {validated.get('title', 'unknown')[:60]}")
+                        continue
+
+                    site_properties.append(validated)
+
+                    await report_property(job_id, {
+                        "title": validated.get("title"),
+                        "price": validated.get("price"),
+                        "location": validated.get("area") or validated.get("state"),
+                        "bedrooms": validated.get("bedrooms"),
+                        "bathrooms": validated.get("bathrooms"),
+                        "image": (validated.get("images") or [None])[0],
+                        "source": site.name,
+                    })
+
+                except Exception as e:
+                    errors += 1
+
+                    logger.exception(f"[{site.name}] Error processing listing: {str(e)[:200]}")
+                    await report_log(job_id, "ERROR",
+                        f"[{site.name}] Error processing listing: {str(e)[:200]}")
+
+    # ─── Persist learned listPaths ───
+    if (site_properties
+        and urls_with_successful_extraction
+        and not (site.listPaths and any(lp.strip() for lp in site.listPaths))):
+        validated_paths = []
+        for url in urls_with_successful_extraction:
+            path = urlparse(url).path
+            if path and path != "/":
+                validated_paths.append(path)
+        if validated_paths:
+            try:
+                await report_learned_data(job_id=job_id, site_id=site.id, list_paths=validated_paths)
+                await report_log(job_id, "INFO",
+                    f"[{site.name}] Saved {len(validated_paths)} validated listPaths for future scrapes")
+            except Exception as e:
+                logger.warning(f"Failed to persist listPaths for {site.name}: {e}")
+
+    # Send properties incrementally per-site
+    if site_properties:
+        site_stats = {
+            "totalScraped": len(site_properties),
+            "totalErrors": errors,
+            "sitesProcessed": 1,
+            "duplicatesSkipped": deduplicator.duplicate_count,
+            "incremental": True,
+        }
+        await report_results(job_id, site_properties, site_stats)
+        await report_log(job_id, "INFO",
+            f"[{site.name}] Sent {len(site_properties)} properties to backend")
+
+    logger.info(f"Site {site.name}: scraped {len(site_properties)} properties, {errors} errors")
+    await report_log(job_id, "INFO",
+        f"Site {site.name}: scraped {len(site_properties)} properties")
+
+    return site_properties, errors, pages_fetched
+
+
+async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
+    """Core scrape pipeline with concurrent site processing.
+
+    Runs up to 3 sites in parallel, each with a 10-minute timeout.
+    Properties are sent incrementally per-site for crash resilience.
     """
     job_id = request.jobId
     all_properties: list[dict[str, Any]] = []
     deduplicator = Deduplicator()
-    fetcher = AdaptiveFetcher()
     visited = VisitedSet()
     total_errors = 0
     total_pages_fetched = 0
@@ -382,7 +649,7 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
         set_api_base_url(request.callbackUrl)
 
     try:
-        # Check LLM providers upfront — no point scraping if we can't extract
+        # Check LLM providers upfront
         from engine.llm_providers import get_available_providers, PROVIDERS
         avail = get_available_providers()
         configured = [p.name for p in PROVIDERS if p.api_key]
@@ -391,369 +658,79 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
             await report_log(job_id, "ERROR", error_msg)
             await report_error(job_id, error_msg)
             return
-        await report_log(job_id, "INFO", f"Starting scrape job with {len(request.sites)} site(s)")
+
+        batch_index = request.parameters.get("batchIndex")
+        total_batches = request.parameters.get("totalBatches", 1)
+        if total_batches > 1:
+            await report_log(job_id, "INFO",
+                f"Batch {batch_index + 1}/{total_batches}: scraping {len(request.sites)} site(s)")
+        else:
+            await report_log(job_id, "INFO", f"Starting scrape job with {len(request.sites)} site(s)")
         await report_log(job_id, "INFO", f"LLM providers configured: {', '.join(configured)} (available now: {', '.join(avail)})")
 
-        for site_idx, site in enumerate(request.sites):
-            if _is_stopped(job_id):
-                await report_log(job_id, "WARN", "Job stopped by user")
-                break
+        # Concurrency: run up to 3 sites in parallel (limited by LLM rate limits)
+        concurrency = min(3, len(request.sites))
+        semaphore = asyncio.Semaphore(concurrency)
+        per_site_timeout = 600  # 10 minutes per site
 
-            await report_log(job_id, "INFO", f"Scraping site: {site.name} ({site.baseUrl})")
-            await report_progress(
-                job_id,
-                processed=len(all_properties),
-                total=request.maxListingsPerSite * len(request.sites),
-                current_site=site.name,
-                current_page=0,
-                max_pages=site.maxPages,
-                pages_fetched=total_pages_fetched,
-                properties_found=len(all_properties),
-                duplicates=deduplicator.duplicate_count,
-                errors=total_errors,
-            )
-
-            site_properties: list[dict[str, Any]] = []
-            urls_with_successful_extraction: set[str] = set()
-
-            try:
-                # Check robots.txt
-                if not robots_allowed(site.baseUrl):
-                    await report_log(job_id, "WARN", f"robots.txt disallows {site.baseUrl} — skipping")
-                    continue
-
-                crawl_delay = get_crawl_delay(site.baseUrl)
-
-                # ─── PHASE 1: Determine listing page URLs ───
-                listing_page_urls: list[str] = []
-
-                if site.listPaths and any(lp.strip() for lp in site.listPaths):
-                    # Use configured listPaths
-                    for lp in site.listPaths:
-                        lp = lp.strip()
-                        if not lp:
-                            continue
-                        if lp.startswith("http"):
-                            listing_page_urls.append(lp)
-                        else:
-                            listing_page_urls.append(site.baseUrl.rstrip("/") + "/" + lp.lstrip("/"))
-                    await report_log(job_id, "INFO", f"[{site.name}] Using {len(listing_page_urls)} configured list paths")
-                else:
-                    # Fetch homepage and let LLM navigate to listing pages
-                    await report_log(job_id, "INFO", f"[{site.name}] No listPaths — LLM navigating to find listing pages...")
-                    homepage_html = await fetcher.fetch(site.baseUrl, requires_js=True)
-
-                    if homepage_html:
-                        total_pages_fetched += 1
-
-                        # Strategy 1: LLM Navigator — reads all links, picks best listing pages
-                        # Pass existing listPaths so LLM finds NEW paths
-                        nav_results = await llm_navigate(
-                            homepage_html, site.baseUrl,
-                            site_name=site.name,
-                            existing_list_paths=site.listPaths if site.listPaths else None,
-                        )
-                        if nav_results:
-                            llm_urls = prioritize_nav_results(nav_results, max_urls=8)
-                            listing_page_urls.extend(llm_urls)
-                            # Log the categories found
-                            categories = set(r.get("listing_type", "?") for r in nav_results)
-                            await report_log(job_id, "INFO",
-                                f"[{site.name}] LLM identified {len(llm_urls)} listing pages "
-                                f"(categories: {', '.join(categories)})")
-                        else:
-                            # Strategy 2: Keyword-based discovery (fallback)
-                            discovered = discover_listing_pages(homepage_html, site.baseUrl, max_results=5)
-                            if discovered:
-                                listing_page_urls.extend(discovered)
-                                await report_log(job_id, "INFO",
-                                    f"[{site.name}] Keyword discovery found {len(discovered)} listing pages")
-                            else:
-                                # Strategy 3: Check if homepage itself has listings
-                                if is_listing_page(homepage_html):
-                                    listing_page_urls.append(site.baseUrl)
-                                    await report_log(job_id, "INFO",
-                                        f"[{site.name}] Homepage itself has listings")
-                                else:
-                                    await report_log(job_id, "WARN",
-                                        f"[{site.name}] Could not find listing pages — skipping")
-                                    total_errors += 1
-                                    continue
-                    else:
-                        await report_log(job_id, "ERROR", f"[{site.name}] Could not fetch homepage")
-                        total_errors += 1
-                        continue
-
-                await report_log(job_id, "INFO", f"[{site.name}] Listing pages to crawl: {listing_page_urls[:5]}")
-
-                # ─── PHASE 2: Crawl listing pages with pagination ───
-                for lp_url in listing_page_urls:
-                    if len(site_properties) >= request.maxListingsPerSite:
-                        break
-                    if _is_stopped(job_id):
-                        break
-
-                    await report_log(job_id, "INFO", f"[{site.name}] Crawling: {lp_url}")
-
-                    # Fetch the page (Playwright renders JS) — classify for logging only,
-                    # never skip. The LLM extractor handles all page types gracefully.
-                    probe_html = await fetcher.fetch(lp_url, requires_js=True)
-                    if probe_html:
-                        page_type = classify_page(probe_html, lp_url)
-                        if page_type == "category":
-                            await report_log(job_id, "DEBUG",
-                                f"[{site.name}] Page classified as category (will still attempt extraction): {lp_url}")
-
-                    # Use browser-session pagination to collect all pages
-                    collected_pages = await fetcher.render_and_collect_pages(
-                        lp_url, max_pages=site.maxPages,
+        async def _scrape_with_limit(site):
+            """Run a single site with its own fetcher, semaphore + timeout."""
+            async with semaphore:
+                if _is_stopped(job_id):
+                    return [], 0, 0
+                # Each site gets its own fetcher (own browser context) for isolation
+                site_fetcher = AdaptiveFetcher()
+                try:
+                    logger.info(f"Scraping site: {site.name} ({site.baseUrl})")
+                    await report_log(job_id, "INFO", f"Scraping site: {site.name} ({site.baseUrl})")
+                    return await asyncio.wait_for(
+                        _scrape_single_site(site, request, job_id, site_fetcher, deduplicator, visited),
+                        timeout=per_site_timeout,
                     )
+                except asyncio.TimeoutError:
+                    logger.warning(f"[{site.name}] Timed out after {per_site_timeout // 60} minutes")
+                    await report_log(job_id, "WARN",
+                        f"[{site.name}] Timed out after {per_site_timeout // 60} minutes — moving on")
+                    return [], 1, 0
+                except Exception as e:
+                    logger.error(f"Error scraping site {site.name}: {str(e)[:200]}")
+                    await report_log(job_id, "ERROR", f"Error scraping site {site.name}: {str(e)}")
+                    return [], 1, 0
+                finally:
+                    await site_fetcher.close()
 
-                    if not collected_pages:
-                        # Fallback: reuse probe HTML or re-fetch
-                        html = probe_html if (probe_html and len(probe_html) > 500) else await fetcher.fetch(lp_url, requires_js=True)
-                        if html and len(html) > 500:
-                            collected_pages = [(lp_url, html)]
-                        else:
-                            await report_log(job_id, "WARN", f"[{site.name}] Could not fetch {lp_url}")
-                            total_errors += 1
-                            continue
+        # Launch all sites concurrently (semaphore limits parallelism)
+        results = await asyncio.gather(
+            *[_scrape_with_limit(site) for site in request.sites],
+            return_exceptions=True,
+        )
 
-                    await report_log(job_id, "INFO",
-                        f"[{site.name}] Collected {len(collected_pages)} pages from {lp_url}")
-                    total_pages_fetched += len(collected_pages)
-
-                    # ─── PHASE 3: LLM extraction from each page ───
-                    consecutive_empty = 0
-
-                    for page_num, (page_url, html) in enumerate(collected_pages):
-                        if len(site_properties) >= request.maxListingsPerSite:
-                            break
-                        if _is_stopped(job_id):
-                            break
-
-                        # Log page type for diagnostics but never skip — let LLM decide
-                        page_type = classify_page(html, page_url)
-                        if page_type == "category":
-                            await report_log(job_id, "DEBUG",
-                                f"[{site.name}] Page {page_num + 1} classified as category (attempting extraction anyway)")
-
-                        # ─── Extraction: CSS fast path → LLM fallback ───
-                        listings = None
-
-                        # Try CSS selectors first (free, fast) if site has learned selectors
-                        stored_selectors = site.selectors or {}
-                        container_sel = stored_selectors.get("listing_container", "")
-                        field_sels = {
-                            k: v for k, v in stored_selectors.items()
-                            if k not in ("listing_container", "_confidence", "_learned_at", "_stale",
-                                         "listingSelector", "listing_link", "paginationConfig",
-                                         "delayMin", "delayMax")
-                            and isinstance(v, str) and v
-                        }
-
-                        if container_sel and field_sels and not stored_selectors.get("_stale"):
-                            from extractors.selector_learner import extract_with_selectors
-                            css_listings = extract_with_selectors(html, container_sel, field_sels)
-                            if css_listings and len(css_listings) >= 2:
-                                listings = css_listings
-                                await report_log(job_id, "INFO",
-                                    f"[{site.name}] CSS selectors extracted {len(listings)} listings "
-                                    f"from page {page_num + 1} (no LLM needed)")
-
-                        # Fall back to LLM extraction
-                        if listings is None:
-                            from engine.llm_providers import get_available_providers
-                            avail = get_available_providers()
-                            if not avail:
-                                await report_log(job_id, "ERROR",
-                                    f"[{site.name}] No LLM providers available! Check API keys (GROQ_API_KEY, CEREBRAS_API_KEY, SAMBANOVA_API_KEY, GEMINI_API_KEY)")
-                                total_errors += 1
-                                break
-
-                            await report_log(job_id, "INFO",
-                                f"[{site.name}] LLM extracting listings from page {page_num + 1} (providers: {', '.join(avail)})...")
-
-                            listings = await extract_listings_from_page(
-                                html, page_url, site_name=site.name,
-                            )
-
-                            # Learn selectors from successful LLM extraction
-                            if listings and len(listings) >= 2:
-                                try:
-                                    from extractors.selector_learner import learn_selectors_from_extraction
-                                    learned = learn_selectors_from_extraction(html, listings, page_url)
-                                    if learned and learned.confidence >= 0.5:
-                                        await report_learned_data(
-                                            job_id=job_id,
-                                            site_id=site.id,
-                                            selectors={
-                                                "listing_container": learned.listing_container,
-                                                **learned.fields,
-                                                "_confidence": learned.confidence,
-                                                "_learned_at": learned.learned_at,
-                                            },
-                                        )
-                                        await report_log(job_id, "INFO",
-                                            f"[{site.name}] Learned {len(learned.fields)} CSS selectors "
-                                            f"(confidence: {learned.confidence:.0%})")
-                                except Exception as e:
-                                    logger.debug(f"Selector learning failed for {site.name}: {e}")
-
-                        if not listings:
-                            await report_log(job_id, "WARN",
-                                f"[{site.name}] No listings extracted from page {page_num + 1}")
-                            consecutive_empty += 1
-                            if consecutive_empty >= 3:
-                                await report_log(job_id, "INFO",
-                                    f"[{site.name}] 3 consecutive empty pages, moving to next path")
-                                break
-                            continue
-
-                        consecutive_empty = 0
-                        urls_with_successful_extraction.add(page_url)
-                        await report_log(job_id, "INFO",
-                            f"[{site.name}] Found {len(listings)} listings on page {page_num + 1}")
-
-                        # ─── PHASE 4: Detail enrichment ───
-                        for listing in listings:
-                            if len(site_properties) >= request.maxListingsPerSite:
-                                break
-                            if _is_stopped(job_id):
-                                break
-
-                            try:
-                                detail_url = listing.get("listing_url", "")
-
-                                # Enrich from detail page if we have a URL and it's not the listing page itself
-                                if (detail_url
-                                    and detail_url != page_url
-                                    and normalize_url(detail_url) not in visited):
-                                    visited.add(normalize_url(detail_url))
-
-                                    # Rate limiting
-                                    if crawl_delay:
-                                        await asyncio.sleep(crawl_delay)
-                                    else:
-                                        await asyncio.sleep(random.uniform(
-                                            site.delayMin or 1.0,
-                                            site.delayMax or 3.0,
-                                        ))
-
-                                    detail_html = await fetcher.fetch(detail_url, requires_js=True)
-                                    if detail_html:
-                                        detail_data = await extract_detail_from_page(
-                                            detail_html, detail_url, site_name=site.name,
-                                        )
-                                        listing = merge_listing_detail(listing, detail_data)
-                                    else:
-                                        logger.debug(f"Detail fetch failed for {detail_url}")
-
-                                # Convert to property dict and process
-                                raw_data = _to_property_dict(listing, site.name, site.id)
-
-                                # Normalize
-                                normalized = normalize_property(raw_data, site.name)
-
-                                # Validate + quality score
-                                validated = validate_property(normalized)
-
-                                # Dedup check
-                                if deduplicator.is_duplicate(validated):
-                                    logger.debug(f"Duplicate detected: {validated.get('title', 'unknown')[:60]}")
-                                    continue
-
-                                site_properties.append(validated)
-
-                                # Report live property to frontend
-                                await report_property(job_id, {
-                                    "title": validated.get("title"),
-                                    "price": validated.get("price"),
-                                    "location": validated.get("area") or validated.get("state"),
-                                    "bedrooms": validated.get("bedrooms"),
-                                    "bathrooms": validated.get("bathrooms"),
-                                    "image": (validated.get("images") or [None])[0],
-                                    "source": site.name,
-                                })
-
-                                # Update progress
-                                await report_progress(
-                                    job_id,
-                                    processed=len(all_properties) + len(site_properties),
-                                    total=request.maxListingsPerSite * len(request.sites),
-                                    current_site=site.name,
-                                    current_page=page_num + 1,
-                                    max_pages=site.maxPages,
-                                    pages_fetched=total_pages_fetched,
-                                    properties_found=len(all_properties) + len(site_properties),
-                                    duplicates=deduplicator.duplicate_count,
-                                    errors=total_errors,
-                                )
-
-                            except Exception as e:
-                                total_errors += 1
-                                await report_log(job_id, "ERROR",
-                                    f"[{site.name}] Error processing listing: {str(e)[:200]}")
-
-            except Exception as e:
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
                 total_errors += 1
-                await report_log(job_id, "ERROR", f"Error scraping site {site.name}: {str(e)}")
+                await report_log(job_id, "ERROR",
+                    f"Site {request.sites[i].name} crashed: {str(result)[:200]}")
+            else:
+                props, errs, pages = result
+                all_properties.extend(props)
+                total_errors += errs
+                total_pages_fetched += pages
 
-            # ─── PHASE 5: Persist learned listPaths ───
-            # If we discovered listing URLs via LLM and they produced results,
-            # save them as listPaths so the next scrape skips navigation
-            if (site_properties
-                and urls_with_successful_extraction
-                and not (site.listPaths and any(lp.strip() for lp in site.listPaths))):
-                validated_paths = []
-                for url in urls_with_successful_extraction:
-                    path = urlparse(url).path
-                    if path and path != "/":
-                        validated_paths.append(path)
-                if validated_paths:
-                    try:
-                        await report_learned_data(
-                            job_id=job_id,
-                            site_id=site.id,
-                            list_paths=validated_paths,
-                        )
-                        await report_log(job_id, "INFO",
-                            f"[{site.name}] Saved {len(validated_paths)} validated listPaths for future scrapes")
-                    except Exception as e:
-                        logger.warning(f"Failed to persist listPaths for {site.name}: {e}")
-
-            await report_log(job_id, "INFO",
-                f"Site {site.name}: scraped {len(site_properties)} properties")
-
-            # Send properties incrementally per-site so they're saved immediately
-            # (don't wait until job completes — properties survive crashes/timeouts)
-            if site_properties:
-                site_stats = {
-                    "totalScraped": len(site_properties),
-                    "totalErrors": total_errors,
-                    "sitesProcessed": 1,
-                    "duplicatesSkipped": deduplicator.duplicate_count,
-                    "incremental": True,  # tells backend this is a partial batch
-                }
-                await report_results(job_id, site_properties, site_stats)
-                await report_log(job_id, "INFO",
-                    f"[{site.name}] Sent {len(site_properties)} properties to backend")
-
-            all_properties.extend(site_properties)
-
-        # Report final completion (properties already sent incrementally per-site)
+        # Report final completion
         stats = {
             "totalScraped": len(all_properties),
             "totalErrors": total_errors,
             "sitesProcessed": len(request.sites),
             "duplicatesSkipped": deduplicator.duplicate_count,
         }
-
         await report_results(job_id, [], stats)
 
-        # ─── End-of-job summary for diagnostics ───
+        # End-of-job summary
+        batch_label = ""
+        if total_batches > 1:
+            batch_label = f"[Batch {batch_index + 1}/{total_batches}] "
         summary = (
-            f"SCRAPE COMPLETE: {len(request.sites)} sites, "
+            f"{batch_label}SCRAPE COMPLETE: {len(request.sites)} sites, "
             f"{len(all_properties)} properties found, "
             f"{deduplicator.duplicate_count} duplicates skipped, "
             f"{total_errors} errors, "
@@ -767,7 +744,7 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
         await report_error(job_id, str(e))
 
     finally:
-        await fetcher.close()
+        pass  # Each site_fetcher is closed in _scrape_with_limit
 
 
 if __name__ == "__main__":

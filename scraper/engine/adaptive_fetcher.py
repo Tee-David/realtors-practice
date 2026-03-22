@@ -528,25 +528,34 @@ class AdaptiveFetcher:
     async def _fetch_playwright(self, url: str) -> Optional[str]:
         """Fetch with Playwright + stealth for JS-rendered content.
 
-        Follows the proven pattern from the old scraper:
-        1. Navigate to URL
+        1. Navigate to URL with networkidle wait
         2. Accept cookies/dismiss overlays
-        3. Wait for list-ready selectors (property-specific)
-        4. Deep scroll (12 steps) to trigger lazy-loaded content
-        5. Return fully-rendered HTML
+        3. Wait for JS framework hydration (React/Next/Angular)
+        4. Wait for list-ready selectors
+        5. Scroll to trigger lazy-loaded content
+        6. Return fully-rendered HTML
         """
         try:
             context = await self._get_browser()
             page = await context.new_page()
 
             try:
-                await asyncio.sleep(random.uniform(0.5, 1.5))
+                await asyncio.sleep(random.uniform(0.3, 0.8))
 
-                response = await page.goto(
-                    url,
-                    wait_until="domcontentloaded",
-                    timeout=config.browser_timeout,
-                )
+                # Use networkidle to wait for AJAX/fetch requests to complete
+                # Fall back to domcontentloaded if networkidle times out
+                try:
+                    response = await page.goto(
+                        url,
+                        wait_until="networkidle",
+                        timeout=config.browser_timeout,
+                    )
+                except Exception:
+                    response = await page.goto(
+                        url,
+                        wait_until="domcontentloaded",
+                        timeout=config.browser_timeout,
+                    )
 
                 if response and response.status in (403, 401, 429):
                     logger.warning(f"Playwright HTTP {response.status} for {url}")
@@ -556,8 +565,15 @@ class AdaptiveFetcher:
 
                 await self._wait_for_cloudflare(page)
                 await self._dismiss_overlays(page)
+
+                # Wait for SPA hydration — key for React/Next.js/Angular sites
+                await self._wait_for_hydration(page)
+
                 await self._wait_for_list_ready(page)
                 await self._human_scroll(page)
+
+                # Second hydration check after scroll (lazy-load triggers)
+                await page.wait_for_timeout(1500)
 
                 html = await page.content()
 
@@ -577,6 +593,35 @@ class AdaptiveFetcher:
         except Exception as e:
             logger.warning(f"Playwright fetch error for {url}: {e}")
             return None
+
+    async def _wait_for_hydration(self, page) -> None:
+        """Wait for SPA frameworks to hydrate (React, Next.js, Angular, Vue).
+
+        Checks for actual rendered content rather than just DOM structure.
+        Many Nigerian property sites use Next.js or React and need time
+        for client-side JS to populate the page content.
+        """
+        try:
+            # Wait for common SPA hydration signals
+            hydration_checks = [
+                # React: __NEXT_DATA__ or __NUXT__ populated
+                "() => document.querySelector('#__next')?.children?.length > 1",
+                # General: body has substantial text content
+                "() => document.body?.innerText?.length > 500",
+                # Cards/articles rendered
+                "() => document.querySelectorAll('article, [class*=\"card\"], [class*=\"listing\"], [class*=\"property\"]').length > 2",
+            ]
+            for check in hydration_checks:
+                try:
+                    await page.wait_for_function(check, timeout=8000)
+                    return
+                except Exception:
+                    continue
+
+            # Final fallback: wait a bit for any remaining JS execution
+            await page.wait_for_timeout(3000)
+        except Exception:
+            pass
 
     async def _wait_for_cloudflare(self, page) -> None:
         """Wait for Cloudflare challenge to resolve (up to 15s)."""
@@ -599,13 +644,13 @@ class AdaptiveFetcher:
         """Wait for property listing content to appear on the page.
 
         Uses property-specific selectors first, then falls back to generic
-        content selectors. Ported from old scraper's _wait_list_ready().
+        content selectors. Checks for visible text content, not just DOM nodes.
         """
         # Property/listing-specific selectors (most likely on real estate sites)
         list_selectors = [
             "[data-testid*='listing']",
             ".property-list", ".property-listing", ".listing", ".listings",
-            ".property-grid", ".grid",
+            ".property-grid",
             "section:has(article)", ".results", ".search-results",
             ".searchResult", ".cards",
             "article[property]", "article[itemtype*='Offer']",
@@ -615,7 +660,7 @@ class AdaptiveFetcher:
         ]
         for selector in list_selectors:
             try:
-                await page.wait_for_selector(selector, timeout=5000, state="visible")
+                await page.wait_for_selector(selector, timeout=8000, state="visible")
                 logger.debug(f"List ready: matched selector '{selector}'")
                 return
             except Exception:
@@ -627,13 +672,19 @@ class AdaptiveFetcher:
         ]
         for selector in generic_selectors:
             try:
-                await page.wait_for_selector(selector, timeout=3000)
+                await page.wait_for_selector(selector, timeout=5000)
                 return
             except Exception:
                 continue
 
-        # Final fallback: just wait for the page to settle
-        await page.wait_for_timeout(3000)
+        # Final fallback: wait for meaningful text content to appear
+        try:
+            await page.wait_for_function(
+                "() => document.body?.innerText?.length > 1000",
+                timeout=8000,
+            )
+        except Exception:
+            await page.wait_for_timeout(3000)
 
     async def _human_scroll(self, page, steps: int = 12) -> None:
         """Deep scroll to trigger lazy-loaded content.
@@ -723,11 +774,18 @@ class AdaptiveFetcher:
             try:
                 # PAGE 1
                 logger.info(f"render_pages: navigating to {start_url}")
-                response = await page.goto(
-                    start_url,
-                    wait_until="domcontentloaded",
-                    timeout=45000,
-                )
+                try:
+                    response = await page.goto(
+                        start_url,
+                        wait_until="networkidle",
+                        timeout=45000,
+                    )
+                except Exception:
+                    response = await page.goto(
+                        start_url,
+                        wait_until="domcontentloaded",
+                        timeout=45000,
+                    )
                 if response:
                     logger.info(f"render_pages: HTTP {response.status} for {start_url}")
                     if response.status in (403, 401, 429):
@@ -735,8 +793,10 @@ class AdaptiveFetcher:
 
                 await self._wait_for_cloudflare(page)
                 await self._dismiss_overlays(page)
+                await self._wait_for_hydration(page)
                 await self._wait_for_list_ready(page)
                 await self._human_scroll(page)
+                await page.wait_for_timeout(1000)
 
                 html = await page.content()
                 logger.info(f"render_pages: page 1 HTML length = {len(html)}")

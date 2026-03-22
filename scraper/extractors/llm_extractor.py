@@ -215,6 +215,36 @@ def html_to_clean_text(html: str, base_url: str = "") -> str:
             full_src = urljoin(base_url, src) if base_url else src
             lines.append(f"IMAGE: {alt} -> {full_src}")
 
+    # If we got very little visible text but the HTML was large,
+    # try extracting from JSON-LD or __NEXT_DATA__ embedded data
+    visible_text = "\n".join(lines)
+    if len(visible_text.strip()) < 500 and len(html) > 10000:
+        # Check for JSON-LD structured data
+        ld_soup = BeautifulSoup(html, "lxml")
+        for script in ld_soup.find_all("script", type="application/ld+json"):
+            try:
+                import json
+                ld = json.loads(script.string or "")
+                if isinstance(ld, (dict, list)):
+                    ld_text = json.dumps(ld, indent=2)[:8000]
+                    lines.append("\n--- STRUCTURED DATA (JSON-LD) ---")
+                    lines.append(ld_text)
+            except Exception:
+                pass
+
+        # Check for __NEXT_DATA__ (Next.js SSR data)
+        for script in ld_soup.find_all("script", id="__NEXT_DATA__"):
+            try:
+                import json
+                nd = json.loads(script.string or "")
+                props = nd.get("props", {}).get("pageProps", {})
+                if props:
+                    nd_text = json.dumps(props, indent=2)[:12000]
+                    lines.append("\n--- NEXT.JS PAGE DATA ---")
+                    lines.append(nd_text)
+            except Exception:
+                pass
+
     text = "\n".join(lines)
     text = re.sub(r"\n{3,}", "\n\n", text)
 

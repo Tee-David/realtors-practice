@@ -15,5 +15,6 @@ def get_logger(name: str) -> logging.Logger:
         )
         handler.setFormatter(formatter)
         logger.addHandler(handler)
-        logger.setLevel(getattr(logging, config.log_level.upper(), logging.INFO))
+        # Always use INFO for scraper loggers regardless of uvicorn log level
+        logger.setLevel(logging.INFO)
     return logger
