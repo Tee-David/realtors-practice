@@ -11,8 +11,8 @@ export interface ScrapeJob {
   processedItems: number;
   successfulItems: number;
   failedItems: number;
-  startTime: string | null;
-  endTime: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
   errorMessage: string | null;
   progressData?: LiveProgress | null;
   createdAt: string;

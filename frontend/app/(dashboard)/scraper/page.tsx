@@ -303,8 +303,8 @@ export default function ScraperPage() {
   useEffect(() => {
     if (pageState === "running" && activeJob) {
       if (!jobStartRef.current) {
-        jobStartRef.current = activeJob.startTime
-          ? new Date(activeJob.startTime).getTime()
+        jobStartRef.current = activeJob.startedAt
+          ? new Date(activeJob.startedAt).getTime()
           : Date.now();
       }
       elapsedIntervalRef.current = setInterval(() => {
