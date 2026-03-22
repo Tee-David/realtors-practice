@@ -495,16 +495,14 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
 
                     await report_log(job_id, "INFO", f"[{site.name}] Crawling: {lp_url}")
 
-                    # Only skip obvious category/directory pages; never skip based
-                    # on "detail" heuristic — the LLM extraction handles both listing
-                    # pages and single-property pages correctly.
+                    # Fetch the page (Playwright renders JS) — classify for logging only,
+                    # never skip. The LLM extractor handles all page types gracefully.
                     probe_html = await fetcher.fetch(lp_url, requires_js=True)
                     if probe_html:
                         page_type = classify_page(probe_html, lp_url)
                         if page_type == "category":
-                            await report_log(job_id, "INFO",
-                                f"[{site.name}] Skipping category/directory page: {lp_url}")
-                            continue
+                            await report_log(job_id, "DEBUG",
+                                f"[{site.name}] Page classified as category (will still attempt extraction): {lp_url}")
 
                     # Use browser-session pagination to collect all pages
                     collected_pages = await fetcher.render_and_collect_pages(
@@ -534,15 +532,11 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
                         if _is_stopped(job_id):
                             break
 
-                        # Only skip category/directory pages — let LLM handle everything else
+                        # Log page type for diagnostics but never skip — let LLM decide
                         page_type = classify_page(html, page_url)
                         if page_type == "category":
                             await report_log(job_id, "DEBUG",
-                                f"[{site.name}] Page {page_num + 1} classified as category, skipping")
-                            consecutive_empty += 1
-                            if consecutive_empty >= 2:
-                                break
-                            continue
+                                f"[{site.name}] Page {page_num + 1} classified as category (attempting extraction anyway)")
 
                         # ─── Extraction: CSS fast path → LLM fallback ───
                         listings = None
