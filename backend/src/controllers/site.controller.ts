@@ -10,8 +10,7 @@ export class SiteController {
       const page = Math.max(1, parseInt(req.query.page as string) || 1);
       const limit = Math.min(200, Math.max(1, parseInt(req.query.limit as string) || 20));
       const search = req.query.search as string | undefined;
-      const enabledParam = req.query.enabled as string | undefined;
-      const enabled = enabledParam !== undefined ? enabledParam === "true" : undefined;
+      const enabled = req.query.enabled as boolean | undefined;
       const { data, total } = await SiteService.list({ page, limit, search, enabled });
       return sendPaginated(res, data, total, page, limit);
     } catch (err) {
