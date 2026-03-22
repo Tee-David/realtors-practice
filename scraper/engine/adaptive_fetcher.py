@@ -388,20 +388,19 @@ class AdaptiveFetcher:
             layer_errors.append(f"playwright: {'empty response' if not html else f'too short ({len(html)} chars)'}")
 
         # Layer 2: curl_cffi (fast HTTP with Chrome TLS fingerprint)
-        if not requires_js:
-            html = await self._fetch_curl(url)
-            if html and len(html) > 500:
-                block_reason = self._is_blocked(html)
-                if not block_reason:
-                    self._consecutive_blocks = 0
-                    self._last_successful_layer = "curl_cffi"
-                    return html
-                layer_errors.append(f"curl_cffi: blocked ({block_reason})")
-            else:
-                layer_errors.append(f"curl_cffi: {'empty response' if not html else f'too short ({len(html)} chars)'}")
-            logger.debug(f"curl_cffi insufficient for {url}, trying Scrapling")
+        # Always try curl_cffi — even JS-rendered sites often return usable HTML
+        # (server-side rendered content, JSON-LD, __NEXT_DATA__, etc.)
+        html = await self._fetch_curl(url)
+        if html and len(html) > 500:
+            block_reason = self._is_blocked(html)
+            if not block_reason:
+                self._consecutive_blocks = 0
+                self._last_successful_layer = "curl_cffi"
+                return html
+            layer_errors.append(f"curl_cffi: blocked ({block_reason})")
         else:
-            layer_errors.append("curl_cffi: skipped (requires_js=True)")
+            layer_errors.append(f"curl_cffi: {'empty response' if not html else f'too short ({len(html)} chars)'}")
+        logger.debug(f"curl_cffi insufficient for {url}, trying Scrapling")
 
         # Layer 3: Scrapling StealthyFetcher (anti-bot bypass)
         scrapling = self._get_scrapling()
@@ -643,48 +642,34 @@ class AdaptiveFetcher:
     async def _wait_for_list_ready(self, page) -> None:
         """Wait for property listing content to appear on the page.
 
-        Uses property-specific selectors first, then falls back to generic
-        content selectors. Checks for visible text content, not just DOM nodes.
+        Uses a combined CSS selector to race all listing selectors at once
+        (instead of trying each sequentially which can take minutes).
         """
-        # Property/listing-specific selectors (most likely on real estate sites)
-        list_selectors = [
+        # Race all listing selectors at once with a single wait
+        combined_selector = ", ".join([
             "[data-testid*='listing']",
             ".property-list", ".property-listing", ".listing", ".listings",
             ".property-grid",
-            "section:has(article)", ".results", ".search-results",
-            ".searchResult", ".cards",
-            "article[property]", "article[itemtype*='Offer']",
+            ".results", ".search-results", ".searchResult", ".cards",
             "[class*='property']", "[class*='listing']",
             "[class*='PropertyCard']", "[class*='propertyCard']",
             "[class*='ListingCard']", "[class*='listingCard']",
-        ]
-        for selector in list_selectors:
-            try:
-                await page.wait_for_selector(selector, timeout=8000, state="visible")
-                logger.debug(f"List ready: matched selector '{selector}'")
-                return
-            except Exception:
-                continue
+            "article", ".card", "main",
+        ])
+        try:
+            await page.wait_for_selector(combined_selector, timeout=10000, state="visible")
+            return
+        except Exception:
+            pass
 
-        # Generic content fallback
-        generic_selectors = [
-            "article", ".card", "main", "#content", ".content",
-        ]
-        for selector in generic_selectors:
-            try:
-                await page.wait_for_selector(selector, timeout=5000)
-                return
-            except Exception:
-                continue
-
-        # Final fallback: wait for meaningful text content to appear
+        # Final fallback: wait for meaningful text content
         try:
             await page.wait_for_function(
                 "() => document.body?.innerText?.length > 1000",
-                timeout=8000,
+                timeout=5000,
             )
         except Exception:
-            await page.wait_for_timeout(3000)
+            await page.wait_for_timeout(2000)
 
     async def _human_scroll(self, page, steps: int = 12) -> None:
         """Deep scroll to trigger lazy-loaded content.
@@ -808,81 +793,93 @@ class AdaptiveFetcher:
                     seen_fingerprints.add(fp)
                     results.append((page.url, html))
 
-                # Strategy A: Click "Next" button repeatedly
+                # Pagination — wrap in a timeout so page 1 always gets returned
+                # even if pagination strategies are slow
+                PAGINATION_TIMEOUT = 180  # 3 minutes max for pagination
                 pages_visited = 1
-                while pages_visited < max_pages:
-                    clicked = await self._click_next_button(page)
-                    if not clicked:
-                        logger.debug(f"render_pages: no Next button found after page {pages_visited}")
-                        break
-                    await self._wait_for_list_ready(page)
-                    await self._human_scroll(page)
-                    html = await page.content()
-                    if not self._is_blocked(html):
-                        fp = _page_fingerprint(html)
-                        if fp in seen_fingerprints:
-                            logger.info(f"render_pages: duplicate page detected at page {pages_visited + 1}, stopping pagination")
+
+                async def _paginate():
+                    nonlocal pages_visited
+
+                    # Strategy A: Click "Next" button repeatedly
+                    while pages_visited < max_pages:
+                        clicked = await self._click_next_button(page)
+                        if not clicked:
+                            logger.debug(f"render_pages: no Next button found after page {pages_visited}")
                             break
-                        seen_fingerprints.add(fp)
-                        results.append((page.url, html))
-                    pages_visited += 1
-                    logger.info(f"render_pages: collected page {pages_visited} via Next button")
+                        await self._wait_for_list_ready(page)
+                        await self._human_scroll(page)
+                        html = await page.content()
+                        if not self._is_blocked(html):
+                            fp = _page_fingerprint(html)
+                            if fp in seen_fingerprints:
+                                logger.info(f"render_pages: duplicate page detected at page {pages_visited + 1}, stopping pagination")
+                                break
+                            seen_fingerprints.add(fp)
+                            results.append((page.url, html))
+                        pages_visited += 1
+                        logger.info(f"render_pages: collected page {pages_visited} via Next button")
 
-                # Strategy B: Numeric page links (if "Next" button only got page 1)
-                if pages_visited == 1:
-                    logger.info("render_pages: trying numeric page links")
-                    numeric_urls = await self._discover_numeric_pages(page)
-                    logger.info(f"render_pages: found {len(numeric_urls)} numeric page links")
-                    for num_url in numeric_urls[: max_pages - pages_visited]:
-                        try:
-                            await page.goto(num_url, wait_until="domcontentloaded", timeout=40000)
-                            await self._wait_for_list_ready(page)
-                            await self._human_scroll(page)
-                            html = await page.content()
-                            if not self._is_blocked(html):
-                                fp = _page_fingerprint(html)
-                                if fp in seen_fingerprints:
-                                    logger.info(f"render_pages: duplicate page detected (numeric), stopping")
-                                    break
-                                seen_fingerprints.add(fp)
-                                results.append((page.url, html))
-                            pages_visited += 1
-                        except Exception as e:
-                            logger.debug(f"render_pages: numeric page error: {e}")
-                            continue
-
-                # Strategy C: URL param fallback (?page=N, /page/N)
-                if pages_visited == 1:
-                    logger.info("render_pages: trying URL param pagination")
-                    base = start_url.rstrip("/")
-                    joiner = "&" if "?" in start_url else "?"
-                    for n in range(2, min(max_pages + 1, 6)):  # Try up to 5 pages with params
-                        candidates = [
-                            f"{start_url}{joiner}page={n}",
-                            f"{base}/page/{n}",
-                        ]
-                        found = False
-                        for candidate_url in candidates:
+                    # Strategy B: Numeric page links (if "Next" button only got page 1)
+                    if pages_visited == 1:
+                        logger.info("render_pages: trying numeric page links")
+                        numeric_urls = await self._discover_numeric_pages(page)
+                        logger.info(f"render_pages: found {len(numeric_urls)} numeric page links")
+                        for num_url in numeric_urls[: max_pages - pages_visited]:
                             try:
-                                await page.goto(candidate_url, wait_until="domcontentloaded", timeout=35000)
+                                await page.goto(num_url, wait_until="domcontentloaded", timeout=40000)
                                 await self._wait_for_list_ready(page)
                                 await self._human_scroll(page)
                                 html = await page.content()
-                                if html and len(html) > 2000 and not self._is_blocked(html):
+                                if not self._is_blocked(html):
                                     fp = _page_fingerprint(html)
                                     if fp in seen_fingerprints:
-                                        logger.info(f"render_pages: duplicate page detected (URL param), stopping")
-                                        found = False
+                                        logger.info(f"render_pages: duplicate page detected (numeric), stopping")
                                         break
                                     seen_fingerprints.add(fp)
                                     results.append((page.url, html))
-                                    pages_visited += 1
-                                    found = True
-                                    break
-                            except Exception:
+                                pages_visited += 1
+                            except Exception as e:
+                                logger.debug(f"render_pages: numeric page error: {e}")
                                 continue
-                        if not found:
-                            break
+
+                    # Strategy C: URL param fallback (?page=N, /page/N)
+                    if pages_visited == 1:
+                        logger.info("render_pages: trying URL param pagination")
+                        base = start_url.rstrip("/")
+                        joiner = "&" if "?" in start_url else "?"
+                        for n in range(2, min(max_pages + 1, 6)):
+                            candidates = [
+                                f"{start_url}{joiner}page={n}",
+                                f"{base}/page/{n}",
+                            ]
+                            found = False
+                            for candidate_url in candidates:
+                                try:
+                                    await page.goto(candidate_url, wait_until="domcontentloaded", timeout=35000)
+                                    await self._wait_for_list_ready(page)
+                                    await self._human_scroll(page)
+                                    html = await page.content()
+                                    if html and len(html) > 2000 and not self._is_blocked(html):
+                                        fp = _page_fingerprint(html)
+                                        if fp in seen_fingerprints:
+                                            logger.info(f"render_pages: duplicate page detected (URL param), stopping")
+                                            found = False
+                                            break
+                                        seen_fingerprints.add(fp)
+                                        results.append((page.url, html))
+                                        pages_visited += 1
+                                        found = True
+                                        break
+                                except Exception:
+                                    continue
+                            if not found:
+                                break
+
+                try:
+                    await asyncio.wait_for(_paginate(), timeout=PAGINATION_TIMEOUT)
+                except asyncio.TimeoutError:
+                    logger.warning(f"render_pages: pagination timed out after {PAGINATION_TIMEOUT}s — returning {len(results)} page(s)")
 
                 logger.info(f"render_and_collect_pages: collected {len(results)} unique pages from {start_url}")
 

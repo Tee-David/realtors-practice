@@ -442,19 +442,14 @@ async def _scrape_single_site(
 
         await report_log(job_id, "INFO", f"[{site.name}] Crawling: {lp_url}")
 
-        probe_html = await fetcher.fetch(lp_url, requires_js=True)
-        if probe_html:
-            page_type = classify_page(probe_html, lp_url)
-            if page_type == "category":
-                await report_log(job_id, "DEBUG",
-                    f"[{site.name}] Page classified as category (will still attempt extraction): {lp_url}")
-
+        # Try render_and_collect_pages first (handles pagination)
         collected_pages = await fetcher.render_and_collect_pages(
             lp_url, max_pages=site.maxPages,
         )
 
         if not collected_pages:
-            html = probe_html if (probe_html and len(probe_html) > 500) else await fetcher.fetch(lp_url, requires_js=True)
+            # Fallback: single fetch (tries all layers including curl_cffi)
+            html = await fetcher.fetch(lp_url, requires_js=True)
             if html and len(html) > 500:
                 collected_pages = [(lp_url, html)]
             else:
@@ -559,6 +554,16 @@ async def _scrape_single_site(
             logger.info(f"[{site.name}] Found {len(listings)} listings on page {page_num + 1}")
             await report_log(job_id, "INFO",
                 f"[{site.name}] Found {len(listings)} listings on page {page_num + 1}")
+
+            # Report progress to frontend
+            await report_progress(
+                job_id,
+                processed=0,
+                total=1,
+                current_site=site.name,
+                properties_found=len(site_properties) + len(listings),
+                current_page=page_num + 1,
+            )
 
             # ─── PHASE 4: Process listings ───
             for listing in listings:
@@ -673,8 +678,11 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
         semaphore = asyncio.Semaphore(concurrency)
         per_site_timeout = 600  # 10 minutes per site
 
+        sites_completed = 0
+
         async def _scrape_with_limit(site):
             """Run a single site with its own fetcher, semaphore + timeout."""
+            nonlocal sites_completed
             async with semaphore:
                 if _is_stopped(job_id):
                     return [], 0, 0
@@ -683,16 +691,29 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
                 try:
                     logger.info(f"Scraping site: {site.name} ({site.baseUrl})")
                     await report_log(job_id, "INFO", f"Scraping site: {site.name} ({site.baseUrl})")
-                    return await asyncio.wait_for(
+                    await report_progress(
+                        job_id,
+                        processed=sites_completed,
+                        total=len(request.sites),
+                        current_site=site.name,
+                        properties_found=len(all_properties),
+                        duplicates=deduplicator.duplicate_count,
+                        errors=total_errors,
+                    )
+                    result = await asyncio.wait_for(
                         _scrape_single_site(site, request, job_id, site_fetcher, deduplicator, visited),
                         timeout=per_site_timeout,
                     )
+                    sites_completed += 1
+                    return result
                 except asyncio.TimeoutError:
+                    sites_completed += 1
                     logger.warning(f"[{site.name}] Timed out after {per_site_timeout // 60} minutes")
                     await report_log(job_id, "WARN",
                         f"[{site.name}] Timed out after {per_site_timeout // 60} minutes — moving on")
                     return [], 1, 0
                 except Exception as e:
+                    sites_completed += 1
                     logger.error(f"Error scraping site {site.name}: {str(e)[:200]}")
                     await report_log(job_id, "ERROR", f"Error scraping site {site.name}: {str(e)}")
                     return [], 1, 0
