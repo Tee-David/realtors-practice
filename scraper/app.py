@@ -610,9 +610,9 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
                             await report_log(job_id, "WARN",
                                 f"[{site.name}] No listings extracted from page {page_num + 1}")
                             consecutive_empty += 1
-                            if consecutive_empty >= 2:
+                            if consecutive_empty >= 3:
                                 await report_log(job_id, "INFO",
-                                    f"[{site.name}] 2 consecutive empty pages, moving to next path")
+                                    f"[{site.name}] 3 consecutive empty pages, moving to next path")
                                 break
                             continue
 
@@ -652,6 +652,8 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
                                             detail_html, detail_url, site_name=site.name,
                                         )
                                         listing = merge_listing_detail(listing, detail_data)
+                                    else:
+                                        logger.debug(f"Detail fetch failed for {detail_url}")
 
                                 # Convert to property dict and process
                                 raw_data = _to_property_dict(listing, site.name, site.id)
@@ -664,6 +666,7 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
 
                                 # Dedup check
                                 if deduplicator.is_duplicate(validated):
+                                    logger.debug(f"Duplicate detected: {validated.get('title', 'unknown')[:60]}")
                                     continue
 
                                 site_properties.append(validated)
@@ -753,8 +756,17 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
         }
 
         await report_results(job_id, [], stats)
-        await report_log(job_id, "INFO",
-            f"Job complete: {len(all_properties)} properties, {total_errors} errors")
+
+        # ─── End-of-job summary for diagnostics ───
+        summary = (
+            f"SCRAPE COMPLETE: {len(request.sites)} sites, "
+            f"{len(all_properties)} properties found, "
+            f"{deduplicator.duplicate_count} duplicates skipped, "
+            f"{total_errors} errors, "
+            f"{total_pages_fetched} pages fetched"
+        )
+        await report_log(job_id, "INFO", summary)
+        logger.info(summary)
 
     except Exception as e:
         logger.exception(f"Fatal error in job {job_id}")

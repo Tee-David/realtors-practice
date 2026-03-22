@@ -56,6 +56,10 @@ export const perUserRateLimiter = rateLimit({
     // Normalize IPv6-mapped IPv4 (::ffff:127.0.0.1 → 127.0.0.1)
     return ip.startsWith("::ffff:") ? ip.slice(7) : ip;
   },
-  skip: (req) => req.path === "/health" || req.path === "/api/health",
+  skip: (req) =>
+    req.path === "/health" ||
+    req.path === "/api/health" ||
+    req.path.startsWith("/api/internal/") ||
+    req.path.startsWith("/internal/"),
   validate: { xForwardedForHeader: false, ip: false },
 });

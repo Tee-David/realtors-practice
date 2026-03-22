@@ -5,10 +5,8 @@ import {
   useScrapeJobs,
   useStartScrape,
   useStopScrape,
-  type LiveProgress,
-  type LiveProperty,
 } from "@/hooks/use-scrape-jobs";
-import { useSocket } from "@/hooks/use-socket";
+import { useScraperStore } from "@/stores/scraper-store";
 import {
   Play,
   Square,
@@ -176,16 +174,6 @@ function formatPrice(price: number): string {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-type PageState = "idle" | "running" | "complete";
-
-interface CompletionStats {
-  propertiesFound: number;
-  duplicates: number;
-  errors: number;
-  elapsed: number;
-  sites: number;
-}
-
 export default function ScraperPage() {
   const { data: jobs, isLoading, refetch } = useScrapeJobs();
   const startScrape = useStartScrape();
@@ -196,23 +184,26 @@ export default function ScraperPage() {
     return (sitesData as any).sites ?? (sitesData as unknown as Site[]);
   }, [sitesData]);
 
-  const { socket, isConnected } = useSocket({ namespace: "/scrape" });
   const scrapeEstimate = useScrapeEstimate();
   const bulkLearnSites = useBulkLearnSites();
   const [estimate, setEstimate] = useState<ScrapeEstimate | null>(null);
 
-  // ── Live state
-  const [logs, setLogs] = useState<{ id: number; message: string; timestamp: string; level: string }[]>([]);
-  const [liveProgress, setLiveProgress] = useState<LiveProgress | null>(null);
-  const [liveProperties, setLiveProperties] = useState<LiveProperty[]>([]);
-  const [completionStats, setCompletionStats] = useState<CompletionStats | null>(null);
-  const [pageState, setPageState] = useState<PageState>("idle");
-  const [latestLogMessage, setLatestLogMessage] = useState<string | null>(null);
+  // ── Live state from Zustand store (survives navigation)
+  const logs = useScraperStore((s) => s.logs);
+  const liveProgress = useScraperStore((s) => s.liveProgress);
+  const liveProperties = useScraperStore((s) => s.liveProperties);
+  const completionStats = useScraperStore((s) => s.completionStats);
+  const pageState = useScraperStore((s) => s.pageState);
+  const latestLogMessage = useScraperStore((s) => s.latestLogMessage);
+  const pipelineSites = useScraperStore((s) => s.pipelineSites);
+  const jobStartTime = useScraperStore((s) => s.jobStartTime);
+  const isConnected = useScraperStore((s) => s.isSocketConnected);
+  const storeSetPageState = useScraperStore((s) => s.setPageState);
+  const storeResetLiveState = useScraperStore((s) => s.resetLiveState);
 
-  // ── Elapsed timer
+  // ── Elapsed timer (computed from store's jobStartTime)
   const [elapsedMs, setElapsedMs] = useState(0);
   const elapsedIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const jobStartRef = useRef<number | null>(null);
 
   // ── Config state
   const [isConfigOpen, setIsConfigOpen] = useState(false);
@@ -235,50 +226,11 @@ export default function ScraperPage() {
   // ── Live terminal log filters
   const [terminalLogFilter, setTerminalLogFilter] = useState<string>("all");
 
-  // ── Pipeline (per-site progress tracking when multi-site)
-  const [pipelineSites, setPipelineSites] = useState<Record<string, { found: number; status: "queued" | "active" | "done" }>>({});
-
-  // ── Detect active job
+  // ── Detect active job (for UI display only — state sync is in ScraperSocketProvider)
   const activeJob = useMemo(
     () => jobs?.find(j => j.status === "RUNNING" || j.status === "PENDING"),
     [jobs]
   );
-
-  // ── Sync page state with job status
-  useEffect(() => {
-    if (activeJob) {
-      setPageState("running");
-    } else if (pageState === "running") {
-      // Job disappeared from active list (completed/failed) — poll detected completion
-      // Only transition if we didn't already get a job:completed socket event
-      const latestJob = jobs?.[0];
-      if (latestJob && (latestJob.status === "COMPLETED" || latestJob.status === "FAILED" || latestJob.status === "CANCELLED")) {
-        setCompletionStats(prev => prev ?? {
-          propertiesFound: (latestJob as any).totalListings ?? 0,
-          duplicates: (latestJob as any).duplicates ?? 0,
-          errors: (latestJob as any).errors ?? 0,
-          elapsed: elapsedMs,
-          sites: (latestJob as any).siteIds?.length ?? selectedSiteIds.length,
-        });
-        setPageState("complete");
-      }
-    }
-  }, [activeJob, jobs, pageState]);
-
-  // ── Restore persisted progress when returning to page with a running job
-  const hasRestoredProgress = useRef(false);
-  useEffect(() => {
-    if (activeJob && !liveProgress && !hasRestoredProgress.current) {
-      const pd = (activeJob as any).progressData;
-      if (pd && typeof pd === "object") {
-        setLiveProgress(pd as LiveProgress);
-        hasRestoredProgress.current = true;
-      }
-    }
-    if (!activeJob) {
-      hasRestoredProgress.current = false;
-    }
-  }, [activeJob, liveProgress]);
 
   // ── Load saved config on mount
   useEffect(() => {
@@ -299,135 +251,21 @@ export default function ScraperPage() {
     return () => document.removeEventListener("toggle-scraper-config", handleToggle);
   }, []);
 
-  // ── Elapsed timer: start/stop with job
+  // ── Elapsed timer: reads jobStartTime from store (set by ScraperSocketProvider)
   useEffect(() => {
-    if (pageState === "running" && activeJob) {
-      if (!jobStartRef.current) {
-        jobStartRef.current = activeJob.startedAt
-          ? new Date(activeJob.startedAt).getTime()
-          : Date.now();
-      }
+    if (pageState === "running" && jobStartTime) {
+      // Immediately set elapsed so it doesn't flash 0
+      setElapsedMs(Date.now() - jobStartTime);
       elapsedIntervalRef.current = setInterval(() => {
-        setElapsedMs(Date.now() - (jobStartRef.current ?? Date.now()));
+        setElapsedMs(Date.now() - jobStartTime);
       }, 1000);
     } else {
       if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
-      if (pageState !== "running") {
-        jobStartRef.current = null;
-      }
     }
     return () => {
       if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
     };
-  }, [pageState, activeJob]);
-
-  // ── Join socket room when an active job exists (so we receive room-scoped events)
-  const currentJobIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!socket) return;
-    const jobId = activeJob?.id ?? null;
-    if (jobId === currentJobIdRef.current) return;
-
-    // Leave previous room
-    if (currentJobIdRef.current) {
-      socket.emit("leave:job", currentJobIdRef.current);
-    }
-    // Join new room
-    if (jobId) {
-      socket.emit("join:job", jobId);
-    }
-    currentJobIdRef.current = jobId;
-
-    return () => {
-      if (currentJobIdRef.current) {
-        socket.emit("leave:job", currentJobIdRef.current);
-        currentJobIdRef.current = null;
-      }
-    };
-  }, [socket, activeJob?.id]);
-
-  // ── Refs for socket callbacks (avoid re-registering listeners on every state change)
-  const liveProgressRef = useRef(liveProgress);
-  liveProgressRef.current = liveProgress;
-  const elapsedMsRef = useRef(elapsedMs);
-  elapsedMsRef.current = elapsedMs;
-  const selectedSiteIdsRef = useRef(selectedSiteIds);
-  selectedSiteIdsRef.current = selectedSiteIds;
-
-  // ── Socket events (stable deps — only re-register when socket/refetch change)
-  useEffect(() => {
-    if (!socket) return;
-
-    const handleLog = (data: any) => {
-      const msg = data.message ?? String(data);
-      setLatestLogMessage(msg);
-      setLogs(prev => {
-        const entry = {
-          id: Date.now() + Math.random(),
-          message: msg,
-          timestamp: new Date().toISOString(),
-          level: data.level ?? "info",
-        };
-        return [...prev, entry].slice(-200);
-      });
-    };
-
-    socket.on("job:progress", (data: LiveProgress) => {
-      setLiveProgress(data);
-      if (data.currentSite) {
-        setPipelineSites(prev => ({
-          ...prev,
-          [data.currentSite!]: {
-            found: data.propertiesFound ?? 0,
-            status: "active",
-          },
-        }));
-      }
-    });
-
-    socket.on("job:log", handleLog);
-    socket.on("scrape_log", handleLog);
-
-    socket.on("job:property", (data: any) => {
-      const prop: LiveProperty = data.property ?? data;
-      setLiveProperties(prev => [prop, ...prev].slice(0, 100));
-    });
-
-    socket.on("job:completed", (data: any) => {
-      const s = data.stats || data;
-      const lp = liveProgressRef.current;
-      setCompletionStats({
-        propertiesFound: s.totalListings ?? s.propertiesFound ?? lp?.propertiesFound ?? 0,
-        duplicates: s.duplicates ?? lp?.duplicates ?? 0,
-        errors: s.errors ?? lp?.errors ?? 0,
-        elapsed: elapsedMsRef.current,
-        sites: s.sites ?? selectedSiteIdsRef.current.length,
-      });
-      setPageState("complete");
-      setPipelineSites(prev => {
-        const next = { ...prev };
-        Object.keys(next).forEach(k => { next[k] = { ...next[k], status: "done" }; });
-        return next;
-      });
-      refetch();
-    });
-
-    socket.on("job:error", (data: any) => {
-      toast.error(data.message ?? "Scraper reported an error");
-    });
-
-    socket.on("job_update", () => refetch());
-
-    return () => {
-      socket.off("job:progress");
-      socket.off("job:log");
-      socket.off("scrape_log");
-      socket.off("job:property");
-      socket.off("job:completed");
-      socket.off("job:error");
-      socket.off("job_update");
-    };
-  }, [socket, refetch]);
+  }, [pageState, jobStartTime]);
 
   // ── Auto-scroll logs (within container, not page)
   useEffect(() => {
@@ -529,17 +367,18 @@ export default function ScraperPage() {
 
   // ── Dispatch
   const dispatchJob = useCallback((cfg: ScrapeConfig) => {
-    setLogs([]);
-    setLiveProperties([]);
-    setLiveProgress(null);
-    setLatestLogMessage(null);
-    setCompletionStats(null);
-    setPipelineSites(
-      cfg.scrapeMode === "PASSIVE_BULK"
-        ? Object.fromEntries(cfg.selectedSiteIds.map(id => [id, { found: 0, status: "queued" as const }]))
-        : {}
-    );
-    setPageState("running");
+    // Reset live state in the global store
+    storeResetLiveState();
+
+    // Pre-populate pipeline sites for multi-site tracking
+    if (cfg.scrapeMode === "PASSIVE_BULK") {
+      const store = useScraperStore.getState();
+      cfg.selectedSiteIds.forEach(id => {
+        store.updatePipelineSite(id, { found: 0, status: "queued" });
+      });
+    }
+
+    storeSetPageState("running");
 
     startScrape.mutate(
       {
@@ -552,19 +391,19 @@ export default function ScraperPage() {
       {
         onSuccess: (job: any) => {
           toast.success("Scrape job dispatched!");
-          // Immediately join socket room for this job so we get progress/property/completed events
-          if (socket && job?.id) {
-            socket.emit("join:job", job.id);
-            currentJobIdRef.current = job.id;
+          // Store will pick up the new job via polling and join the socket room
+          if (job?.id) {
+            useScraperStore.getState().setActiveJobId(job.id);
+            useScraperStore.getState().setJobStartTime(Date.now());
           }
         },
         onError: (err: any) => {
-          setPageState("idle");
+          storeSetPageState("idle");
           toast.error(err.response?.data?.message || "Failed to start scraping job");
         },
       }
     );
-  }, [startScrape, allSites, socket]);
+  }, [startScrape, allSites, storeResetLiveState, storeSetPageState]);
 
   const handleDispatch = () => {
     if (!savedConfig) {
@@ -1218,7 +1057,7 @@ export default function ScraperPage() {
                     <MiniStat label="Elapsed" value={formatElapsed(completionStats.elapsed)} />
                   </div>
                   <button
-                    onClick={() => setPageState("idle")}
+                    onClick={() => storeSetPageState("idle")}
                     className="w-full py-2 rounded-xl text-xs font-semibold border hover:bg-secondary transition-colors text-muted-foreground"
                   >
                     Clear & Reset
@@ -1412,7 +1251,7 @@ export default function ScraperPage() {
                   </div>
                   {logs.length > 0 && (
                     <button
-                      onClick={() => setLogs([])}
+                      onClick={() => useScraperStore.setState({ logs: [] })}
                       className="text-[9px] font-mono text-zinc-500 hover:text-zinc-300 transition-colors mr-2"
                     >
                       clear

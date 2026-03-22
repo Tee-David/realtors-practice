@@ -99,7 +99,10 @@ const limiter = rateLimit({
   message: "Too many requests from this IP, please try again later.",
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => req.path === "/health" || req.path === "/api/health",
+  skip: (req) =>
+    req.path === "/health" ||
+    req.path === "/api/health" ||
+    req.path.startsWith("/api/internal/"),
 });
 
 app.use("/api/", limiter);
@@ -117,7 +120,8 @@ app.use("/api/auth/login", authLimiter);
 app.use("/api/auth/register", authLimiter);
 app.use("/api/auth/validate-invite", authLimiter);
 
-// Body parser
+// Body parser — larger limit for internal scraper callbacks (property batches can be big)
+app.use("/api/internal", express.json({ limit: "10mb" }));
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true, limit: "2mb" }));
 

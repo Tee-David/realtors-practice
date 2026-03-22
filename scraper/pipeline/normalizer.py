@@ -100,7 +100,16 @@ def normalize_property(raw_data: dict[str, Any], site_name: str) -> dict[str, An
     # Normalize images to list of strings
     images = data.get("images")
     if isinstance(images, list):
-        data["images"] = [url for url in images if isinstance(url, str) and url.startswith("http")]
+        valid_images = []
+        dropped_count = 0
+        for url in images:
+            if isinstance(url, str) and url.startswith("http"):
+                valid_images.append(url)
+            elif isinstance(url, str) and url:
+                dropped_count += 1
+        if dropped_count > 0:
+            logger.debug(f"Dropped {dropped_count} non-HTTP image URLs for {data.get('title', 'unknown')[:40]}")
+        data["images"] = valid_images
     else:
         data["images"] = []
 

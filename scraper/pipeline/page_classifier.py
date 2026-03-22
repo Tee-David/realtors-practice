@@ -227,6 +227,11 @@ def _is_category_page(soup: BeautifulSoup, url: str) -> bool:
     if total_classified >= _MIN_LINKS_FOR_ANALYSIS:
         ratio = category_path_count / total_classified
         if ratio >= _CATEGORY_LINK_RATIO_THRESHOLD:
+            # Rescue check: if this "category" page also has listing signals
+            # (prices + card elements), it's actually a hybrid listing page.
+            if _has_listing_signals(soup):
+                logger.debug(f"Hybrid page (category links + listing signals): {url} — NOT category")
+                return False
             return True
 
     # Signal 4: No price-like text on the page (category pages rarely show prices)
@@ -239,6 +244,39 @@ def _is_category_page(soup: BeautifulSoup, url: str) -> bool:
             card_count += len(soup.select(selector))
         if card_count == 0 and len(links) > 20:
             return True
+
+    return False
+
+
+def _has_listing_signals(soup: BeautifulSoup) -> bool:
+    """Check if a page has signals of actual property listings (prices + card elements).
+
+    Used as a rescue check to prevent misclassifying listing pages as category pages
+    when they have many category-like navigation links but also contain property cards.
+    """
+    # Check for price indicators
+    page_text = soup.get_text()
+    price_matches = _PRICE_PATTERN.findall(page_text)
+    has_prices = len(price_matches) >= 2
+
+    # Check for card-like elements
+    card_count = 0
+    for selector in _LISTING_CARD_SELECTORS:
+        card_count += len(soup.select(selector))
+    has_cards = card_count >= 2
+
+    # Also check for repeated structured blocks (common in Nigerian sites)
+    # that might not match the card selectors
+    repeated_divs = soup.find_all("div", class_=True)
+    class_counts: dict[str, int] = {}
+    for div in repeated_divs:
+        classes = " ".join(sorted(div.get("class", [])))
+        if classes:
+            class_counts[classes] = class_counts.get(classes, 0) + 1
+    has_repeated_blocks = any(count >= 3 for count in class_counts.values())
+
+    if has_prices and (has_cards or has_repeated_blocks):
+        return True
 
     return False
 

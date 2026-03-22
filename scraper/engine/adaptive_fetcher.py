@@ -368,6 +368,9 @@ class AdaptiveFetcher:
             logger.info(f"Backing off {backoff}s due to {self._consecutive_blocks} consecutive blocks")
             await asyncio.sleep(backoff)
 
+        # Track per-layer failures for diagnostic logging
+        layer_errors: list[str] = []
+
         # Layer 1: Playwright + stealth (full browser — default for all sites)
         html = await self._fetch_playwright(url)
         if html and len(html) > MAX_HTML_SIZE:
@@ -379,7 +382,10 @@ class AdaptiveFetcher:
                 self._consecutive_blocks = 0
                 self._last_successful_layer = "playwright"
                 return html
+            layer_errors.append(f"playwright: blocked ({block_reason})")
             logger.debug(f"Playwright blocked ({block_reason}) for {url}, trying curl_cffi")
+        else:
+            layer_errors.append(f"playwright: {'empty response' if not html else f'too short ({len(html)} chars)'}")
 
         # Layer 2: curl_cffi (fast HTTP with Chrome TLS fingerprint)
         if not requires_js:
@@ -390,7 +396,12 @@ class AdaptiveFetcher:
                     self._consecutive_blocks = 0
                     self._last_successful_layer = "curl_cffi"
                     return html
+                layer_errors.append(f"curl_cffi: blocked ({block_reason})")
+            else:
+                layer_errors.append(f"curl_cffi: {'empty response' if not html else f'too short ({len(html)} chars)'}")
             logger.debug(f"curl_cffi insufficient for {url}, trying Scrapling")
+        else:
+            layer_errors.append("curl_cffi: skipped (requires_js=True)")
 
         # Layer 3: Scrapling StealthyFetcher (anti-bot bypass)
         scrapling = self._get_scrapling()
@@ -402,9 +413,14 @@ class AdaptiveFetcher:
                     self._consecutive_blocks = 0
                     self._last_successful_layer = "scrapling"
                     return html
+                layer_errors.append(f"scrapling: blocked ({block_reason})")
                 logger.debug(f"Scrapling blocked ({block_reason}) for {url}")
+            else:
+                layer_errors.append(f"scrapling: {'empty response' if not html else f'too short ({len(html)} chars)'}")
+        else:
+            layer_errors.append("scrapling: not available")
 
-        logger.warning(f"All fetch layers failed for {url}")
+        logger.warning(f"All fetch layers failed for {url} — {'; '.join(layer_errors)}")
         return None
 
     async def fetch_as_markdown(self, url: str) -> Optional[str]:

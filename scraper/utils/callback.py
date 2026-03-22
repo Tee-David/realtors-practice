@@ -88,8 +88,10 @@ async def report_results(
     }
     try:
         resp = await _client.post(url, json=payload, headers=_headers())
+        if resp.status_code >= 400:
+            logger.error(f"Report results failed for job {job_id}: HTTP {resp.status_code} — {resp.text[:300]}")
         resp.raise_for_status()
-        logger.info(f"Reported {len(properties)} properties for job {job_id}")
+        logger.info(f"Reported {len(properties)} properties for job {job_id} (HTTP {resp.status_code})")
     except Exception as e:
         logger.error(f"Failed to report results for job {job_id}: {e}")
 

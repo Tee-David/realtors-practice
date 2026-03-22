@@ -11,6 +11,27 @@ const SANITIZE_OPTS: sanitizeHtml.IOptions = {
   allowedAttributes: {},
 };
 
+// Fields that exist on the Prisma Property model (whitelist)
+const PROPERTY_SCHEMA_FIELDS = new Set([
+  "title", "listingUrl", "source", "siteId", "status", "verificationStatus",
+  "listingType", "category",
+  "propertyType", "propertySubtype", "bedrooms", "bathrooms", "toilets", "bq",
+  "landSize", "landSizeSqm", "buildingSize", "buildingSizeSqm", "plotDimensions",
+  "yearBuilt", "renovationYear", "furnishing", "condition", "floors",
+  "unitsAvailable", "description",
+  "price", "priceCurrency", "pricePerSqm", "pricePerBedroom",
+  "initialDeposit", "paymentPlan", "serviceCharge", "serviceChargeFreq",
+  "legalFees", "agentCommission", "priceNegotiable", "rentFrequency",
+  "fullAddress", "locationText", "estateName", "streetName", "area", "lga",
+  "state", "country", "latitude", "longitude", "landmarks",
+  "features", "security", "utilities", "parkingSpaces",
+  "images", "videos", "virtualTourUrl", "floorPlanUrl",
+  "agentName", "agentPhone", "agentEmail", "contactInfo", "agencyName",
+  "agencyLogo", "agentVerified",
+  "scrapeTimestamp", "searchKeywords", "promoTags", "titleTag",
+  "isPremium", "isFeatured", "isHotDeal", "qualityScore",
+]);
+
 function sanitizeScrapedProperty(prop: Record<string, unknown>): Record<string, unknown> {
   const textFields = [
     "title", "description", "locationText", "fullAddress",
@@ -18,13 +39,75 @@ function sanitizeScrapedProperty(prop: Record<string, unknown>): Record<string, 
     "propertyType", "propertySubtype", "estateName", "streetName",
     "area", "lga", "state", "country",
   ];
-  const sanitized = { ...prop };
+
+  // Strip fields that aren't in the Prisma schema (e.g. priceText, features_text, location_text)
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(prop)) {
+    if (PROPERTY_SCHEMA_FIELDS.has(key)) {
+      sanitized[key] = val;
+    }
+  }
+
+  // HTML-sanitize text fields
   for (const field of textFields) {
     const val = sanitized[field];
     if (typeof val === "string") {
       sanitized[field] = sanitizeHtml(val, SANITIZE_OPTS).trim();
     }
   }
+
+  // Ensure required string fields are not empty
+  if (!sanitized["listingUrl"]) {
+    sanitized["listingUrl"] = sanitized["source"]
+      ? `https://unknown.source/${crypto.randomUUID()}`
+      : `https://unknown/${crypto.randomUUID()}`;
+  }
+
+  // Validate enum fields — Prisma rejects unknown enum values
+  const LISTING_TYPES = new Set(["SALE", "RENT", "LEASE", "SHORTLET"]);
+  if (sanitized["listingType"] && !LISTING_TYPES.has(sanitized["listingType"] as string)) {
+    // Try to map common variants
+    const lt = String(sanitized["listingType"]).toUpperCase().replace(/[^A-Z]/g, "");
+    sanitized["listingType"] = LISTING_TYPES.has(lt) ? lt : "SALE";
+  }
+  if (!sanitized["listingType"]) {
+    sanitized["listingType"] = "SALE";
+  }
+
+  const CATEGORIES = new Set(["RESIDENTIAL", "COMMERCIAL", "LAND", "SHORTLET", "INDUSTRIAL"]);
+  if (sanitized["category"] && !CATEGORIES.has(sanitized["category"] as string)) {
+    sanitized["category"] = "RESIDENTIAL";
+  }
+
+  const FURNISHINGS = new Set(["FURNISHED", "SEMI_FURNISHED", "UNFURNISHED", "UNKNOWN"]);
+  if (sanitized["furnishing"]) {
+    const f = String(sanitized["furnishing"]).toUpperCase().replace(/[\s-]+/g, "_");
+    sanitized["furnishing"] = FURNISHINGS.has(f) ? f : undefined;
+  }
+
+  const CONDITIONS = new Set(["NEW", "GOOD", "FAIR", "NEEDS_RENOVATION", "UNKNOWN"]);
+  if (sanitized["condition"]) {
+    const c = String(sanitized["condition"]).toUpperCase().replace(/[\s-]+/g, "_");
+    sanitized["condition"] = CONDITIONS.has(c) ? c : undefined;
+  }
+
+  const STATUSES = new Set(["AVAILABLE", "SOLD", "RENTED", "UNDER_OFFER", "WITHDRAWN", "EXPIRED"]);
+  if (sanitized["status"] && !STATUSES.has(sanitized["status"] as string)) {
+    sanitized["status"] = "AVAILABLE";
+  }
+
+  const V_STATUSES = new Set(["UNVERIFIED", "VERIFIED", "FLAGGED", "REJECTED"]);
+  if (sanitized["verificationStatus"] && !V_STATUSES.has(sanitized["verificationStatus"] as string)) {
+    sanitized["verificationStatus"] = "UNVERIFIED";
+  }
+
+  // Remove undefined values — let Prisma use defaults
+  for (const key of Object.keys(sanitized)) {
+    if (sanitized[key] === undefined || sanitized[key] === null) {
+      delete sanitized[key];
+    }
+  }
+
   return sanitized;
 }
 import {
@@ -137,7 +220,7 @@ export class ScrapeService {
               event_type: "trigger-scrape",
               client_payload: {
                 jobId: job.id,
-                scraperPayload: JSON.stringify(scraperPayload),
+                scraperPayload: scraperPayload,
               },
             }),
             signal: AbortSignal.timeout(10000),
@@ -424,7 +507,7 @@ export class ScrapeService {
           newCount++;
         }
       } catch (err: any) {
-        Logger.error(`Failed to upsert property: ${err.message}`);
+        Logger.error(`Failed to upsert property (title="${(rawProp as any).title}", listingUrl="${(rawProp as any).listingUrl}"): ${err.message}`);
       }
     }
 

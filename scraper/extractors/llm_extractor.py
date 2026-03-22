@@ -436,6 +436,7 @@ IMPORTANT:
             item.get("listing_url"),
             item.get("location"),
         ]):
+            logger.debug(f"[LLM Extractor] Dropping item with no useful data: {item}")
             continue
 
         listings.append(item)

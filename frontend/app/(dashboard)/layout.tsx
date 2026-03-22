@@ -9,6 +9,7 @@ import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { KeyboardShortcutsModal } from "@/components/ui/keyboard-shortcuts-modal";
 import dynamic from "next/dynamic";
 import { AIChatFab } from "@/components/ai/ai-chat-fab";
+import { ScraperSocketProvider } from "@/components/scraper/scraper-socket-provider";
 
 const TourProvider = dynamic(() => import("@/components/ui/tour-provider").then(m => ({ default: m.TourProvider })), { ssr: false });
 
@@ -40,6 +41,9 @@ export default function DashboardLayout({
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "var(--background)" }}>
+      {/* Persistent scraper socket — survives page navigation */}
+      <ScraperSocketProvider />
+
       {/* Desktop sidebar — hidden on mobile, shown on md+ */}
       <div data-tour="sidebar">
         <AppSidebar />
