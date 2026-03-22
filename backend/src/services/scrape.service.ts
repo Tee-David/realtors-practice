@@ -406,8 +406,9 @@ export class ScrapeService {
       return;
     }
 
+    const isIncremental = (stats as any).incremental === true;
+
     let newCount = 0;
-    let updatedCount = 0;
     let dupCount = 0;
 
     for (const rawProp of properties) {
@@ -427,40 +428,61 @@ export class ScrapeService {
       }
     }
 
-    // Update job stats
-    const durationMs = job.startedAt
-      ? Date.now() - new Date(job.startedAt).getTime()
-      : undefined;
+    if (isIncremental) {
+      // Incremental batch — update running totals but don't complete the job
+      await prisma.scrapeJob.update({
+        where: { id: jobId },
+        data: {
+          totalListings: { increment: properties.length },
+          newListings: { increment: newCount },
+          duplicates: { increment: dupCount },
+        },
+      });
+      Logger.info(
+        `Job ${jobId} incremental: +${newCount} new, +${dupCount} dups (batch of ${properties.length})`
+      );
+    } else {
+      // Final batch — mark job as completed
+      const durationMs = job.startedAt
+        ? Date.now() - new Date(job.startedAt).getTime()
+        : undefined;
 
-    await prisma.scrapeJob.update({
-      where: { id: jobId },
-      data: {
-        status: "COMPLETED",
-        completedAt: new Date(),
-        totalListings: properties.length,
-        newListings: newCount,
-        duplicates: dupCount,
-        errors: (stats.totalErrors as number) || 0,
-        durationMs,
-      },
-    });
+      // Get current totals (from incremental batches) and add final batch
+      const currentJob = await prisma.scrapeJob.findUnique({ where: { id: jobId } });
+      const prevNew = currentJob?.newListings ?? 0;
+      const prevDups = currentJob?.duplicates ?? 0;
+      const prevTotal = currentJob?.totalListings ?? 0;
 
-    // Update site health for each site
-    for (const siteId of job.siteIds) {
-      await SiteService.updateHealth(siteId, true, newCount);
+      await prisma.scrapeJob.update({
+        where: { id: jobId },
+        data: {
+          status: "COMPLETED",
+          completedAt: new Date(),
+          totalListings: prevTotal + properties.length,
+          newListings: prevNew + newCount,
+          duplicates: prevDups + dupCount,
+          errors: (stats.totalErrors as number) || 0,
+          durationMs,
+        },
+      });
+
+      // Update site health for each site
+      for (const siteId of job.siteIds) {
+        await SiteService.updateHealth(siteId, true, prevNew + newCount);
+      }
+
+      // Broadcast completion
+      broadcastScrapeComplete(jobId, {
+        totalListings: prevTotal + properties.length,
+        newListings: prevNew + newCount,
+        duplicates: prevDups + dupCount,
+        errors: stats.totalErrors || 0,
+      });
+
+      Logger.info(
+        `Job ${jobId} completed: ${prevNew + newCount} new, ${prevDups + dupCount} dups, ${(stats.totalErrors as number) || 0} errors`
+      );
     }
-
-    // Broadcast completion
-    broadcastScrapeComplete(jobId, {
-      totalListings: properties.length,
-      newListings: newCount,
-      duplicates: dupCount,
-      errors: stats.totalErrors || 0,
-    });
-
-    Logger.info(
-      `Job ${jobId} completed: ${newCount} new, ${dupCount} dups, ${(stats.totalErrors as number) || 0} errors`
-    );
   }
 
   /**

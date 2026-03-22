@@ -495,36 +495,15 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
 
                     await report_log(job_id, "INFO", f"[{site.name}] Crawling: {lp_url}")
 
-                    # Classification gate: skip non-listing pages before investing in pagination
+                    # Only skip obvious category/directory pages; never skip based
+                    # on "detail" heuristic — the LLM extraction handles both listing
+                    # pages and single-property pages correctly.
                     probe_html = await fetcher.fetch(lp_url, requires_js=True)
                     if probe_html:
                         page_type = classify_page(probe_html, lp_url)
                         if page_type == "category":
                             await report_log(job_id, "INFO",
                                 f"[{site.name}] Skipping category/directory page: {lp_url}")
-                            continue
-                        if page_type == "detail":
-                            # Single property page — extract directly, skip pagination
-                            await report_log(job_id, "INFO",
-                                f"[{site.name}] URL is a detail page, extracting directly: {lp_url}")
-                            detail_data = await extract_detail_from_page(
-                                probe_html, lp_url, site_name=site.name,
-                            )
-                            if detail_data:
-                                raw_data = _to_property_dict(detail_data, site.name, site.id)
-                                normalized = normalize_property(raw_data, site.name)
-                                validated = validate_property(normalized)
-                                if not deduplicator.is_duplicate(validated):
-                                    site_properties.append(validated)
-                                    await report_property(job_id, {
-                                        "title": validated.get("title"),
-                                        "price": validated.get("price"),
-                                        "location": validated.get("area") or validated.get("state"),
-                                        "bedrooms": validated.get("bedrooms"),
-                                        "bathrooms": validated.get("bathrooms"),
-                                        "image": (validated.get("images") or [None])[0],
-                                        "source": site.name,
-                                    })
                             continue
 
                     # Use browser-session pagination to collect all pages
@@ -533,8 +512,8 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
                     )
 
                     if not collected_pages:
-                        # Fallback: single page fetch
-                        html = await fetcher.fetch(lp_url, requires_js=True)
+                        # Fallback: reuse probe HTML or re-fetch
+                        html = probe_html if (probe_html and len(probe_html) > 500) else await fetcher.fetch(lp_url, requires_js=True)
                         if html and len(html) > 500:
                             collected_pages = [(lp_url, html)]
                         else:
@@ -555,18 +534,11 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
                         if _is_stopped(job_id):
                             break
 
-                        # Classification gate: skip non-listing pages before expensive LLM call
+                        # Only skip category/directory pages — let LLM handle everything else
                         page_type = classify_page(html, page_url)
-                        if page_type in ("category", "detail"):
+                        if page_type == "category":
                             await report_log(job_id, "DEBUG",
-                                f"[{site.name}] Page {page_num + 1} classified as '{page_type}', skipping LLM extraction")
-                            consecutive_empty += 1
-                            if consecutive_empty >= 2:
-                                break
-                            continue
-                        if page_num > 0 and page_type == "unknown" and not is_listing_page(html):
-                            await report_log(job_id, "DEBUG",
-                                f"[{site.name}] Page {page_num + 1} doesn't look like listings, skipping")
+                                f"[{site.name}] Page {page_num + 1} classified as category, skipping")
                             consecutive_empty += 1
                             if consecutive_empty >= 2:
                                 break
@@ -755,15 +727,24 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
 
             await report_log(job_id, "INFO",
                 f"Site {site.name}: scraped {len(site_properties)} properties")
+
+            # Send properties incrementally per-site so they're saved immediately
+            # (don't wait until job completes — properties survive crashes/timeouts)
+            if site_properties:
+                site_stats = {
+                    "totalScraped": len(site_properties),
+                    "totalErrors": total_errors,
+                    "sitesProcessed": 1,
+                    "duplicatesSkipped": deduplicator.duplicate_count,
+                    "incremental": True,  # tells backend this is a partial batch
+                }
+                await report_results(job_id, site_properties, site_stats)
+                await report_log(job_id, "INFO",
+                    f"[{site.name}] Sent {len(site_properties)} properties to backend")
+
             all_properties.extend(site_properties)
 
-        # Enrich all properties (geocoding)
-        if all_properties:
-            await report_log(job_id, "INFO",
-                f"Enriching {len(all_properties)} properties (geocoding)...")
-            all_properties = await enrich_property(all_properties)
-
-        # Report final results
+        # Report final completion (properties already sent incrementally per-site)
         stats = {
             "totalScraped": len(all_properties),
             "totalErrors": total_errors,
@@ -771,7 +752,7 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
             "duplicatesSkipped": deduplicator.duplicate_count,
         }
 
-        await report_results(job_id, all_properties, stats)
+        await report_results(job_id, [], stats)
         await report_log(job_id, "INFO",
             f"Job complete: {len(all_properties)} properties, {total_errors} errors")
 
