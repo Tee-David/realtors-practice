@@ -62,7 +62,7 @@ PROVIDERS = [
         name="Cerebras",
         base_url="https://api.cerebras.ai/v1",
         api_key_env="CEREBRAS_API_KEY",
-        model="llama-3.3-70b",
+        model="qwen-3-235b-a22b-instruct-2507",
         rpm_limit=30,
     ),
     LLMProvider(
