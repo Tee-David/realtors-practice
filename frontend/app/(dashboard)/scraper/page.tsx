@@ -1209,7 +1209,7 @@ export default function ScraperPage() {
         <div className="lg:col-span-8 flex flex-col">
 
           {/* Live Terminal */}
-          <Card data-tour="scraper-terminal" className="bg-white dark:bg-[#0A0A0B] border border-border dark:border-white/10 shadow-xl relative overflow-hidden flex flex-col rounded-2xl flex-1">
+          <Card data-tour="scraper-terminal" className="bg-white dark:bg-[#0A0A0B] border border-border dark:border-white/10 shadow-xl relative overflow-hidden flex flex-col rounded-2xl h-full">
             {/* Terminal header */}
             <CardHeader className="pb-2 border-b border-border dark:border-white/10 bg-slate-50/80 dark:bg-[#0A0A0B]/80 backdrop-blur-xl z-10 flex-shrink-0">
               <div className="flex items-center justify-between">
