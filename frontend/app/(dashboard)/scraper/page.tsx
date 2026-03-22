@@ -220,7 +220,7 @@ export default function ScraperPage() {
   // ── Execution History state
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [historyStatusFilter, setHistoryStatusFilter] = useState<string>("");
-  const logsEndRef = useRef<HTMLDivElement>(null);
+  // logsEndRef removed — logs display newest-first now
   const logsSectionRef = useRef<HTMLDivElement>(null);
 
   // ── Live terminal log filters
@@ -267,13 +267,7 @@ export default function ScraperPage() {
     };
   }, [pageState, jobStartTime]);
 
-  // ── Auto-scroll logs (within container, not page)
-  useEffect(() => {
-    const el = logsEndRef.current;
-    if (el?.parentElement) {
-      el.parentElement.scrollTop = el.parentElement.scrollHeight;
-    }
-  }, [logs]);
+  // Logs are displayed newest-first, no auto-scroll needed
 
   // ── Site helpers
   // ── Fetch estimate when selected sites change
@@ -1215,7 +1209,7 @@ export default function ScraperPage() {
         <div className="lg:col-span-8 flex flex-col">
 
           {/* Live Terminal */}
-          <Card data-tour="scraper-terminal" className="bg-white dark:bg-[#0A0A0B] border border-border dark:border-white/10 shadow-xl relative overflow-hidden flex flex-col rounded-2xl min-h-[340px] max-h-[600px]">
+          <Card data-tour="scraper-terminal" className="bg-white dark:bg-[#0A0A0B] border border-border dark:border-white/10 shadow-xl relative overflow-hidden flex flex-col rounded-2xl flex-1">
             {/* Terminal header */}
             <CardHeader className="pb-2 border-b border-border dark:border-white/10 bg-slate-50/80 dark:bg-[#0A0A0B]/80 backdrop-blur-xl z-10 flex-shrink-0">
               <div className="flex items-center justify-between">
@@ -1271,7 +1265,7 @@ export default function ScraperPage() {
                 </div>
               ) : (
                 <div className="space-y-1 pb-4">
-                  {logs.filter(log => terminalLogFilter === "all" || log.level.toLowerCase() === terminalLogFilter).map(log => (
+                  {[...logs].filter(log => terminalLogFilter === "all" || log.level.toLowerCase() === terminalLogFilter).reverse().map(log => (
                     <div key={log.id} className="flex items-start gap-2 sm:gap-3 break-words hover:bg-black/[0.02] dark:hover:bg-white/[0.02] px-1 rounded">
                       <span className="text-zinc-400 dark:text-zinc-600 shrink-0 select-none hidden sm:inline text-[10px] pt-0.5 tabular-nums">
                         {new Date(log.timestamp).toLocaleTimeString([], {
@@ -1307,11 +1301,11 @@ export default function ScraperPage() {
                       </span>
                     </div>
                   ))}
-                  <div ref={logsEndRef} />
+                  {/* logsEndRef removed — newest logs are at the top now */}
                 </div>
               )}
             </CardContent>
-            <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-white dark:from-[#0A0A0B] to-transparent pointer-events-none z-10" />
+            <div className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-white dark:from-[#0A0A0B] to-transparent pointer-events-none z-10" />
           </Card>
 
         </div>
