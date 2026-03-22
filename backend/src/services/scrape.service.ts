@@ -127,8 +127,12 @@ interface StartJobInput {
 }
 
 export class ScrapeService {
+  // Batch size — 5 sites per GH Actions runner (proven reliable, avoids timeouts)
+  static readonly BATCH_SIZE = 5;
+
   /**
    * Start a new scrape job — creates a DB record and dispatches to the Python scraper.
+   * When there are many sites, splits into batches dispatched as parallel GH Actions runs.
    */
   static async startJob(input: StartJobInput, userId?: string) {
     const { siteIds, type = "PASSIVE_BULK", maxListingsPerSite = 100, parameters, searchQuery } = input;
@@ -142,7 +146,15 @@ export class ScrapeService {
       throw new Error("No valid enabled sites found for the given IDs");
     }
 
-    // Create ScrapeJob record
+    // Split sites into batches
+    const totalBatches = Math.ceil(sites.length / ScrapeService.BATCH_SIZE);
+
+    // Create ScrapeJob record — store batch tracking info in parameters
+    const jobParams = {
+      ...(parameters || {}),
+      ...(totalBatches > 1 ? { totalBatches, completedBatches: 0 } : {}),
+    };
+
     const job = await prisma.scrapeJob.create({
       data: {
         type,
@@ -150,7 +162,7 @@ export class ScrapeService {
         siteIds,
         sites: { connect: sites.map((s) => ({ id: s.id })) },
         createdById: userId || undefined,
-        parameters: parameters as Prisma.InputJsonValue || undefined,
+        parameters: jobParams as Prisma.InputJsonValue,
         searchQuery,
         startedAt: new Date(),
       },
@@ -159,89 +171,124 @@ export class ScrapeService {
       },
     });
 
-    // Build payload for the Python scraper
     const callbackUrl = config.env === "production"
       ? `${process.env.API_BASE_URL || "https://realtors-practice-new-api.onrender.com/api"}`
       : `http://localhost:${config.port}/api`;
 
-    const scraperPayload = {
-      jobId: job.id,
-      sites: sites.map((site) => {
-        const selectors = (site.selectors || {}) as Record<string, any>;
-        const detailSelectors = (site.detailSelectors || selectors) as Record<string, any>;
+    // Build site payload configs
+    const sitePayloads = sites.map((site) => {
+      const selectors = (site.selectors || {}) as Record<string, any>;
+      const detailSelectors = (site.detailSelectors || selectors) as Record<string, any>;
+      const listingSelector = selectors.listingSelector
+        || selectors.listing_container
+        || selectors.listing_link
+        || "a[href]";
 
-        // listingSelector is the CSS selector for listing cards/containers on the index page
-        // It's separate from the detail page field selectors
-        const listingSelector = selectors.listingSelector
-          || selectors.listing_container
-          || selectors.listing_link
-          || "a[href]";
+      return {
+        id: site.id,
+        name: site.name,
+        baseUrl: site.baseUrl,
+        listPaths: (site as any).listPaths || [],
+        listingSelector,
+        selectors: detailSelectors,
+        paginationType: site.paginationType,
+        paginationConfig: selectors.paginationConfig || {},
+        requiresJs: site.requiresBrowser,
+        maxPages: site.maxPages,
+        delayMin: selectors.delayMin || undefined,
+        delayMax: selectors.delayMax || undefined,
+      };
+    });
 
-        return {
-          id: site.id,
-          name: site.name,
-          baseUrl: site.baseUrl,
-          listPaths: (site as any).listPaths || [],
-          listingSelector,
-          selectors: detailSelectors,
-          paginationType: site.paginationType,
-          paginationConfig: selectors.paginationConfig || {},
-          requiresJs: site.requiresBrowser,
-          maxPages: site.maxPages,
-          delayMin: selectors.delayMin || undefined,
-          delayMax: selectors.delayMax || undefined,
-        };
-      }),
-      maxListingsPerSite,
-      callbackUrl,
-      parameters: parameters || {},
-    };
+    // Create batch payloads
+    const batches: Array<{ sites: typeof sitePayloads; batchIndex: number }> = [];
+    for (let i = 0; i < sitePayloads.length; i += ScrapeService.BATCH_SIZE) {
+      batches.push({
+        sites: sitePayloads.slice(i, i + ScrapeService.BATCH_SIZE),
+        batchIndex: batches.length,
+      });
+    }
 
-    // Dispatch scraper — GitHub Actions first (runs Playwright on GH runners),
-    // then direct HTTP to Render scraper as fallback.
-    let dispatched = false;
+    Logger.info(
+      `Scrape dispatch: ${sites.length} sites → ${batches.length} batch(es) of ≤${ScrapeService.BATCH_SIZE}. ` +
+      `GITHUB_PAT=${config.github.pat ? "set" : "MISSING"}, GITHUB_REPO=${config.github.repo}`
+    );
 
-    Logger.info(`Scrape dispatch: GITHUB_PAT=${config.github.pat ? "set" : "MISSING"}, GITHUB_REPO=${config.github.repo}`);
+    let dispatchedCount = 0;
 
     // Method 1: GitHub Actions (primary — full Playwright + Chromium environment)
     if (config.github.pat && config.github.repo) {
-      try {
-        const [owner, repo] = config.github.repo.split("/");
-        const response = await fetch(
-          `https://api.github.com/repos/${owner}/${repo}/dispatches`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${config.github.pat}`,
-              Accept: "application/vnd.github.v3+json",
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              event_type: "trigger-scrape",
-              client_payload: {
-                jobId: job.id,
-                scraperPayload: scraperPayload,
-              },
-            }),
-            signal: AbortSignal.timeout(10000),
-          }
-        );
+      const [owner, repo] = config.github.repo.split("/");
 
-        if (response.status === 204 || response.ok) {
-          dispatched = true;
-          Logger.info(`Scrape job ${job.id} dispatched to GitHub Actions (${sites.length} sites)`);
-        } else {
-          const body = await response.text();
-          throw new Error(`GitHub API responded ${response.status}: ${body}`);
+      for (const batch of batches) {
+        const scraperPayload = {
+          jobId: job.id,
+          sites: batch.sites,
+          maxListingsPerSite,
+          callbackUrl,
+          parameters: {
+            ...(parameters || {}),
+            batchIndex: batch.batchIndex,
+            totalBatches,
+          },
+        };
+
+        try {
+          const response = await fetch(
+            `https://api.github.com/repos/${owner}/${repo}/dispatches`,
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${config.github.pat}`,
+                Accept: "application/vnd.github.v3+json",
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                event_type: "trigger-scrape",
+                client_payload: {
+                  jobId: job.id,
+                  scraperPayload: scraperPayload,
+                },
+              }),
+              signal: AbortSignal.timeout(10000),
+            }
+          );
+
+          if (response.status === 204 || response.ok) {
+            dispatchedCount++;
+            const siteNames = batch.sites.map((s) => s.name).join(", ");
+            Logger.info(
+              `Batch ${batch.batchIndex + 1}/${totalBatches} dispatched to GH Actions: ${siteNames}`
+            );
+          } else {
+            const body = await response.text();
+            Logger.warn(
+              `Batch ${batch.batchIndex + 1}/${totalBatches} GH dispatch failed: ${response.status} — ${body}`
+            );
+          }
+        } catch (err: any) {
+          Logger.warn(`Batch ${batch.batchIndex + 1}/${totalBatches} GH dispatch error: ${err.message}`);
         }
-      } catch (err: any) {
-        Logger.warn(`GitHub Actions dispatch failed: ${err.message}`);
+
+        // Brief delay between dispatches to avoid GitHub API rate limits
+        if (batches.length > 1 && batch.batchIndex < batches.length - 1) {
+          await new Promise((r) => setTimeout(r, 1000));
+        }
       }
     }
 
-    // Method 2: Direct HTTP to Python scraper (fallback — Render or local)
-    if (!dispatched) {
+    // Method 2: Direct HTTP fallback — send ALL sites as a single payload (no batching needed
+    // since the scraper handles them sequentially anyway and there's no GH Actions timeout)
+    if (dispatchedCount === 0) {
       Logger.warn(`GitHub Actions dispatch skipped/failed, falling back to direct HTTP (scraper URL: ${config.scraper.url})`);
+
+      const scraperPayload = {
+        jobId: job.id,
+        sites: sitePayloads,
+        maxListingsPerSite,
+        callbackUrl,
+        parameters: parameters || {},
+      };
 
       try {
         const response = await fetch(`${config.scraper.url}/api/jobs`, {
@@ -259,18 +306,21 @@ export class ScrapeService {
           throw new Error(`Scraper responded ${response.status}: ${body}`);
         }
 
-        dispatched = true;
+        dispatchedCount = 1;
         Logger.info(`Scrape job ${job.id} dispatched directly to scraper via HTTP (${sites.length} sites)`);
       } catch (err: any) {
         Logger.warn(`Direct HTTP dispatch also failed: ${err.message}`);
       }
     }
 
-    if (dispatched) {
+    if (dispatchedCount > 0) {
       await prisma.scrapeJob.update({
         where: { id: job.id },
         data: { status: "RUNNING" },
       });
+      Logger.info(
+        `Job ${job.id} RUNNING: ${dispatchedCount}/${batches.length} batches dispatched (${sites.length} sites total)`
+      );
     } else {
       await prisma.scrapeJob.update({
         where: { id: job.id },
@@ -525,10 +575,9 @@ export class ScrapeService {
         `Job ${jobId} incremental: +${newCount} new, +${dupCount} dups (batch of ${properties.length})`
       );
     } else {
-      // Final batch — mark job as completed
-      const durationMs = job.startedAt
-        ? Date.now() - new Date(job.startedAt).getTime()
-        : undefined;
+      // A batch has finished — check if this is a multi-batch job
+      const jobParams = (job.parameters || {}) as Record<string, any>;
+      const totalBatches = jobParams.totalBatches as number || 1;
 
       // Get current totals (from incremental batches) and add final batch
       const currentJob = await prisma.scrapeJob.findUnique({ where: { id: jobId } });
@@ -536,35 +585,83 @@ export class ScrapeService {
       const prevDups = currentJob?.duplicates ?? 0;
       const prevTotal = currentJob?.totalListings ?? 0;
 
-      await prisma.scrapeJob.update({
-        where: { id: jobId },
-        data: {
-          status: "COMPLETED",
-          completedAt: new Date(),
+      if (totalBatches > 1) {
+        // Multi-batch job: increment completedBatches, only finish when all done
+        const completedBatches = (jobParams.completedBatches as number || 0) + 1;
+        const updatedParams = { ...jobParams, completedBatches };
+
+        const allDone = completedBatches >= totalBatches;
+        const durationMs = allDone && job.startedAt
+          ? Date.now() - new Date(job.startedAt).getTime()
+          : undefined;
+
+        await prisma.scrapeJob.update({
+          where: { id: jobId },
+          data: {
+            parameters: updatedParams as Prisma.InputJsonValue,
+            totalListings: prevTotal + properties.length,
+            newListings: prevNew + newCount,
+            duplicates: prevDups + dupCount,
+            errors: { increment: (stats.totalErrors as number) || 0 },
+            ...(allDone ? {
+              status: "COMPLETED",
+              completedAt: new Date(),
+              durationMs,
+            } : {}),
+          },
+        });
+
+        Logger.info(
+          `Job ${jobId} batch ${completedBatches}/${totalBatches} done: ` +
+          `+${newCount} new, +${dupCount} dups` +
+          (allDone ? " — ALL BATCHES COMPLETE" : "")
+        );
+
+        if (allDone) {
+          for (const siteId of job.siteIds) {
+            await SiteService.updateHealth(siteId, true, prevNew + newCount);
+          }
+          broadcastScrapeComplete(jobId, {
+            totalListings: prevTotal + properties.length,
+            newListings: prevNew + newCount,
+            duplicates: prevDups + dupCount,
+            errors: (currentJob?.errors ?? 0) + ((stats.totalErrors as number) || 0),
+          });
+        }
+      } else {
+        // Single-batch job — original behavior
+        const durationMs = job.startedAt
+          ? Date.now() - new Date(job.startedAt).getTime()
+          : undefined;
+
+        await prisma.scrapeJob.update({
+          where: { id: jobId },
+          data: {
+            status: "COMPLETED",
+            completedAt: new Date(),
+            totalListings: prevTotal + properties.length,
+            newListings: prevNew + newCount,
+            duplicates: prevDups + dupCount,
+            errors: (stats.totalErrors as number) || 0,
+            durationMs,
+          },
+        });
+
+        for (const siteId of job.siteIds) {
+          await SiteService.updateHealth(siteId, true, prevNew + newCount);
+        }
+
+        broadcastScrapeComplete(jobId, {
           totalListings: prevTotal + properties.length,
           newListings: prevNew + newCount,
           duplicates: prevDups + dupCount,
-          errors: (stats.totalErrors as number) || 0,
-          durationMs,
-        },
-      });
+          errors: stats.totalErrors || 0,
+        });
 
-      // Update site health for each site
-      for (const siteId of job.siteIds) {
-        await SiteService.updateHealth(siteId, true, prevNew + newCount);
+        Logger.info(
+          `Job ${jobId} completed: ${prevNew + newCount} new, ${prevDups + dupCount} dups, ${(stats.totalErrors as number) || 0} errors`
+        );
       }
-
-      // Broadcast completion
-      broadcastScrapeComplete(jobId, {
-        totalListings: prevTotal + properties.length,
-        newListings: prevNew + newCount,
-        duplicates: prevDups + dupCount,
-        errors: stats.totalErrors || 0,
-      });
-
-      Logger.info(
-        `Job ${jobId} completed: ${prevNew + newCount} new, ${prevDups + dupCount} dups, ${(stats.totalErrors as number) || 0} errors`
-      );
     }
   }
 
@@ -616,29 +713,81 @@ export class ScrapeService {
 
   /**
    * Handle error report from scraper.
+   * For multi-batch jobs, a single batch failure doesn't fail the whole job —
+   * it counts as a completed batch. Only if ALL batches fail does the job fail.
    */
   static async handleError(jobId: string, error: string, details?: any) {
-    // Check if this is a cancellation (from GH Actions workflow cancel)
     const isCancelled = typeof details === "object" && details?.status === "CANCELLED";
-    const finalStatus = isCancelled ? "CANCELLED" : "FAILED";
+    const job = await prisma.scrapeJob.findUnique({ where: { id: jobId } });
 
-    await prisma.scrapeJob.update({
-      where: { id: jobId },
-      data: { status: finalStatus, completedAt: new Date() },
-    });
+    if (!job) {
+      Logger.warn(`handleError: job ${jobId} not found`);
+      return;
+    }
 
-    if (!isCancelled) {
-      // Update site health only for real failures, not cancellations
-      const job = await prisma.scrapeJob.findUnique({ where: { id: jobId } });
-      if (job) {
+    const jobParams = (job.parameters || {}) as Record<string, any>;
+    const totalBatches = jobParams.totalBatches as number || 1;
+
+    if (totalBatches > 1 && !isCancelled) {
+      // Multi-batch: treat this batch as done (with errors), don't fail the whole job yet
+      const completedBatches = (jobParams.completedBatches as number || 0) + 1;
+      const failedBatches = (jobParams.failedBatches as number || 0) + 1;
+      const updatedParams = { ...jobParams, completedBatches, failedBatches };
+      const allDone = completedBatches >= totalBatches;
+
+      const updateData: any = {
+        parameters: updatedParams as Prisma.InputJsonValue,
+      };
+
+      if (allDone) {
+        // All batches finished — if ALL failed, mark job as FAILED; otherwise COMPLETED
+        const allFailed = failedBatches >= totalBatches;
+        updateData.status = allFailed ? "FAILED" : "COMPLETED";
+        updateData.completedAt = new Date();
+        if (job.startedAt) {
+          updateData.durationMs = Date.now() - new Date(job.startedAt).getTime();
+        }
+      }
+
+      await prisma.scrapeJob.update({ where: { id: jobId }, data: updateData });
+
+      Logger.warn(
+        `Job ${jobId} batch error (${completedBatches}/${totalBatches} done, ${failedBatches} failed): ${error}`
+      );
+
+      if (allDone) {
+        if (failedBatches >= totalBatches) {
+          for (const siteId of job.siteIds) {
+            await SiteService.updateHealth(siteId, false);
+          }
+          broadcastScrapeError(jobId, `All ${totalBatches} batches failed. Last error: ${error}`);
+        } else {
+          broadcastScrapeComplete(jobId, {
+            totalListings: job.totalListings,
+            newListings: job.newListings,
+            duplicates: job.duplicates,
+            errors: job.errors,
+          });
+        }
+      }
+    } else {
+      // Single-batch job or cancellation — original behavior
+      const finalStatus = isCancelled ? "CANCELLED" : "FAILED";
+
+      await prisma.scrapeJob.update({
+        where: { id: jobId },
+        data: { status: finalStatus, completedAt: new Date() },
+      });
+
+      if (!isCancelled) {
         for (const siteId of job.siteIds) {
           await SiteService.updateHealth(siteId, false);
         }
       }
-    }
 
-    broadcastScrapeError(jobId, error);
-    Logger.error(`Job ${jobId} ${finalStatus}: ${error}`);
+      broadcastScrapeError(jobId, error);
+      Logger.error(`Job ${jobId} ${finalStatus}: ${error}`);
+    }
   }
 
   /**
