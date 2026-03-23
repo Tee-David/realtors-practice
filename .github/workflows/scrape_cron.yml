@@ -116,6 +116,8 @@ jobs:
           CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
           SAMBANOVA_API_KEY: ${{ secrets.SAMBANOVA_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          # Residential proxy (optional — bypasses datacenter IP blocks)
+          PROXY_LIST: ${{ secrets.PROXY_LIST }}
         run: |
           cd scraper
 
