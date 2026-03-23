@@ -186,6 +186,8 @@ class AdaptiveFetcher:
         self.last_block_reason: Optional[str] = None
         self._consecutive_blocks = 0
         self._last_successful_layer: Optional[str] = None
+        # Per-site layer memory: domain → layer name that worked last
+        self._site_preferred_layer: dict[str, str] = {}
         # Proxy round-robin state
         self._proxy_index = 0
         self._proxy_lock = threading.Lock()
@@ -351,16 +353,18 @@ class AdaptiveFetcher:
     async def fetch(self, url: str, requires_js: bool = False) -> Optional[str]:
         """Fetch a URL with adaptive multi-layer fallback.
 
-        Layer order (browser-first — most Nigerian property sites need JS):
-        1. Playwright + stealth — full browser, handles JS-rendered content
-        2. curl_cffi — fast HTTP fallback if Playwright unavailable/fails
-        3. Scrapling StealthyFetcher — anti-bot bypass fallback
+        Layer order (fast-first — most sites serve usable HTML without JS):
+        1. curl_cffi — fast HTTP with Chrome TLS fingerprint (3-5s)
+        2. Scrapling — anti-bot bypass (5-10s)
+        3. Playwright + stealth — full browser for JS-rendered SPAs (30-60s)
 
-        Note: Crawl4AI (for extraction) is NOT used here for fetching.
-        It's used in fetch_as_markdown() for LLM extraction pipeline.
+        Per-site layer memory: if a layer worked for this domain before,
+        try it first to skip slower fallbacks on subsequent pages.
         """
         MAX_HTML_SIZE = 10_000_000  # 10MB — reject absurdly large pages
         await rate_limiter.wait(url)
+
+        domain = urlparse(url).netloc
 
         # Back off if getting blocked repeatedly
         if self._consecutive_blocks >= 3:
@@ -371,56 +375,51 @@ class AdaptiveFetcher:
         # Track per-layer failures for diagnostic logging
         layer_errors: list[str] = []
 
-        # Layer 1: Playwright + stealth (full browser — default for all sites)
-        html = await self._fetch_playwright(url)
-        if html and len(html) > MAX_HTML_SIZE:
-            logger.warning(f"Page too large ({len(html)} bytes), skipping: {url}")
-            return None
-        if html and len(html) > 500:
-            block_reason = self._is_blocked(html)
-            if not block_reason:
-                self._consecutive_blocks = 0
-                self._last_successful_layer = "playwright"
-                return html
-            layer_errors.append(f"playwright: blocked ({block_reason})")
-            logger.debug(f"Playwright blocked ({block_reason}) for {url}, trying curl_cffi")
-        else:
-            layer_errors.append(f"playwright: {'empty response' if not html else f'too short ({len(html)} chars)'}")
+        # Define layer execution order: curl_cffi (fast) → playwright (JS) → scrapling (fallback)
+        layers = [
+            ("curl_cffi", self._fetch_curl),
+            ("playwright", self._fetch_playwright),
+            ("scrapling", self._try_scrapling),
+        ]
 
-        # Layer 2: curl_cffi (fast HTTP with Chrome TLS fingerprint)
-        # Always try curl_cffi — even JS-rendered sites often return usable HTML
-        # (server-side rendered content, JSON-LD, __NEXT_DATA__, etc.)
-        html = await self._fetch_curl(url)
-        if html and len(html) > 500:
-            block_reason = self._is_blocked(html)
-            if not block_reason:
-                self._consecutive_blocks = 0
-                self._last_successful_layer = "curl_cffi"
-                return html
-            layer_errors.append(f"curl_cffi: blocked ({block_reason})")
-        else:
-            layer_errors.append(f"curl_cffi: {'empty response' if not html else f'too short ({len(html)} chars)'}")
-        logger.debug(f"curl_cffi insufficient for {url}, trying Scrapling")
+        # If we know which layer works for this domain, try it first
+        preferred = self._site_preferred_layer.get(domain)
+        if preferred:
+            # Move preferred layer to front
+            layers.sort(key=lambda x: 0 if x[0] == preferred else 1)
 
-        # Layer 3: Scrapling StealthyFetcher (anti-bot bypass)
-        scrapling = self._get_scrapling()
-        if scrapling:
-            html = await scrapling.fetch(url)
+        # If requires_js is explicitly set, try Playwright first
+        if requires_js and not preferred:
+            layers.sort(key=lambda x: 0 if x[0] == "playwright" else 1)
+
+        for layer_name, layer_fn in layers:
+            html = await layer_fn(url)
+
+            if html and len(html) > MAX_HTML_SIZE:
+                logger.warning(f"Page too large ({len(html)} bytes), skipping: {url}")
+                return None
+
             if html and len(html) > 500:
                 block_reason = self._is_blocked(html)
                 if not block_reason:
                     self._consecutive_blocks = 0
-                    self._last_successful_layer = "scrapling"
+                    self._last_successful_layer = layer_name
+                    self._site_preferred_layer[domain] = layer_name
                     return html
-                layer_errors.append(f"scrapling: blocked ({block_reason})")
-                logger.debug(f"Scrapling blocked ({block_reason}) for {url}")
+                layer_errors.append(f"{layer_name}: blocked ({block_reason})")
             else:
-                layer_errors.append(f"scrapling: {'empty response' if not html else f'too short ({len(html)} chars)'}")
-        else:
-            layer_errors.append("scrapling: not available")
+                reason = "empty response" if not html else f"too short ({len(html)} chars)"
+                layer_errors.append(f"{layer_name}: {reason}")
 
         logger.warning(f"All fetch layers failed for {url} — {'; '.join(layer_errors)}")
         return None
+
+    async def _try_scrapling(self, url: str) -> Optional[str]:
+        """Wrapper for scrapling fetch that handles unavailability."""
+        scrapling = self._get_scrapling()
+        if scrapling is None:
+            return None
+        return await scrapling.fetch(url)
 
     async def fetch_as_markdown(self, url: str) -> Optional[str]:
         """Fetch a URL and return clean Markdown via Crawl4AI.
@@ -889,6 +888,118 @@ class AdaptiveFetcher:
         except Exception as e:
             logger.error(f"render_and_collect_pages error for {start_url}: {e}", exc_info=True)
 
+        return results
+
+    async def collect_pages_fast(
+        self,
+        start_url: str,
+        max_pages: int = 10,
+    ) -> list[tuple[str, str]]:
+        """Fast pagination using curl_cffi with URL-pattern discovery.
+
+        Tries URL-pattern pagination (?page=N, /page/N) using fast HTTP
+        instead of driving a full browser. Falls back to render_and_collect_pages()
+        if curl_cffi pages look empty or blocked.
+
+        Returns list of (url, html) tuples.
+        """
+        results: list[tuple[str, str]] = []
+        seen_fingerprints: set[str] = set()
+
+        # Fetch page 1
+        html = await self._fetch_curl(start_url)
+        if not html or len(html) < 500 or self._is_blocked(html):
+            # curl_cffi didn't work — fall back to browser
+            return await self.render_and_collect_pages(start_url, max_pages)
+
+        fp = _page_fingerprint(html)
+        seen_fingerprints.add(fp)
+        results.append((start_url, html))
+
+        # Discover pagination pattern from page 1 HTML
+        # Try common URL patterns for page 2
+        base = start_url.rstrip("/")
+        joiner = "&" if "?" in start_url else "?"
+        page2_candidates = [
+            f"{start_url}{joiner}page=2",
+            f"{base}/page/2",
+        ]
+
+        # Also look for <a rel="next"> or page links in HTML
+        try:
+            soup = BeautifulSoup(html, "lxml")
+            next_link = soup.find("a", rel="next")
+            if next_link and next_link.get("href"):
+                from urllib.parse import urljoin
+                next_url = urljoin(start_url, next_link["href"])
+                page2_candidates.insert(0, next_url)
+
+                # Infer pattern from next link
+                next_href = next_link["href"]
+                import re as _re
+                # e.g. ?page=2 → ?page={n}
+                m = _re.search(r'[?&]page=(\d+)', next_href)
+                if m:
+                    page_param_pattern = next_href.replace(f"page={m.group(1)}", "page={n}")
+                    for n in range(3, max_pages + 1):
+                        url = urljoin(start_url, page_param_pattern.replace("{n}", str(n)))
+                        page2_candidates.append(url)
+        except Exception:
+            pass
+
+        # Try fetching subsequent pages
+        working_pattern: str | None = None
+
+        for candidate_url in page2_candidates:
+            if len(results) >= max_pages:
+                break
+
+            p2_html = await self._fetch_curl(candidate_url)
+            if p2_html and len(p2_html) > 2000 and not self._is_blocked(p2_html):
+                p2_fp = _page_fingerprint(p2_html)
+                if p2_fp not in seen_fingerprints:
+                    seen_fingerprints.add(p2_fp)
+                    results.append((candidate_url, p2_html))
+
+                    # Found working pattern — continue with it
+                    if "page=" in candidate_url:
+                        # URL param pattern works
+                        import re as _re
+                        m = _re.search(r'[?&]page=(\d+)', candidate_url)
+                        if m:
+                            working_pattern = candidate_url.replace(f"page={m.group(1)}", "page={n}")
+                            break
+                    elif "/page/" in candidate_url:
+                        working_pattern = candidate_url.replace("/page/2", "/page/{n}")
+                        break
+                else:
+                    # Duplicate page — this pattern loops
+                    continue
+
+        # If we found a working pattern, fetch remaining pages
+        if working_pattern and len(results) < max_pages:
+            start_n = 3  # Already have pages 1 and 2
+            for n in range(start_n, max_pages + 1):
+                if len(results) >= max_pages:
+                    break
+                page_url = working_pattern.replace("{n}", str(n))
+                page_html = await self._fetch_curl(page_url)
+                if not page_html or len(page_html) < 2000 or self._is_blocked(page_html):
+                    break  # No more pages
+                page_fp = _page_fingerprint(page_html)
+                if page_fp in seen_fingerprints:
+                    break  # Duplicate = end of pagination
+                seen_fingerprints.add(page_fp)
+                results.append((page_url, page_html))
+
+        # If we only got page 1 with curl_cffi, fall back to browser pagination
+        if len(results) <= 1 and max_pages > 1:
+            logger.info(f"collect_pages_fast: curl_cffi got only {len(results)} page(s), falling back to browser")
+            browser_results = await self.render_and_collect_pages(start_url, max_pages)
+            if len(browser_results) > len(results):
+                return browser_results
+
+        logger.info(f"collect_pages_fast: collected {len(results)} pages from {start_url}")
         return results
 
     async def _click_next_button(self, page) -> bool:

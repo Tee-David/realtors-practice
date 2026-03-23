@@ -1,13 +1,15 @@
-"""LLM provider rotation engine — Groq → Cerebras → SambaNova → Gemini.
+"""LLM provider rotation engine — thread-safe, with proper RPM tracking.
 
-All providers are free-tier, OpenAI-compatible APIs serving Qwen3 32B or equivalent.
-Automatically rotates on rate limit errors. Zero cost.
+All providers are free-tier, OpenAI-compatible APIs.
+Automatically rotates on rate limit errors with proper sliding-window RPM tracking.
+Uses asyncio.Lock to prevent race conditions when multiple sites run concurrently.
 """
 
 import os
 import json
 import time
 import asyncio
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -25,9 +27,10 @@ class LLMProvider:
     api_key_env: str
     model: str
     rpm_limit: int = 30
-    _last_call: float = 0.0
     _fail_count: int = 0
     _cooldown_until: float = 0.0
+    # Sliding window of request timestamps for true RPM enforcement
+    _request_times: deque = field(default_factory=lambda: deque(maxlen=60))
 
     @property
     def api_key(self) -> str:
@@ -37,9 +40,25 @@ class LLMProvider:
     def available(self) -> bool:
         return bool(self.api_key) and time.time() > self._cooldown_until
 
+    @property
+    def current_rpm(self) -> int:
+        """Count requests in the last 60 seconds."""
+        now = time.time()
+        cutoff = now - 60.0
+        # Count timestamps within the last 60s
+        return sum(1 for t in self._request_times if t > cutoff)
+
+    @property
+    def rpm_headroom(self) -> int:
+        """How many more requests can be made within the RPM limit."""
+        return max(0, self.rpm_limit - self.current_rpm)
+
+    def record_request(self):
+        """Record that a request was made now."""
+        self._request_times.append(time.time())
+
     def mark_success(self):
         self._fail_count = 0
-        self._last_call = time.time()
 
     def mark_failure(self):
         self._fail_count += 1
@@ -48,6 +67,17 @@ class LLMProvider:
         self._cooldown_until = time.time() + cooldown
         logger.warning(f"[LLM] {self.name} failed ({self._fail_count}x), cooling down {cooldown}s")
 
+    def time_until_rpm_available(self) -> float:
+        """Seconds until the oldest request in the sliding window expires."""
+        if self.rpm_headroom > 0:
+            return 0.0
+        if not self._request_times:
+            return 0.0
+        # Find the oldest request that's still in the 60s window
+        now = time.time()
+        oldest_in_window = min(t for t in self._request_times if t > now - 60.0)
+        return max(0.0, (oldest_in_window + 60.0) - now)
+
 
 # Provider definitions — order = priority
 PROVIDERS = [
@@ -55,7 +85,7 @@ PROVIDERS = [
         name="Groq",
         base_url="https://api.groq.com/openai/v1",
         api_key_env="GROQ_API_KEY",
-        model="llama-3.3-70b-versatile",  # Fast, reliable, no <think> overhead
+        model="llama-3.3-70b-versatile",
         rpm_limit=30,
     ),
     LLMProvider(
@@ -81,8 +111,47 @@ PROVIDERS = [
     ),
 ]
 
-
 _client = httpx.AsyncClient(timeout=120.0)
+
+# Lock to protect provider state from concurrent async access
+_provider_lock = asyncio.Lock()
+
+
+async def _select_provider() -> tuple[LLMProvider | None, float]:
+    """Select the best available provider. Returns (provider, wait_time).
+
+    Must be called while holding _provider_lock.
+    """
+    best: LLMProvider | None = None
+    min_wait: float = float("inf")
+
+    for p in PROVIDERS:
+        if not p.api_key:
+            continue
+        if not p.available:
+            # In cooldown — check if it'll be available soonest
+            wait = p._cooldown_until - time.time()
+            if wait < min_wait:
+                min_wait = wait
+            continue
+        if p.rpm_headroom > 0:
+            return p, 0.0
+        else:
+            # RPM exhausted — calculate wait
+            wait = p.time_until_rpm_available()
+            if wait < min_wait:
+                min_wait = wait
+                best = p
+
+    # All available providers have RPM exhausted
+    if best is not None:
+        return best, min_wait
+
+    # All providers in cooldown
+    if min_wait < float("inf"):
+        return None, min_wait
+
+    return None, 0.0
 
 
 async def llm_extract(
@@ -92,116 +161,105 @@ async def llm_extract(
     max_tokens: int = 4096,
     _retry_count: int = 0,
 ) -> str | None:
-    """Call LLM with automatic provider rotation and retry.
+    """Call LLM with thread-safe provider rotation and retry.
 
-    Tries each provider in order. On rate limit or error, rotates to next.
-    If all providers are rate-limited, waits and retries up to 2 times.
-    Returns the response text, or None if all providers fail.
+    Uses asyncio.Lock to prevent race conditions when multiple sites
+    run concurrently. The lock only protects provider state selection,
+    NOT the actual HTTP call (which runs outside the lock).
     """
-    errors = []
-    available = [p for p in PROVIDERS if p.available]
-    available_names = [p.name for p in available]
+    configured = [p.name for p in PROVIDERS if p.api_key]
+    if not configured:
+        logger.error("[LLM] NO LLM API keys configured! Set at least one of: GROQ_API_KEY, CEREBRAS_API_KEY, SAMBANOVA_API_KEY, GEMINI_API_KEY")
+        return None
 
-    if not available_names:
-        configured = [p.name for p in PROVIDERS if p.api_key]
-        if not configured:
-            logger.error("[LLM] NO LLM API keys configured! Set at least one of: GROQ_API_KEY, CEREBRAS_API_KEY, SAMBANOVA_API_KEY, GEMINI_API_KEY")
-            return None
-        logger.warning(f"[LLM] All configured providers are cooling down ({configured}), waiting...")
+    # Select a provider (under lock)
+    async with _provider_lock:
+        provider, wait_time = await _select_provider()
+
+    if provider is None:
         if _retry_count < 2:
-            # Wait for shortest cooldown to expire, then retry
-            wait = min((p._cooldown_until - time.time()) for p in PROVIDERS if p.api_key)
-            wait = max(wait, 5.0)  # at least 5s
-            wait = min(wait, 60.0)  # at most 60s
-            logger.info(f"[LLM] Waiting {wait:.0f}s for provider cooldown (retry {_retry_count + 1}/2)")
+            wait = max(wait_time, 5.0)
+            wait = min(wait, 60.0)
+            logger.info(f"[LLM] All providers busy, waiting {wait:.0f}s (retry {_retry_count + 1}/2)")
             await asyncio.sleep(wait)
             return await llm_extract(prompt, system_prompt, temperature, max_tokens, _retry_count + 1)
         logger.error("[LLM] All providers exhausted after retries")
         return None
 
-    logger.info(f"[LLM] Calling LLM ({len(prompt)} char prompt). Available providers: {available_names}")
+    # Wait for RPM headroom if needed
+    if wait_time > 0:
+        logger.debug(f"[LLM] Waiting {wait_time:.1f}s for {provider.name} RPM headroom")
+        await asyncio.sleep(wait_time)
 
-    rate_limited_count = 0
+    # Record the request timestamp (under lock)
+    async with _provider_lock:
+        provider.record_request()
 
-    for provider in PROVIDERS:
-        if not provider.available:
-            logger.debug(f"[LLM] {provider.name} unavailable (no key or cooling down)")
-            continue
+    # Make the HTTP call OUTSIDE the lock
+    try:
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
 
-        try:
-            messages = []
-            if system_prompt:
-                messages.append({"role": "system", "content": system_prompt})
-            messages.append({"role": "user", "content": prompt})
+        logger.info(f"[LLM] Trying {provider.name} ({provider.model}, {len(prompt)} chars)...")
+        start_time = time.time()
 
-            # Enforce minimum interval between calls (rate limit safety)
-            min_interval = 60.0 / provider.rpm_limit
-            elapsed_since = time.time() - provider._last_call
-            if elapsed_since < min_interval:
-                wait_time = min_interval - elapsed_since
-                logger.debug(f"[LLM] Rate limit wait {wait_time:.1f}s for {provider.name}")
-                await asyncio.sleep(wait_time)
+        resp = await _client.post(
+            f"{provider.base_url}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {provider.api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": provider.model,
+                "messages": messages,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+            },
+        )
 
-            logger.info(f"[LLM] Trying {provider.name} ({provider.model})...")
-            start_time = time.time()
+        duration = time.time() - start_time
 
-            resp = await _client.post(
-                f"{provider.base_url}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {provider.api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": provider.model,
-                    "messages": messages,
-                    "temperature": temperature,
-                    "max_tokens": max_tokens,
-                },
-            )
-
-            duration = time.time() - start_time
-
-            if resp.status_code == 429:
-                rate_limited_count += 1
+        if resp.status_code == 429:
+            async with _provider_lock:
                 provider.mark_failure()
-                logger.info(f"[LLM] {provider.name} rate limited ({duration:.1f}s), trying next provider")
-                continue
+            logger.info(f"[LLM] {provider.name} rate limited ({duration:.1f}s), rotating...")
+            # Retry with next provider
+            if _retry_count < 3:
+                return await llm_extract(prompt, system_prompt, temperature, max_tokens, _retry_count + 1)
+            return None
 
-            if resp.status_code >= 400:
+        if resp.status_code >= 400:
+            async with _provider_lock:
                 provider.mark_failure()
-                body_preview = resp.text[:200] if resp.text else ""
-                errors.append(f"{provider.name}: HTTP {resp.status_code} - {body_preview}")
-                logger.warning(f"[LLM] {provider.name} HTTP {resp.status_code} ({duration:.1f}s): {body_preview}")
-                continue
+            body_preview = resp.text[:200] if resp.text else ""
+            logger.warning(f"[LLM] {provider.name} HTTP {resp.status_code} ({duration:.1f}s): {body_preview}")
+            # Retry with next provider
+            if _retry_count < 3:
+                return await llm_extract(prompt, system_prompt, temperature, max_tokens, _retry_count + 1)
+            return None
 
-            data = resp.json()
-            content = data["choices"][0]["message"]["content"]
+        data = resp.json()
+        content = data["choices"][0]["message"]["content"]
 
-            # Strip thinking tags if present (Qwen3 /think mode)
-            if "<think>" in content:
-                import re
-                content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
+        # Strip thinking tags if present (Qwen3 /think mode)
+        if "<think>" in content:
+            import re
+            content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
 
+        async with _provider_lock:
             provider.mark_success()
-            logger.info(f"[LLM] {provider.name} responded ({len(content)} chars in {duration:.1f}s)")
-            return content
+        logger.info(f"[LLM] {provider.name} responded ({len(content)} chars in {duration:.1f}s)")
+        return content
 
-        except Exception as e:
-            duration = time.time() - start_time
+    except Exception as e:
+        async with _provider_lock:
             provider.mark_failure()
-            errors.append(f"{provider.name}: {e}")
-            logger.warning(f"[LLM] {provider.name} exception ({duration:.1f}s): {e}")
-            continue
-
-    # If all available providers were rate-limited, wait and retry
-    if rate_limited_count > 0 and _retry_count < 2:
-        wait = 15 * (_retry_count + 1)  # 15s, 30s
-        logger.info(f"[LLM] All providers rate-limited, waiting {wait}s before retry {_retry_count + 1}/2")
-        await asyncio.sleep(wait)
-        return await llm_extract(prompt, system_prompt, temperature, max_tokens, _retry_count + 1)
-
-    logger.error(f"[LLM] All providers failed: {errors}")
-    return None
+        logger.warning(f"[LLM] {provider.name} exception: {e}")
+        if _retry_count < 3:
+            return await llm_extract(prompt, system_prompt, temperature, max_tokens, _retry_count + 1)
+        return None
 
 
 async def llm_extract_json(
@@ -223,7 +281,6 @@ async def llm_extract_json(
     text = raw.strip()
     if text.startswith("```"):
         lines = text.split("\n")
-        # Remove first and last lines (```json and ```)
         lines = lines[1:]
         if lines and lines[-1].strip() == "```":
             lines = lines[:-1]
@@ -234,7 +291,6 @@ async def llm_extract_json(
     except json.JSONDecodeError:
         # Try to find JSON array or object in the response
         import re
-        # Look for [...] or {...}
         match = re.search(r"(\[[\s\S]*\]|\{[\s\S]*\})", text)
         if match:
             try:

@@ -27,6 +27,7 @@ from extractors.llm_extractor import (
     prioritize_nav_results,
 )
 from extractors.universal_nlp import detect_listing_type
+from extractors.universal_extractor import UniversalExtractor
 from extractors.price_parser import parse_price
 from extractors.location_parser import parse_location
 from extractors.feature_extractor import extract_features
@@ -34,10 +35,12 @@ from pipeline.validator import validate_property
 from pipeline.deduplicator import Deduplicator
 from pipeline.normalizer import normalize_property
 from pipeline.enricher import enrich_property
+from pipeline.site_health import SiteHealthChecker
 from utils.callback import (
     report_progress, report_results, report_error,
     report_log, report_property, report_learned_data,
     report_learn_results, set_api_base_url,
+    start_batcher, stop_batcher,
 )
 from utils.robots_checker import is_allowed as robots_allowed, get_crawl_delay
 from utils.url_normalizer import normalize_url, VisitedSet
@@ -119,6 +122,7 @@ class ScrapeJobRequest(BaseModel):
         allowed_hosts = [
             "localhost", "127.0.0.1",
             urlparse(config.api_base_url).hostname,
+            "realtors-practice-new-api.onrender.com",
         ]
         if parsed.hostname not in allowed_hosts:
             raise ValueError(f"callbackUrl host '{parsed.hostname}' not in allowlist")
@@ -239,6 +243,7 @@ async def _run_learn_job(request: LearnSiteRequest) -> None:
 
     try:
         from pipeline.site_learner import learn_site
+        from pipeline.site_health import SiteHealthChecker
         from engine.llm_providers import PROVIDERS
 
         configured = [p.name for p in PROVIDERS if p.api_key]
@@ -248,6 +253,21 @@ async def _run_learn_job(request: LearnSiteRequest) -> None:
             _update_job_status(request.jobId, status="failed")
             await report_error(request.jobId, error_msg)
             return
+
+        # Pre-flight health check — skip dead/blocked sites early
+        health_checker = SiteHealthChecker()
+        try:
+            healthy, reason = await health_checker.preflight(request.site.baseUrl)
+            if not healthy:
+                error_msg = f"Site health check failed: {reason}"
+                logger.warning(f"Learn skipped for {request.site.name}: {reason}")
+                _update_job_status(request.jobId, status="failed")
+                await report_error(request.jobId, error_msg)
+                return
+        finally:
+            await health_checker.close()
+
+        await report_log(request.jobId, "INFO", f"Health check passed for {request.site.name}")
 
         fetcher = AdaptiveFetcher()
         try:
@@ -364,7 +384,7 @@ async def _run_scrape_job(request: ScrapeJobRequest) -> None:
 
 
 async def _scrape_single_site(
-    site: "SiteDef",
+    site: SiteConfig,
     request: ScrapeJobRequest,
     job_id: str,
     fetcher: AdaptiveFetcher,
@@ -442,8 +462,8 @@ async def _scrape_single_site(
 
         await report_log(job_id, "INFO", f"[{site.name}] Crawling: {lp_url}")
 
-        # Try render_and_collect_pages first (handles pagination)
-        collected_pages = await fetcher.render_and_collect_pages(
+        # Try fast pagination first (curl_cffi + URL patterns), falls back to browser
+        collected_pages = await fetcher.collect_pages_fast(
             lp_url, max_pages=site.maxPages,
         )
 
@@ -478,27 +498,38 @@ async def _scrape_single_site(
 
             listings = None
 
-            # Try CSS selectors first (free, fast)
-            stored_selectors = site.selectors or {}
-            container_sel = stored_selectors.get("listing_container", "")
-            field_sels = {
-                k: v for k, v in stored_selectors.items()
-                if k not in ("listing_container", "_confidence", "_learned_at", "_stale",
-                             "listingSelector", "listing_link", "paginationConfig",
-                             "delayMin", "delayMax")
-                and isinstance(v, str) and v
-            }
+            # ─── Extraction cascade: structured data → CSS → LLM ───
 
-            if container_sel and field_sels and not stored_selectors.get("_stale"):
-                from extractors.selector_learner import extract_with_selectors
-                css_listings = extract_with_selectors(html, container_sel, field_sels)
-                if css_listings and len(css_listings) >= 2:
-                    listings = css_listings
-                    await report_log(job_id, "INFO",
-                        f"[{site.name}] CSS selectors extracted {len(listings)} listings "
-                        f"from page {page_num + 1} (no LLM needed)")
+            # Step 1: Try structured data extraction (FREE — JSON-LD, __NEXT_DATA__)
+            structured = UniversalExtractor.extract_all_structured_data(html, page_url)
+            if structured and len(structured) >= 2:
+                listings = structured
+                await report_log(job_id, "INFO",
+                    f"[{site.name}] Structured data extracted {len(listings)} listings "
+                    f"from page {page_num + 1} (no LLM needed)")
 
-            # Fall back to LLM extraction
+            # Step 2: Try CSS selectors (FREE)
+            if listings is None:
+                stored_selectors = site.selectors or {}
+                container_sel = stored_selectors.get("listing_container", "")
+                field_sels = {
+                    k: v for k, v in stored_selectors.items()
+                    if k not in ("listing_container", "_confidence", "_learned_at", "_stale",
+                                 "listingSelector", "listing_link", "paginationConfig",
+                                 "delayMin", "delayMax")
+                    and isinstance(v, str) and v
+                }
+
+                if container_sel and field_sels and not stored_selectors.get("_stale"):
+                    from extractors.selector_learner import extract_with_selectors
+                    css_listings = extract_with_selectors(html, container_sel, field_sels)
+                    if css_listings and len(css_listings) >= 2:
+                        listings = css_listings
+                        await report_log(job_id, "INFO",
+                            f"[{site.name}] CSS selectors extracted {len(listings)} listings "
+                            f"from page {page_num + 1} (no LLM needed)")
+
+            # Step 3: Fall back to LLM extraction (PAID — last resort)
             if listings is None:
                 from engine.llm_providers import get_available_providers
                 avail = get_available_providers()
@@ -600,6 +631,90 @@ async def _scrape_single_site(
                     await report_log(job_id, "ERROR",
                         f"[{site.name}] Error processing listing: {str(e)[:200]}")
 
+    # ─── PHASE 4.5: Enrich from detail pages ───
+    # Only enrich listings that are missing key data (description, images, bedrooms, agent)
+    def _needs_enrichment(prop: dict) -> bool:
+        missing = 0
+        if not prop.get("description"):
+            missing += 1
+        if not prop.get("images"):
+            missing += 1
+        if prop.get("bedrooms") is None:
+            missing += 1
+        if not prop.get("agentName"):
+            missing += 1
+        return missing >= 2
+
+    enrichable = [p for p in site_properties if _needs_enrichment(p)]
+    if enrichable and not _is_stopped(job_id):
+        await report_log(job_id, "INFO",
+            f"[{site.name}] Enriching {len(enrichable)} properties from detail pages...")
+
+        detail_semaphore = asyncio.Semaphore(3)  # Max 3 concurrent detail fetches
+
+        async def _enrich_one(prop: dict) -> dict:
+            async with detail_semaphore:
+                detail_url = prop.get("listingUrl", "")
+                if not detail_url or detail_url == site.baseUrl:
+                    return prop
+
+                try:
+                    detail_html = await fetcher.fetch(detail_url, requires_js=False)
+                    if not detail_html or len(detail_html) < 500:
+                        return prop
+
+                    # Try structured data first (free)
+                    structured = UniversalExtractor.extract_all_structured_data(detail_html, detail_url)
+                    if structured:
+                        detail_data = structured[0]
+                        detail_dict = _to_property_dict(detail_data, site.name, site.id)
+                        return merge_listing_detail(prop, detail_dict)
+
+                    # Try OpenGraph (free)
+                    og_data = UniversalExtractor.extract_opengraph(detail_html, detail_url)
+                    if og_data and (og_data.get("title") or og_data.get("description")):
+                        og_dict = _to_property_dict(og_data, site.name, site.id)
+                        return merge_listing_detail(prop, og_dict)
+
+                    # LLM detail extraction only if quality is very low
+                    quality = prop.get("qualityScore", 50)
+                    if quality < 40:
+                        from engine.llm_providers import get_available_providers
+                        if get_available_providers():
+                            detail_data = await extract_detail_from_page(
+                                detail_html, detail_url, site_name=site.name,
+                            )
+                            if detail_data:
+                                detail_dict = _to_property_dict(detail_data, site.name, site.id)
+                                return merge_listing_detail(prop, detail_dict)
+
+                except Exception as e:
+                    logger.debug(f"[{site.name}] Detail enrichment failed for {detail_url}: {e}")
+
+                return prop
+
+        # Run detail enrichment in parallel (capped at 3 concurrent)
+        enrichment_tasks = [_enrich_one(p) for p in enrichable]
+        enriched_results = await asyncio.gather(*enrichment_tasks, return_exceptions=True)
+
+        # Merge enriched data back into site_properties
+        enriched_map = {}
+        for i, result in enumerate(enriched_results):
+            if isinstance(result, dict):
+                url = enrichable[i].get("listingUrl", "")
+                enriched_map[url] = result
+
+        enriched_count = 0
+        for j, prop in enumerate(site_properties):
+            url = prop.get("listingUrl", "")
+            if url in enriched_map and enriched_map[url] is not prop:
+                site_properties[j] = enriched_map[url]
+                enriched_count += 1
+
+        if enriched_count > 0:
+            await report_log(job_id, "INFO",
+                f"[{site.name}] Enriched {enriched_count} properties from detail pages")
+
     # ─── Persist learned listPaths ───
     if (site_properties
         and urls_with_successful_extraction
@@ -653,6 +768,9 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
     if request.callbackUrl:
         set_api_base_url(request.callbackUrl)
 
+    # Start callback batcher — batches logs/progress/properties to reduce HTTP rate
+    await start_batcher()
+
     try:
         # Check LLM providers upfront
         from engine.llm_providers import get_available_providers, PROVIDERS
@@ -664,7 +782,7 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
             await report_error(job_id, error_msg)
             return
 
-        batch_index = request.parameters.get("batchIndex")
+        batch_index = request.parameters.get("batchIndex", 0)
         total_batches = request.parameters.get("totalBatches", 1)
         if total_batches > 1:
             await report_log(job_id, "INFO",
@@ -680,12 +798,24 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
 
         sites_completed = 0
 
+        # Site health checker for pre-flight checks
+        health_checker = SiteHealthChecker()
+
         async def _scrape_with_limit(site):
             """Run a single site with its own fetcher, semaphore + timeout."""
             nonlocal sites_completed
             async with semaphore:
                 if _is_stopped(job_id):
                     return [], 0, 0
+
+                # Pre-flight health check (catches dead domains, 403s, etc.)
+                healthy, reason = await health_checker.preflight(site.baseUrl)
+                if not healthy:
+                    sites_completed += 1
+                    await report_log(job_id, "WARN",
+                        f"[{site.name}] SKIPPED: {reason}")
+                    return [], 1, 0
+
                 # Each site gets its own fetcher (own browser context) for isolation
                 site_fetcher = AdaptiveFetcher()
                 try:
@@ -765,7 +895,14 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
         await report_error(job_id, str(e))
 
     finally:
-        pass  # Each site_fetcher is closed in _scrape_with_limit
+        # Clean up health checker
+        try:
+            if 'health_checker' in locals():
+                await health_checker.close()
+        except Exception:
+            pass
+        # Flush all remaining callbacks before job ends
+        await stop_batcher()
 
 
 if __name__ == "__main__":

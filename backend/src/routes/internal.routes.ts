@@ -120,6 +120,63 @@ router.post("/scrape-log", async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /internal/scrape-log-batch
+ * Receive batched log entries from Python scraper (reduces HTTP rate).
+ */
+router.post("/scrape-log-batch", async (req: Request, res: Response) => {
+  try {
+    const { jobId, logs } = req.body;
+    if (!jobId || !Array.isArray(logs)) {
+      return res.status(400).json({ error: "jobId and logs array required" });
+    }
+
+    // Process each log entry (fire-and-forget for speed)
+    for (const log of logs) {
+      try {
+        await ScrapeService.handleLog(
+          jobId,
+          log.level || "INFO",
+          log.message || "",
+          log.details,
+        );
+      } catch {
+        // Skip individual log failures
+      }
+    }
+
+    return res.json({ success: true, count: logs.length });
+  } catch (err: any) {
+    return res.status(500).json({ error: "Internal error" });
+  }
+});
+
+/**
+ * POST /internal/scrape-property-batch
+ * Receive batched live-feed properties from Python scraper (reduces HTTP rate).
+ */
+router.post("/scrape-property-batch", async (req: Request, res: Response) => {
+  try {
+    const { jobId, properties } = req.body;
+    if (!jobId || !Array.isArray(properties)) {
+      return res.status(400).json({ error: "jobId and properties array required" });
+    }
+
+    for (const item of properties) {
+      try {
+        const prop = item.property || item;
+        await ScrapeService.handleProperty(jobId, prop);
+      } catch {
+        // Skip individual property feed failures
+      }
+    }
+
+    return res.json({ success: true, count: properties.length });
+  } catch (err: any) {
+    return res.status(500).json({ error: "Internal error" });
+  }
+});
+
+/**
  * POST /internal/scrape/scheduled
  * Triggered by GitHub Actions cron — starts a SCHEDULED scrape across all enabled sites.
  * Uses X-Internal-Key auth (no Supabase JWT required).

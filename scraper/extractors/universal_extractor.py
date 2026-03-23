@@ -716,6 +716,242 @@ class UniversalExtractor:
         # Fall back to pure CSS extraction
         return self.extract_property(html, url)
 
+    # --- __NEXT_DATA__ extraction (Next.js SSR data) ---
+
+    @staticmethod
+    def extract_next_data(html: str, page_url: str) -> list[dict[str, Any]]:
+        """Extract property listings from Next.js __NEXT_DATA__ JSON.
+
+        Next.js embeds server-side rendered data in a script tag with id="__NEXT_DATA__".
+        This data often contains the full property listing data in props.pageProps.
+        """
+        soup = BeautifulSoup(html, "lxml")
+        script = soup.find("script", id="__NEXT_DATA__")
+        if not script or not script.string:
+            return []
+
+        try:
+            data = json.loads(script.string)
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+        page_props = data.get("props", {}).get("pageProps", {})
+        if not page_props:
+            return []
+
+        # Search for arrays of property-like objects
+        properties: list[dict[str, Any]] = []
+
+        def _looks_like_property(obj: dict) -> bool:
+            """Check if a dict looks like a property listing."""
+            property_keys = {"price", "title", "name", "bedrooms", "beds", "address",
+                             "location", "amount", "listing_url", "url", "slug",
+                             "propertyType", "property_type", "type"}
+            matching = property_keys & set(obj.keys())
+            return len(matching) >= 2
+
+        def _convert_property(obj: dict) -> dict[str, Any]:
+            """Convert a Next.js property object to our schema."""
+            # Map common Next.js field names to our schema
+            title = obj.get("title") or obj.get("name") or obj.get("heading") or ""
+            price = obj.get("price") or obj.get("amount") or obj.get("formattedPrice") or ""
+
+            # Location
+            location = (obj.get("location") or obj.get("address") or
+                        obj.get("area") or obj.get("neighbourhood") or "")
+            if isinstance(location, dict):
+                location = location.get("name") or location.get("address") or str(location)
+
+            # URL
+            url = obj.get("url") or obj.get("listing_url") or obj.get("detailUrl") or ""
+            slug = obj.get("slug") or obj.get("id") or ""
+            if not url and slug:
+                url = f"{page_url.rstrip('/')}/{slug}"
+            if url and not url.startswith("http"):
+                url = urljoin(page_url, url)
+
+            # Images
+            images = obj.get("images") or obj.get("photos") or obj.get("gallery") or []
+            if isinstance(images, str):
+                images = [images]
+            elif isinstance(images, list):
+                images = [
+                    (img.get("url") or img.get("src") or img) if isinstance(img, dict) else img
+                    for img in images
+                ]
+            images = [urljoin(page_url, img) if isinstance(img, str) and not img.startswith("http") else img
+                      for img in images if isinstance(img, str)]
+
+            return {
+                "title": str(title),
+                "price": str(price) if price else "",
+                "location": str(location),
+                "bedrooms": obj.get("bedrooms") or obj.get("beds") or obj.get("numberOfBedrooms"),
+                "bathrooms": obj.get("bathrooms") or obj.get("baths") or obj.get("numberOfBathrooms"),
+                "toilets": obj.get("toilets"),
+                "property_type": obj.get("propertyType") or obj.get("property_type") or obj.get("type") or "",
+                "listing_type": obj.get("listingType") or obj.get("listing_type") or obj.get("purpose") or "",
+                "description": obj.get("description") or "",
+                "land_size": str(obj.get("landSize") or obj.get("land_size") or obj.get("plotSize") or ""),
+                "building_size": str(obj.get("buildingSize") or obj.get("building_size") or obj.get("floorArea") or ""),
+                "features": obj.get("features") or obj.get("amenities") or [],
+                "images": images,
+                "listing_url": url or page_url,
+                "agent_name": obj.get("agentName") or obj.get("agent_name") or "",
+                "agent_phone": obj.get("agentPhone") or obj.get("agent_phone") or "",
+                "agency_name": obj.get("agencyName") or obj.get("agency_name") or "",
+                "_source": "__NEXT_DATA__",
+            }
+
+        def _search_for_properties(obj: Any, depth: int = 0) -> None:
+            """Recursively search for property arrays in nested data."""
+            if depth > 5:
+                return
+            if isinstance(obj, list) and len(obj) >= 2:
+                # Check if this array contains property-like objects
+                prop_count = sum(1 for item in obj[:5] if isinstance(item, dict) and _looks_like_property(item))
+                if prop_count >= 2:
+                    for item in obj:
+                        if isinstance(item, dict) and _looks_like_property(item):
+                            properties.append(_convert_property(item))
+                    return
+            if isinstance(obj, dict):
+                for v in obj.values():
+                    _search_for_properties(v, depth + 1)
+            elif isinstance(obj, list):
+                for v in obj:
+                    _search_for_properties(v, depth + 1)
+
+        _search_for_properties(page_props)
+
+        if properties:
+            logger.info(f"__NEXT_DATA__ extracted {len(properties)} properties from {page_url}")
+
+        return properties
+
+    # --- __NUXT_DATA__ extraction (Nuxt.js) ---
+
+    @staticmethod
+    def extract_nuxt_data(html: str, page_url: str) -> list[dict[str, Any]]:
+        """Extract property listings from Nuxt.js data payloads.
+
+        Nuxt.js embeds data in various ways:
+        - window.__NUXT__ = {...}
+        - <script id="__NUXT_DATA__">
+        - <script>window.__NUXT_DATA__=...</script>
+        """
+        soup = BeautifulSoup(html, "lxml")
+        properties: list[dict[str, Any]] = []
+
+        # Try script#__NUXT_DATA__
+        nuxt_script = soup.find("script", id="__NUXT_DATA__")
+        if nuxt_script and nuxt_script.string:
+            try:
+                data = json.loads(nuxt_script.string)
+                # Similar search as __NEXT_DATA__
+                if isinstance(data, (dict, list)):
+                    # Nuxt data can be deeply nested
+                    pass  # TODO: implement if needed for specific sites
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        # Try window.__NUXT__ pattern
+        for script in soup.find_all("script"):
+            if script.string and "window.__NUXT__" in script.string:
+                try:
+                    # Extract JSON from window.__NUXT__ = {...}
+                    match = re.search(r'window\.__NUXT__\s*=\s*({.+?})\s*;?\s*$',
+                                      script.string, re.DOTALL)
+                    if match:
+                        data = json.loads(match.group(1))
+                        # Search for property data in the Nuxt state
+                        # This is site-specific but we can look for common patterns
+                        if isinstance(data, dict):
+                            for key in ("data", "state", "fetch"):
+                                if key in data and isinstance(data[key], (dict, list)):
+                                    pass  # Would need site-specific handling
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+        return properties
+
+    # --- OpenGraph extraction ---
+
+    @staticmethod
+    def extract_opengraph(html: str, page_url: str) -> dict[str, Any] | None:
+        """Extract property data from OpenGraph meta tags.
+
+        Useful for detail pages where OG tags contain structured property info.
+        """
+        soup = BeautifulSoup(html, "lxml")
+        og: dict[str, str] = {}
+
+        for meta in soup.find_all("meta"):
+            prop = meta.get("property", "") or meta.get("name", "")
+            content = meta.get("content", "")
+            if prop.startswith("og:") and content:
+                og[prop] = content
+            elif prop.startswith("product:") and content:
+                og[prop] = content
+
+        if not og.get("og:title"):
+            return None
+
+        images = [og["og:image"]] if og.get("og:image") else []
+        # Resolve relative image URLs
+        images = [urljoin(page_url, img) if not img.startswith("http") else img for img in images]
+
+        return {
+            "title": og.get("og:title", ""),
+            "description": og.get("og:description", ""),
+            "price": og.get("product:price:amount", "") or og.get("og:price:amount", ""),
+            "location": og.get("og:locality", "") or og.get("og:region", ""),
+            "images": images,
+            "listing_url": og.get("og:url", page_url),
+            "_source": "opengraph",
+        }
+
+    # --- Orchestrator: try all structured data sources ---
+
+    @classmethod
+    def extract_all_structured_data(
+        cls, html: str, page_url: str,
+    ) -> list[dict[str, Any]]:
+        """Try all structured data extraction methods in priority order.
+
+        Returns the first non-empty result:
+        1. JSON-LD (most reliable — schema.org structured data)
+        2. __NEXT_DATA__ (Next.js SSR data)
+        3. __NUXT_DATA__ (Nuxt.js data)
+
+        OpenGraph is NOT included here — it's for single-property detail pages,
+        not listing pages. Use extract_opengraph() separately for detail enrichment.
+        """
+        # 1. JSON-LD
+        json_ld = cls.extract_json_ld(html)
+        if json_ld:
+            properties = cls.harvest_properties_from_json_ld(json_ld, page_url)
+            if properties and len(properties) >= 1:
+                # Filter out items without useful data
+                valid = [p for p in properties if p.get("title") or p.get("price_text")]
+                if valid:
+                    logger.info(f"JSON-LD extracted {len(valid)} properties from {page_url}")
+                    return valid
+
+        # 2. __NEXT_DATA__
+        next_data = cls.extract_next_data(html, page_url)
+        if next_data and len(next_data) >= 2:
+            logger.info(f"__NEXT_DATA__ extracted {len(next_data)} properties from {page_url}")
+            return next_data
+
+        # 3. __NUXT_DATA__
+        nuxt_data = cls.extract_nuxt_data(html, page_url)
+        if nuxt_data and len(nuxt_data) >= 2:
+            logger.info(f"__NUXT_DATA__ extracted {len(nuxt_data)} properties from {page_url}")
+            return nuxt_data
+
+        return []
+
     def _map_field_names(self, data: dict[str, Any]) -> dict[str, Any]:
         """Map extractor field names to API-expected names."""
         mapping = {

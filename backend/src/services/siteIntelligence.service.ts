@@ -13,6 +13,28 @@ export class SiteIntelligenceService {
     if (!site) throw new Error("Site not found");
     if (site.deletedAt) throw new Error("Site has been deleted");
 
+    // Guard against duplicate learn — if already LEARNING, check if the job is stale
+    if (site.learnStatus === "LEARNING" && site.learnJobId) {
+      const existingJob = await prisma.scrapeJob.findUnique({
+        where: { id: site.learnJobId },
+        select: { status: true, startedAt: true },
+      });
+      const staleThresholdMs = 20 * 60 * 1000; // 20 minutes
+      const isStale = existingJob?.startedAt &&
+        Date.now() - new Date(existingJob.startedAt).getTime() > staleThresholdMs;
+
+      if (existingJob && existingJob.status === "RUNNING" && !isStale) {
+        throw new Error("Site is already being learned. Please wait for the current job to finish.");
+      }
+      // If stale or not running, allow re-learn — mark old job as failed
+      if (existingJob && existingJob.status === "RUNNING") {
+        await prisma.scrapeJob.update({
+          where: { id: site.learnJobId },
+          data: { status: "FAILED", completedAt: new Date() },
+        });
+      }
+    }
+
     // Create a LEARN_SITE job
     const job = await prisma.scrapeJob.create({
       data: {
@@ -131,7 +153,7 @@ export class SiteIntelligenceService {
       });
       await prisma.site.update({
         where: { id: siteId },
-        data: { learnStatus: "FAILED" },
+        data: { learnStatus: "FAILED", learnJobId: null },
       });
       throw new Error("Failed to dispatch learn job");
     }
@@ -170,6 +192,16 @@ export class SiteIntelligenceService {
       listPaths?: string[];
     }
   ) {
+    // Idempotency: skip if job already completed
+    const existingJob = await prisma.scrapeJob.findUnique({
+      where: { id: jobId },
+      select: { status: true },
+    });
+    if (existingJob?.status === "COMPLETED") {
+      Logger.info(`Learn results for job ${jobId} already processed, skipping duplicate`);
+      return;
+    }
+
     const updateData: Record<string, any> = {
       learnStatus: "LEARNED",
       learnedAt: new Date(),

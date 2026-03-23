@@ -165,9 +165,10 @@ model Site {
 
   lastScrapeAt    DateTime?
   lastSuccessAt   DateTime?
-  failCount       Int       @default(0)
-  avgListings     Int       @default(0)
-  healthScore     Float     @default(100)
+  failCount          Int       @default(0)
+  lastFailureReason  String?
+  avgListings        Int       @default(0)
+  healthScore        Float     @default(100)
 
   // Site Intelligence (learn-once, scrape-fast)
   learnStatus     String    @default("NOT_LEARNED")
