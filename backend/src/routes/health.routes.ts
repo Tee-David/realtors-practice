@@ -28,4 +28,28 @@ router.get("/", async (_req: Request, res: Response) => {
   }
 });
 
+// Temporary diagnostic: test the exact sites query path (no auth needed)
+router.get("/sites-check", async (_req: Request, res: Response) => {
+  try {
+    const [data, total] = await Promise.all([
+      prisma.site.findMany({
+        where: { deletedAt: null },
+        orderBy: { name: "asc" },
+        skip: 0,
+        take: 20,
+        include: { _count: { select: { properties: true, scrapeJobs: true } } },
+      }),
+      prisma.site.count({ where: { deletedAt: null } }),
+    ]);
+    res.json({
+      success: true,
+      total,
+      count: data.length,
+      sites: data.map(s => ({ id: s.id, name: s.name, key: s.key })),
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message, stack: err.stack });
+  }
+});
+
 export default router;

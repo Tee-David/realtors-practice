@@ -13,8 +13,9 @@ export class SiteController {
       };
       const { data, total } = await SiteService.list({ page, limit, search, enabled });
       return sendPaginated(res, data, total, page, limit);
-    } catch (err) {
-      return sendError(res, "Failed to fetch sites");
+    } catch (err: any) {
+      console.error("[SiteController.list] Error:", err?.message, err?.stack);
+      return sendError(res, `Failed to fetch sites: ${err?.message || "unknown"}`);
     }
   }
 
