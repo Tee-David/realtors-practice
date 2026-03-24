@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { AppSidebar, MobileSidebar } from "@/components/layout/app-sidebar";
 import { MobileBottomNav } from "@/components/layout/mobile-bottom-nav";
 import { TopBar } from "@/components/layout/top-bar";
@@ -10,6 +10,8 @@ import { KeyboardShortcutsModal } from "@/components/ui/keyboard-shortcuts-modal
 import dynamic from "next/dynamic";
 import { AIChatFab } from "@/components/ai/ai-chat-fab";
 import { ScraperSocketProvider } from "@/components/scraper/scraper-socket-provider";
+import { useAuth } from "@/hooks/use-auth";
+import ModernLoader from "@/components/ui/modern-loader";
 
 const TourProvider = dynamic(() => import("@/components/ui/tour-provider").then(m => ({ default: m.TourProvider })), { ssr: false });
 
@@ -18,9 +20,25 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const { loading: authLoading, isAuthenticated } = useAuth();
+  const router = useRouter();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const pathname = usePathname() || "";
+
+  // Redirect to login if not authenticated
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "var(--background)" }}>
+        <ModernLoader words={["Authenticating...", "Loading session...", "Almost ready..."]} fullPage={false} />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    router.replace("/login");
+    return null;
+  }
 
   const toggleShortcuts = useCallback(() => setShortcutsOpen((v) => !v), []);
   useKeyboardShortcuts({ onToggleHelp: toggleShortcuts });

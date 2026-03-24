@@ -36,8 +36,18 @@ export default function LoginPage() {
       return;
     }
 
+    // Store remember-me preference
+    if (rememberMe) {
+      localStorage.setItem("rp-remember-me", "true");
+      localStorage.removeItem("rp-no-persist");
+    } else {
+      localStorage.removeItem("rp-remember-me");
+      localStorage.setItem("rp-no-persist", "true");
+      sessionStorage.setItem("rp-session-only", "true");
+    }
+
     toast.success("Login successful! Redirecting...");
-    
+
     setTimeout(() => {
       router.push("/");
     }, 1000);
