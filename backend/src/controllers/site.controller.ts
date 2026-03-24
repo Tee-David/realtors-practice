@@ -7,10 +7,10 @@ import { logAudit, getClientInfo } from "../middlewares/auditLog.middleware";
 export class SiteController {
   static async list(req: Request, res: Response) {
     try {
-      const page = Math.max(1, parseInt(req.query.page as string) || 1);
-      const limit = Math.min(200, Math.max(1, parseInt(req.query.limit as string) || 20));
-      const search = req.query.search as string | undefined;
-      const enabled = req.query.enabled as boolean | undefined;
+      // req.query is already validated and coerced by Zod middleware
+      const { page, limit, search, enabled } = req.query as unknown as {
+        page: number; limit: number; search?: string; enabled?: boolean;
+      };
       const { data, total } = await SiteService.list({ page, limit, search, enabled });
       return sendPaginated(res, data, total, page, limit);
     } catch (err) {

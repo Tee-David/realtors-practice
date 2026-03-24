@@ -20,7 +20,7 @@ export const updateSiteSchema = createSiteSchema.partial().omit({ key: true });
 export const listSitesSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(50),
-  enabled: z.coerce.boolean().optional(),
+  enabled: z.enum(["true", "false"]).transform(v => v === "true").optional(),
   search: z.string().optional(),
 });
 

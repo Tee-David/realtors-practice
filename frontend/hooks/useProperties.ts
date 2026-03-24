@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { properties, sites } from "@/lib/api";
+import { properties } from "@/lib/api";
 import { MOCK_PROPERTIES } from "@/lib/mock-data";
 import type { PropertyFilters } from "@/types/property";
 
@@ -171,12 +171,3 @@ export function useBulkAction() {
   });
 }
 
-export function useSites(params?: Record<string, unknown>) {
-  return useQuery({
-    queryKey: ["sites", params],
-    queryFn: async () => {
-      const { data } = await sites.list(params);
-      return data;
-    },
-  });
-}

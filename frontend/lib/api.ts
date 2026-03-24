@@ -9,30 +9,11 @@ const api = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
-// Wait for Supabase to load the session from localStorage before any API call
-let cachedToken: string | null = null;
-let tokenExpiry = 0;
-let _resolveSession: () => void;
-const sessionReady = typeof window !== "undefined"
-  ? new Promise<void>((r) => { _resolveSession = r; })
-  : Promise.resolve();
-
-if (typeof window !== "undefined") {
-  const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-    cachedToken = session?.access_token || null;
-    tokenExpiry = session?.expires_at ? session.expires_at * 1000 : 0;
-    _resolveSession(); // Unblock API calls as soon as we have a session (or null)
-  });
-
-  // Safety: unblock after 3s even if no auth event fires
-  setTimeout(() => _resolveSession(), 3000);
-}
-
-// Attach auth token to every request
+// Attach auth token to every request — reads directly from Supabase session
 api.interceptors.request.use(async (config) => {
-  await sessionReady;
-  if (cachedToken) {
-    config.headers.Authorization = `Bearer ${cachedToken}`;
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.access_token) {
+    config.headers.Authorization = `Bearer ${session.access_token}`;
   }
   return config;
 });

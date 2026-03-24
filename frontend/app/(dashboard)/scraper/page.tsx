@@ -179,10 +179,7 @@ export default function ScraperPage() {
   const startScrape = useStartScrape();
   const stopScrape = useStopScrape();
   const { data: sitesData, isLoading: isSitesLoading, isError: isSitesError, refetch: refetchSites } = useSites(1, 100);
-  const allSites = useMemo(() => {
-    if (!sitesData) return [];
-    return (sitesData as any).sites ?? (sitesData as unknown as Site[]);
-  }, [sitesData]);
+  const allSites: Site[] = sitesData?.sites ?? [];
 
   const scrapeEstimate = useScrapeEstimate();
   const bulkLearnSites = useBulkLearnSites();

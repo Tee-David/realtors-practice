@@ -34,17 +34,15 @@ export function useSites(page = 1, limit = 20, search?: string, enabled?: boolea
       if (search) params.search = search;
       if (enabled !== undefined) params.enabled = enabled;
       const { data: response } = await api.get(`/sites`, { params });
-      const sitesArray = Array.isArray(response.data) ? response.data : [];
-
       return {
-        sites: sitesArray,
-        total: response.meta?.total || sitesArray.length,
-        page: response.meta?.page || page,
-        limit: response.meta?.limit || limit
+        sites: response.data as Site[],
+        total: response.meta?.total ?? 0,
+        page: response.meta?.page ?? page,
+        limit: response.meta?.limit ?? limit,
       } as SitesResponse;
     },
-    staleTime: 60_000, // Sites change rarely — 1 minute stale is fine
-    refetchOnMount: "always", // Always check when component mounts
+    staleTime: 60_000,
+    refetchOnMount: "always",
   });
 }
 
