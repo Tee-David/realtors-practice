@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AppSidebar, MobileSidebar } from "@/components/layout/app-sidebar";
 import { MobileBottomNav } from "@/components/layout/mobile-bottom-nav";
@@ -20,13 +20,39 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // ALL hooks must be called unconditionally — never after early returns
   const { loading: authLoading, isAuthenticated } = useAuth();
   const router = useRouter();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const pathname = usePathname() || "";
 
-  // Redirect to login if not authenticated
+  const toggleShortcuts = useCallback(() => setShortcutsOpen((v) => !v), []);
+  useKeyboardShortcuts({ onToggleHelp: toggleShortcuts });
+
+  const title = useMemo(() => {
+    if (pathname.startsWith("/properties")) return "Properties";
+    if (pathname.startsWith("/search")) return "Search";
+    if (pathname.startsWith("/data-explorer")) return "Data Explorer";
+    if (pathname.startsWith("/scraper/sites")) return "Sites";
+    if (pathname.startsWith("/scraper")) return "Scraper";
+    if (pathname.startsWith("/analytics")) return "Analytics";
+    if (pathname.startsWith("/saved-searches")) return "Saved Searches";
+    if (pathname.startsWith("/audit-log")) return "Audit Log";
+    if (pathname.startsWith("/settings")) return "Settings";
+    if (pathname.startsWith("/ai")) return "AI Assistant";
+    if (pathname.startsWith("/market")) return "Market Intel";
+    if (pathname.startsWith("/notifications")) return "Notifications";
+    return "Dashboard";
+  }, [pathname]);
+
+  // Redirect to login if not authenticated (after all hooks)
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.replace("/login");
+    }
+  }, [authLoading, isAuthenticated, router]);
+
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "var(--background)" }}>
@@ -36,63 +62,36 @@ export default function DashboardLayout({
   }
 
   if (!isAuthenticated) {
-    router.replace("/login");
     return null;
   }
 
-  const toggleShortcuts = useCallback(() => setShortcutsOpen((v) => !v), []);
-  useKeyboardShortcuts({ onToggleHelp: toggleShortcuts });
-
-  let title = "Dashboard";
-  if (pathname.startsWith("/properties")) title = "Properties";
-  else if (pathname.startsWith("/search")) title = "Search";
-  else if (pathname.startsWith("/data-explorer")) title = "Data Explorer";
-  else if (pathname.startsWith("/scraper/sites")) title = "Sites";
-  else if (pathname.startsWith("/scraper")) title = "Scraper";
-  else if (pathname.startsWith("/analytics")) title = "Analytics";
-  else if (pathname.startsWith("/saved-searches")) title = "Saved Searches";
-  else if (pathname.startsWith("/audit-log")) title = "Audit Log";
-  else if (pathname.startsWith("/settings")) title = "Settings";
-  else if (pathname.startsWith("/ai")) title = "AI Assistant";
-  else if (pathname.startsWith("/market")) title = "Market Intel";
-  else if (pathname.startsWith("/notifications")) title = "Notifications";
-
   return (
     <div className="min-h-screen" style={{ backgroundColor: "var(--background)" }}>
-      {/* Persistent scraper socket — survives page navigation */}
       <ScraperSocketProvider />
 
-      {/* Desktop sidebar — hidden on mobile, shown on md+ */}
       <div data-tour="sidebar">
         <AppSidebar />
       </div>
 
-      {/* Guided Tour */}
       <TourProvider />
 
-      {/* Desktop/Mobile top bar */}
       <TopBar title={title} onOpenSidebar={() => setMobileSidebarOpen(true)} />
 
-      {/* Main content area */}
       <main className="pt-[76px] md:ml-[60px] md:pt-[56px] p-6 pb-24 md:pb-6 transition-all duration-300">
         {children}
       </main>
 
-      {/* Mobile sidebar overlay */}
       <MobileSidebar
         open={mobileSidebarOpen}
         onOpenChange={setMobileSidebarOpen}
       />
 
-      {/* Keyboard shortcuts help modal */}
       <KeyboardShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
 
-      {/* Floating AI Chat Button */}
       <AIChatFab />
 
-      {/* Mobile bottom navigation */}
-      <MobileBottomNav 
-        onOpenSidebar={() => setMobileSidebarOpen(true)} 
+      <MobileBottomNav
+        onOpenSidebar={() => setMobileSidebarOpen(true)}
         extraButton={
           (pathname === "/properties" || pathname === "/search" || pathname === "/scraper") ? (
             <button
