@@ -9,43 +9,30 @@ const api = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
-// Cache the session token to avoid blocking getSession() on every request
+// Wait for Supabase to load the session from localStorage before any API call
 let cachedToken: string | null = null;
 let tokenExpiry = 0;
-let sessionReady: Promise<void> = Promise.resolve();
+let _resolveSession: () => void;
+const sessionReady = typeof window !== "undefined"
+  ? new Promise<void>((r) => { _resolveSession = r; })
+  : Promise.resolve();
 
 if (typeof window !== "undefined") {
-  // Block API calls until the initial session is loaded
-  sessionReady = new Promise<void>((resolve) => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      cachedToken = session?.access_token || null;
-      tokenExpiry = session?.expires_at ? session.expires_at * 1000 : 0;
-      resolve();
-    }).catch(() => resolve()); // Don't block forever on error
-  });
-
-  supabase.auth.onAuthStateChange((_event, session) => {
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
     cachedToken = session?.access_token || null;
     tokenExpiry = session?.expires_at ? session.expires_at * 1000 : 0;
+    _resolveSession(); // Unblock API calls as soon as we have a session (or null)
   });
+
+  // Safety: unblock after 3s even if no auth event fires
+  setTimeout(() => _resolveSession(), 3000);
 }
 
 // Attach auth token to every request
 api.interceptors.request.use(async (config) => {
-  // Wait for initial session load before any API call
   await sessionReady;
-
-  // Use cached token if still valid (with 60s buffer)
-  if (cachedToken && tokenExpiry > Date.now() + 60000) {
+  if (cachedToken) {
     config.headers.Authorization = `Bearer ${cachedToken}`;
-    return config;
-  }
-  // Fallback: refresh from Supabase
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session?.access_token) {
-    cachedToken = session.access_token;
-    tokenExpiry = session.expires_at ? session.expires_at * 1000 : 0;
-    config.headers.Authorization = `Bearer ${session.access_token}`;
   }
   return config;
 });
