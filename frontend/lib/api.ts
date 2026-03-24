@@ -12,14 +12,19 @@ const api = axios.create({
 // Cache the session token to avoid blocking getSession() on every request
 let cachedToken: string | null = null;
 let tokenExpiry = 0;
+let sessionReady: Promise<void> = Promise.resolve();
 
 if (typeof window !== "undefined") {
-  supabase.auth.onAuthStateChange((_event, session) => {
-    cachedToken = session?.access_token || null;
-    tokenExpiry = session?.expires_at ? session.expires_at * 1000 : 0;
+  // Block API calls until the initial session is loaded
+  sessionReady = new Promise<void>((resolve) => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      cachedToken = session?.access_token || null;
+      tokenExpiry = session?.expires_at ? session.expires_at * 1000 : 0;
+      resolve();
+    }).catch(() => resolve()); // Don't block forever on error
   });
-  // Initialize from current session
-  supabase.auth.getSession().then(({ data: { session } }) => {
+
+  supabase.auth.onAuthStateChange((_event, session) => {
     cachedToken = session?.access_token || null;
     tokenExpiry = session?.expires_at ? session.expires_at * 1000 : 0;
   });
@@ -27,6 +32,9 @@ if (typeof window !== "undefined") {
 
 // Attach auth token to every request
 api.interceptors.request.use(async (config) => {
+  // Wait for initial session load before any API call
+  await sessionReady;
+
   // Use cached token if still valid (with 60s buffer)
   if (cachedToken && tokenExpiry > Date.now() + 60000) {
     config.headers.Authorization = `Bearer ${cachedToken}`;
