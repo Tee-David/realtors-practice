@@ -34,9 +34,8 @@ export function useSites(page = 1, limit = 20, search?: string, enabled?: boolea
       if (search) params.search = search;
       if (enabled !== undefined) params.enabled = enabled;
       const { data: response } = await api.get(`/sites`, { params });
-      // response is the body from axios, which looks like: { success: true, data: [...], meta: { total, page, limit } }
       const sitesArray = Array.isArray(response.data) ? response.data : [];
-      
+
       return {
         sites: sitesArray,
         total: response.meta?.total || sitesArray.length,
@@ -44,6 +43,8 @@ export function useSites(page = 1, limit = 20, search?: string, enabled?: boolea
         limit: response.meta?.limit || limit
       } as SitesResponse;
     },
+    staleTime: 60_000, // Sites change rarely — 1 minute stale is fine
+    refetchOnMount: "always", // Always check when component mounts
   });
 }
 

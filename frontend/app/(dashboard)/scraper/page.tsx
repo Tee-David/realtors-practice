@@ -178,7 +178,7 @@ export default function ScraperPage() {
   const { data: jobs, isLoading, refetch } = useScrapeJobs();
   const startScrape = useStartScrape();
   const stopScrape = useStopScrape();
-  const { data: sitesData, isLoading: isSitesLoading } = useSites(1, 100, undefined, true);
+  const { data: sitesData, isLoading: isSitesLoading, isError: isSitesError, refetch: refetchSites } = useSites(1, 100, undefined, true);
   const allSites = useMemo(() => {
     if (!sitesData) return [];
     return (sitesData as any).sites ?? (sitesData as unknown as Site[]);
@@ -564,11 +564,20 @@ export default function ScraperPage() {
                 <div className="p-6 flex items-center justify-center gap-2 text-muted-foreground text-xs">
                   <RefreshCcw className="w-3.5 h-3.5 animate-spin" /> Loading sources...
                 </div>
+              ) : isSitesError || (enabledSites.length === 0 && !isSitesLoading) ? (
+                <div className="p-4 text-center text-xs text-muted-foreground space-y-2">
+                  <p>{isSitesError ? "Failed to load sources. Server may be starting up." : "No active sources. Enable sources in Data Sources."}</p>
+                  <button
+                    type="button"
+                    onClick={() => refetchSites()}
+                    className="text-primary hover:underline font-medium inline-flex items-center gap-1"
+                  >
+                    <RefreshCcw className="w-3 h-3" /> Retry
+                  </button>
+                </div>
               ) : filteredSources.length === 0 ? (
                 <div className="p-4 text-center text-xs text-muted-foreground">
-                  {enabledSites.length === 0
-                    ? "No active sources. Enable sources in Data Sources."
-                    : "No sources match your search."}
+                  No sources match your search.
                 </div>
               ) : (
                 filteredSources.map((site: Site) => {

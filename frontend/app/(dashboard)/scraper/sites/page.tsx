@@ -59,7 +59,7 @@ export default function SitesPage() {
   const [bulkUrls, setBulkUrls] = useState("");
   const [addMode, setAddMode] = useState<"single" | "bulk">("single");
 
-  const { data: sitesData, isLoading } = useSites(1, 100);
+  const { data: sitesData, isLoading, isError, refetch } = useSites(1, 100);
   const sites: Site[] = sitesData?.sites ?? [];
   const toggleSite = useToggleSite();
   const deleteSite = useDeleteSite();
@@ -590,6 +590,23 @@ export default function SitesPage() {
       {isLoading ? (
         <div className="relative min-h-[400px]">
           <ModernLoader words={["Loading site configs...", "Checking source status...", "Preparing site list...", "Almost ready..."]} fullPage={false} />
+        </div>
+      ) : isError ? (
+        <div className="py-24 flex flex-col items-center justify-center">
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ backgroundColor: "rgba(255,102,0,0.08)" }}>
+            <RefreshCcw className="w-8 h-8" style={{ color: "var(--accent)", opacity: 0.5 }} />
+          </div>
+          <p className="font-semibold text-lg text-foreground mb-1">Failed to load sites</p>
+          <p className="text-sm text-muted-foreground mb-5 text-center max-w-sm">
+            The server may be starting up. This usually takes 30-60 seconds on first load.
+          </p>
+          <button
+            onClick={() => refetch()}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all hover:opacity-90"
+            style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
+          >
+            <RefreshCcw className="w-4 h-4" /> Retry
+          </button>
         </div>
       ) : filteredSites.length === 0 ? (
         <div className="py-24 flex flex-col items-center justify-center">
