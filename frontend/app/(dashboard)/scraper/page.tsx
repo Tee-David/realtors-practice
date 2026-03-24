@@ -178,7 +178,7 @@ export default function ScraperPage() {
   const { data: jobs, isLoading, refetch } = useScrapeJobs();
   const startScrape = useStartScrape();
   const stopScrape = useStopScrape();
-  const { data: sitesData, isLoading: isSitesLoading, isError: isSitesError, refetch: refetchSites } = useSites(1, 100, undefined, true);
+  const { data: sitesData, isLoading: isSitesLoading, isError: isSitesError, refetch: refetchSites } = useSites(1, 100);
   const allSites = useMemo(() => {
     if (!sitesData) return [];
     return (sitesData as any).sites ?? (sitesData as unknown as Site[]);
@@ -1447,8 +1447,8 @@ export default function ScraperPage() {
         </BottomSheet>
       ) : (
         <SideSheet open={isConfigOpen} onOpenChange={setIsConfigOpen} side="right" width="480px">
-          <SideSheetContent className="p-0 bg-transparent border-none shadow-2xl">
-            <div className="h-full bg-card shadow-2xl border-l border-white/10 relative">
+          <SideSheetContent className="p-0 bg-card border-none shadow-2xl">
+            <div className="h-full relative">
               {configContent}
             </div>
           </SideSheetContent>
