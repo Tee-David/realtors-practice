@@ -305,3 +305,19 @@ async def llm_extract_json(
 def get_available_providers() -> list[str]:
     """Return names of currently available (configured + not cooling down) providers."""
     return [p.name for p in PROVIDERS if p.available]
+
+
+def get_provider_status_summary() -> str:
+    """Return a compact one-line summary of provider status for logging.
+
+    Example: "Groq OK, Cerebras NO KEY, SambaNova OK, Gemini NO KEY"
+    """
+    parts = []
+    for p in PROVIDERS:
+        if not p.api_key:
+            parts.append(f"{p.name} NO KEY")
+        elif not p.available:
+            parts.append(f"{p.name} COOLDOWN")
+        else:
+            parts.append(f"{p.name} OK")
+    return ", ".join(parts)

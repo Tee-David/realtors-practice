@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useDashboardKPIs, useDashboardCharts } from "@/hooks/use-analytics";
+import { useDashboardKPIs, useDashboardCharts, useListingVelocity, useActivityHeatmap, usePriceTrends, useKPITrends } from "@/hooks/use-analytics";
 import {
   Building2, TrendingUp, TrendingDown, Home, DollarSign, BarChart3,
   ArrowUpRight, ArrowDownRight, Download, Search, Filter,
@@ -38,32 +38,68 @@ function fmtCount(n: number): string {
   return String(n);
 }
 
-function genSeries(total: number, range: TimeRange) {
-  const pts = range === "7d" ? 7 : range === "30d" ? 30 : range === "90d" ? 13 : 12;
+/** Format listing velocity data into chart series, filtered by time range */
+function formatVelocityData(velocity: { date: string; count: number }[] | undefined, range: TimeRange) {
+  if (!velocity || velocity.length === 0) {
+    // Return empty series placeholder
+    return Array.from({ length: range === "7d" ? 7 : 12 }, (_, i) => ({
+      name: `Day ${i + 1}`,
+      properties: 0,
+      new: 0,
+    }));
+  }
+
   const now = new Date();
-  return Array.from({ length: pts }, (_, i) => {
-    const d = new Date(now);
-    range === "7d"
-      ? d.setDate(d.getDate() - (pts - 1 - i))
-      : d.setMonth(d.getMonth() - (pts - 1 - i));
-    const label = range === "7d"
-      ? d.toLocaleDateString("en-NG", { weekday: "short" })
-      : d.toLocaleDateString("en-NG", { month: "short" });
-    const base = Math.round(total / pts);
-    const rnd = Math.round(base * (0.5 + Math.random() * 0.9));
-    return { name: label, properties: rnd, new: Math.round(rnd * 0.2) };
-  });
+  const cutoff = new Date(now);
+  if (range === "7d") cutoff.setDate(cutoff.getDate() - 7);
+  else if (range === "30d") cutoff.setDate(cutoff.getDate() - 30);
+  else if (range === "90d") cutoff.setDate(cutoff.getDate() - 90);
+  else cutoff.setFullYear(cutoff.getFullYear() - 1);
+
+  const filtered = velocity.filter(v => new Date(v.date) >= cutoff);
+
+  if (range === "7d" || range === "30d") {
+    // Daily granularity
+    return filtered.map(v => {
+      const d = new Date(v.date);
+      const label = range === "7d"
+        ? d.toLocaleDateString("en-NG", { weekday: "short" })
+        : d.toLocaleDateString("en-NG", { day: "numeric", month: "short" });
+      return { name: label, properties: v.count, new: v.count };
+    });
+  }
+
+  // Weekly/monthly aggregation for 90d/1y
+  const buckets = new Map<string, number>();
+  for (const v of filtered) {
+    const d = new Date(v.date);
+    const key = range === "90d"
+      ? `W${Math.ceil(d.getDate() / 7)} ${d.toLocaleDateString("en-NG", { month: "short" })}`
+      : d.toLocaleDateString("en-NG", { month: "short", year: "2-digit" });
+    buckets.set(key, (buckets.get(key) || 0) + v.count);
+  }
+  return Array.from(buckets.entries()).map(([name, count]) => ({
+    name,
+    properties: count,
+    new: count,
+  }));
 }
 
-function buildHeatmap(total: number) {
-  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  const hours = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
-  return days.map(day => ({
-    day,
-    hours: hours.map(h => ({
-      h,
-      val: Math.round((total / 1000) * (0.1 + Math.random() * 0.9) * (day === "Sat" || day === "Sun" ? 0.3 : 1) * (h >= 10 && h <= 15 ? 1.5 : 0.7)),
-    })),
+/** Format heatmap data from real backend response */
+function formatHeatmapData(heatmap: { day: number; hours: number[] }[] | undefined) {
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const displayHours = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+
+  if (!heatmap || heatmap.length === 0) {
+    return dayNames.map(day => ({
+      day,
+      hours: displayHours.map(h => ({ h, val: 0 })),
+    }));
+  }
+
+  return heatmap.map(row => ({
+    day: dayNames[row.day] || `Day${row.day}`,
+    hours: displayHours.map(h => ({ h, val: row.hours[h] || 0 })),
   }));
 }
 
@@ -207,7 +243,7 @@ function TopList({ title, items, valueLabel }: {
 
 // ─── Activity Heatmap ────────────────────────────────────────────────────────
 
-function ActivityHeatmap({ data, maxVal }: { data: ReturnType<typeof buildHeatmap>; maxVal: number }) {
+function ActivityHeatmap({ data, maxVal }: { data: { day: string; hours: { h: number; val: number }[] }[]; maxVal: number }) {
   const hours = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
 
   return (
@@ -262,7 +298,7 @@ function ActivityHeatmap({ data, maxVal }: { data: ReturnType<typeof buildHeatma
 
 // ─── Combo Chart (line + bar) ────────────────────────────────────────────────
 
-function TrendChart({ data, timeRange, onTimeRange }: { data: ReturnType<typeof genSeries>; timeRange: TimeRange; onTimeRange: (v: TimeRange) => void }) {
+function TrendChart({ data, timeRange, onTimeRange }: { data: { name: string; properties: number; new: number }[]; timeRange: TimeRange; onTimeRange: (v: TimeRange) => void }) {
   const totalNew = data.reduce((s, d) => s + d.new, 0);
   const totalAll = data.reduce((s, d) => s + d.properties, 0);
 
@@ -300,6 +336,76 @@ function TrendChart({ data, timeRange, onTimeRange }: { data: ReturnType<typeof 
             <Bar dataKey="new" name="New" fill="rgba(82,39,255,0.15)" radius={[3, 3, 0, 0]} />
             <Area type="monotone" dataKey="properties" name="Total" stroke="#5227FF" strokeWidth={2.5} fill="url(#trendGrad)" />
           </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+// ─── Price Trends Chart ──────────────────────────────────────────────────────
+
+function PriceTrendsChart({ data }: { data: { month: string; listingType: string; avgPrice: number; count: number }[] | undefined }) {
+  const chartData = useMemo(() => {
+    if (!data || data.length === 0) return [];
+
+    // Pivot data: one row per month with avgSale and avgRent columns
+    const monthMap = new Map<string, { month: string; sale: number; rent: number; saleCount: number; rentCount: number }>();
+    for (const d of data) {
+      const existing = monthMap.get(d.month) || { month: d.month, sale: 0, rent: 0, saleCount: 0, rentCount: 0 };
+      if (d.listingType === "SALE") {
+        existing.sale = d.avgPrice;
+        existing.saleCount = d.count;
+      } else if (d.listingType === "RENT") {
+        existing.rent = d.avgPrice;
+        existing.rentCount = d.count;
+      }
+      monthMap.set(d.month, existing);
+    }
+
+    return Array.from(monthMap.values())
+      .sort((a, b) => a.month.localeCompare(b.month))
+      .map(d => {
+        const date = new Date(d.month + "-15");
+        return {
+          name: date.toLocaleDateString("en-NG", { month: "short", year: "2-digit" }),
+          sale: d.sale,
+          rent: d.rent,
+        };
+      });
+  }, [data]);
+
+  if (chartData.length === 0) {
+    return (
+      <div className="rounded-2xl border p-5 flex flex-col items-center justify-center" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)", minHeight: 200 }}>
+        <DollarSign className="w-8 h-8 mb-2" style={{ color: "var(--muted-foreground)", opacity: 0.4 }} />
+        <p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>Price Trends</p>
+        <p className="text-xs mt-1" style={{ color: "var(--muted-foreground)" }}>Not enough data yet</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border p-5 flex flex-col" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h3 className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>Avg Price Trends</h3>
+          <p className="text-[10px] mt-0.5" style={{ color: "var(--muted-foreground)" }}>Last 6 months by listing type</p>
+        </div>
+        <div className="flex items-center gap-3 text-[10px] font-semibold">
+          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: "#2563eb" }} />Sale</span>
+          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: "#ea580c" }} />Rent</span>
+        </div>
+      </div>
+      <div className="flex-1 min-h-[180px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={chartData} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
+            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} tickFormatter={fmtPrice} />
+            <Tooltip {...tooltipStyle} formatter={(value: number) => fmtPrice(value)} />
+            <Line type="monotone" dataKey="sale" name="Avg Sale Price" stroke="#2563eb" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+            <Line type="monotone" dataKey="rent" name="Avg Rent Price" stroke="#ea580c" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+          </LineChart>
         </ResponsiveContainer>
       </div>
     </div>
@@ -447,6 +553,10 @@ export default function AnalyticsPage() {
 
   const { data: kpis, isLoading: kpisLoading } = useDashboardKPIs();
   const { data: charts, isLoading: chartsLoading } = useDashboardCharts();
+  const { data: velocity } = useListingVelocity();
+  const { data: heatmapRaw } = useActivityHeatmap();
+  const { data: priceTrends } = usePriceTrends();
+  const { data: kpiTrends } = useKPITrends();
   const isLoading = kpisLoading || chartsLoading;
 
   // Live data — no hardcoded fallbacks
@@ -458,9 +568,9 @@ export default function AnalyticsPage() {
   const topSites: any[] = charts?.topSites || [];
   const recentProps: any[] = charts?.recentProperties || [];
 
-  const heatmapData = useMemo(() => buildHeatmap(total), [total]);
-  const heatmapMax = useMemo(() => Math.max(...heatmapData.flatMap(r => r.hours.map(h => h.val))), [heatmapData]);
-  const seriesData  = useMemo(() => genSeries(total, timeRange), [total, timeRange]);
+  const heatmapData = useMemo(() => formatHeatmapData(heatmapRaw), [heatmapRaw]);
+  const heatmapMax = useMemo(() => Math.max(1, ...heatmapData.flatMap(r => r.hours.map(h => h.val))), [heatmapData]);
+  const seriesData  = useMemo(() => formatVelocityData(velocity, timeRange), [velocity, timeRange]);
 
   // Top areas — real data only
   const topAreas = useMemo(() => {
@@ -508,11 +618,11 @@ export default function AnalyticsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Left: Hero + mini KPIs stacked */}
         <div className="flex flex-col gap-4">
-          <HeroKpi value={total} trend={8} isLoading={isLoading} />
+          <HeroKpi value={total} trend={kpiTrends?.totalProperties?.changePercent ?? 0} isLoading={isLoading} />
           <div className="grid grid-cols-2 gap-4">
-            <MiniKpi label="For Sale" value={forSale} trend={4} icon={Home} color="#2563eb" bg="rgba(37,99,235,0.08)" isLoading={isLoading} />
-            <MiniKpi label="For Rent" value={forRent} trend={-2} icon={Tag} color="#ea580c" bg="rgba(234,88,12,0.08)" isLoading={isLoading} />
-            <MiniKpi label="Avg Price" value={avgPrice} prefix="₦" trend={6} icon={DollarSign} color="#7c3aed" bg="rgba(124,58,237,0.08)" isLoading={isLoading} />
+            <MiniKpi label="For Sale" value={forSale} trend={kpiTrends?.forSale?.changePercent} icon={Home} color="#2563eb" bg="rgba(37,99,235,0.08)" isLoading={isLoading} />
+            <MiniKpi label="For Rent" value={forRent} trend={kpiTrends?.forRent?.changePercent} icon={Tag} color="#ea580c" bg="rgba(234,88,12,0.08)" isLoading={isLoading} />
+            <MiniKpi label="Avg Price" value={avgPrice} prefix="₦" trend={kpiTrends?.avgPrice?.changePercent} icon={DollarSign} color="#7c3aed" bg="rgba(124,58,237,0.08)" isLoading={isLoading} />
             <MiniKpi label="Active Sites" value={kpis?.totalSites || 0} icon={Globe} color="#0891b2" bg="rgba(8,145,178,0.08)" isLoading={isLoading} />
           </div>
         </div>
@@ -521,6 +631,11 @@ export default function AnalyticsPage() {
         <div className="lg:col-span-2">
           <TrendChart data={seriesData} timeRange={timeRange} onTimeRange={setTimeRange} />
         </div>
+      </div>
+
+      {/* Row 1.5: Price Trends Chart */}
+      <div className="grid grid-cols-1 gap-4">
+        <PriceTrendsChart data={priceTrends} />
       </div>
 
       {/* Row 2: Top Areas + Top Sites + Heatmap */}

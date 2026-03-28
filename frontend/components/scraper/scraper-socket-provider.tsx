@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import io from "socket.io-client";
 import { supabase } from "@/lib/supabase";
 import { useScraperStore } from "@/stores/scraper-store";
@@ -19,6 +19,7 @@ const SOCKET_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/ap
 export function ScraperSocketProvider() {
   const socketRef = useRef<SocketInstance | null>(null);
   const currentJobIdRef = useRef<string | null>(null);
+  const [socketReady, setSocketReady] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: jobs } = useScrapeJobs();
@@ -130,6 +131,7 @@ export function ScraperSocketProvider() {
       });
 
       socketRef.current = socket;
+      setSocketReady(true);
     };
 
     connect();
@@ -139,6 +141,7 @@ export function ScraperSocketProvider() {
       if (socketRef.current) {
         socketRef.current.disconnect();
         socketRef.current = null;
+        setSocketReady(false);
       }
     };
   }, []);
@@ -160,10 +163,10 @@ export function ScraperSocketProvider() {
     currentJobIdRef.current = jobId;
   }, [activeJob?.id]);
 
-  // ── Socket event listeners
+  // ── Socket event listeners (re-registers when socket becomes ready)
   useEffect(() => {
     const socket = socketRef.current;
-    if (!socket) return;
+    if (!socket || !socketReady) return;
 
     const handleLog = (data: any) => {
       const msg = data.message ?? String(data);
@@ -226,7 +229,7 @@ export function ScraperSocketProvider() {
       socket.off("job:error", handleError);
       socket.off("job_update", handleJobUpdate);
     };
-  }, []);
+  }, [socketReady]);
 
   // Render nothing — this is a headless provider
   return null;

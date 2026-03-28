@@ -121,7 +121,10 @@ export const updatePropertySchema = createPropertySchema.partial().omit({
 
 export const bulkActionSchema = z.object({
   ids: z.array(z.string()).min(1).max(100),
-  action: z.enum(["verify", "reject", "flag", "delete", "restore"]),
+  action: z.enum([
+    "verify", "reject", "flag", "delete", "restore",
+    "status_available", "status_sold", "status_expired", "status_rented",
+  ]),
 });
 
 export type ListPropertiesInput = z.infer<typeof listPropertiesSchema>;

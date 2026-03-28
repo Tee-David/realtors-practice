@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { usePropertyStats, useProperties } from "@/hooks/useProperties";
-import { useDashboardKPIs, useDashboardCharts } from "@/hooks/use-analytics";
+import { useDashboardKPIs, useDashboardCharts, useWeeklySparkline, useKPITrends } from "@/hooks/use-analytics";
 import { PropertyCard } from "@/components/property/property-card";
 import { formatNumber, formatPrice, pluralize } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -93,8 +93,16 @@ type TimeRange = (typeof TIME_RANGES)[number];
 /*  Sparkline bars helper                                              */
 /* ------------------------------------------------------------------ */
 
-function SparklineBars({ color, opacity = 0.15 }: { color: string; opacity?: number }) {
-  const bars = [40, 65, 50, 75, 55, 80, 70, 90, 60, 85, 95, 80];
+function SparklineBars({ color, opacity = 0.15, data }: { color: string; opacity?: number; data?: { week: string; count: number }[] }) {
+  // Use real weekly data if available, otherwise show flat placeholder
+  const bars = useMemo(() => {
+    if (!data || data.length === 0) return [20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20];
+    const counts = data.map(d => d.count);
+    const maxVal = Math.max(1, ...counts);
+    // Normalize to 10-100% range for visual display
+    return counts.map(c => Math.max(10, Math.round((c / maxVal) * 100)));
+  }, [data]);
+
   return (
     <div className="flex items-end gap-[2px] h-6 flex-1">
       {bars.map((h, i) => (
@@ -127,6 +135,7 @@ function KpiCard({
   isLoading,
   prefix,
   compact,
+  sparklineData,
 }: {
   label: string;
   value: number;
@@ -138,6 +147,7 @@ function KpiCard({
   isLoading?: boolean;
   prefix?: string;
   compact?: boolean;
+  sparklineData?: { week: string; count: number }[];
 }) {
   const isPositive = trend != null && trend >= 0;
 
@@ -181,7 +191,7 @@ function KpiCard({
             style={{ color: isPositive ? "var(--success)" : "var(--destructive)" }}
           >
             {isPositive ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
-            {Math.abs(trend)}%
+            {trend > 0 ? "+" : ""}{trend}%
           </div>
         )}
         {trendLabel && (
@@ -190,7 +200,7 @@ function KpiCard({
           </span>
         )}
         <div className="ml-auto flex-1 max-w-[100px]">
-          <SparklineBars color={iconColor} />
+          <SparklineBars color={iconColor} data={sparklineData} />
         </div>
       </div>
     </div>
@@ -321,10 +331,11 @@ function RevenueAnalyticsChart({
 
   const chartData = useMemo(() => {
     const count = monthLabels.length;
-    // Distribute values with realistic variation
+    // Distribute values with deterministic variation (no Math.random)
+    const variations = [0.72, 0.88, 1.05, 0.95, 1.12, 0.82, 1.08, 0.91, 1.15, 0.78, 1.02, 0.96];
     return monthLabels.map((name, i) => {
       const baseMultiplier = (i + 1) / count;
-      const variation = 0.7 + Math.random() * 0.6;
+      const variation = variations[i % variations.length];
       return {
         name,
         sale: Math.round((saleValue / count) * baseMultiplier * variation),
@@ -648,6 +659,8 @@ export default function DashboardPage() {
   const { data: stats, isLoading: statsLoading } = usePropertyStats();
   const { data: kpis, isLoading: kpisLoading } = useDashboardKPIs();
   const { data: charts, isLoading: chartsLoading } = useDashboardCharts();
+  const { data: kpiTrends, isLoading: kpiTrendsLoading } = useKPITrends();
+  const { data: sparklineData } = useWeeklySparkline();
   const { data: recentData, isLoading: recentLoading } = useProperties({
     page: 1,
     limit: 12,
@@ -691,6 +704,12 @@ export default function DashboardPage() {
 
   const isLoading = statsLoading || kpisLoading;
 
+  // Real KPI values from analytics API
+  const kpiTotal = kpiTrends?.totalProperties?.current ?? total;
+  const kpiForSale = kpiTrends?.forSale?.current ?? (kpis?.forSale || 0);
+  const kpiForRent = kpiTrends?.forRent?.current ?? (kpis?.forRent || 0);
+  const kpiAvgPrice = kpiTrends?.avgPrice?.current ?? (charts?.avgPrice || 0);
+
   return (
     <div className="space-y-5 pb-8">
       {/* ============================================================ */}
@@ -699,9 +718,77 @@ export default function DashboardPage() {
       <GlobeHero />
 
       {/* ============================================================ */}
+      {/*  KPI CARDS ROW — real period-over-period trends              */}
+      {/* ============================================================ */}
+      <div data-tour="kpi-cards" className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {([
+          {
+            label: "Total Properties",
+            value: kpiTotal,
+            icon: Building2,
+            trend: kpiTrends?.totalProperties?.changePercent,
+            iconBg: "rgba(0,1,252,0.08)",
+            iconColor: "var(--primary)",
+            compact: true,
+          },
+          {
+            label: "For Sale",
+            value: kpiForSale,
+            icon: Home,
+            trend: kpiTrends?.forSale?.changePercent,
+            iconBg: "rgba(37,99,235,0.08)",
+            iconColor: "#2563eb",
+            compact: true,
+          },
+          {
+            label: "For Rent",
+            value: kpiForRent,
+            icon: Calendar,
+            trend: kpiTrends?.forRent?.changePercent,
+            iconBg: "rgba(255,102,0,0.08)",
+            iconColor: "var(--accent)",
+            compact: true,
+          },
+          {
+            label: "Avg Price",
+            value: kpiAvgPrice,
+            icon: DollarSign,
+            trend: kpiTrends?.avgPrice?.changePercent,
+            iconBg: "rgba(124,58,237,0.08)",
+            iconColor: "#7c3aed",
+            compact: true,
+            prefix: "₦",
+          },
+        ] as const).map((card) => (
+          <motion.div
+            key={card.label}
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+            className="rounded-2xl border p-4"
+            style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}
+          >
+            <KpiCard
+              label={card.label}
+              value={card.value}
+              icon={card.icon}
+              trend={card.trend}
+              trendLabel="vs last 30d"
+              iconBg={card.iconBg}
+              iconColor={card.iconColor}
+              isLoading={isLoading || kpiTrendsLoading}
+              compact={card.compact}
+              prefix={"prefix" in card ? card.prefix : undefined}
+              sparklineData={sparklineData}
+            />
+          </motion.div>
+        ))}
+      </div>
+
+      {/* ============================================================ */}
       {/*  BENTO GRID LAYOUT                                           */}
       {/* ============================================================ */}
-      <BentoGrid data-tour="kpi-cards" className="grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 auto-rows-[minmax(140px,auto)] gap-3 mt-6">
+      <BentoGrid className="grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 auto-rows-[minmax(140px,auto)] gap-3 mt-6">
         {/* Top Section: Revenue Analytics + Categories + Status Analysis */}
         <motion.div
           className="sm:col-span-2 lg:col-span-4"

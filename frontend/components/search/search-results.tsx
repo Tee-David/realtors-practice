@@ -1,13 +1,14 @@
 "use client";
 
+import React from "react";
 import { motion } from "framer-motion";
 import { PropertyCard } from "@/components/property/property-card";
 import { PropertyListCard } from "@/components/property/property-list-card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SearchX, List, LayoutGrid, SlidersHorizontal, Bookmark, ChevronDown, Check, X } from "lucide-react";
-import { toast } from "sonner";
+import { SearchX, List, LayoutGrid, SlidersHorizontal, Bookmark, ChevronDown, Check, X, Loader2 } from "lucide-react";
 import { formatNumber, cn } from "@/lib/utils";
 import type { Property } from "@/types/property";
+import { useCreateSavedSearch } from "@/hooks/use-saved-searches";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -65,6 +66,7 @@ export function SearchResults({
   compact = false,
 }: SearchResultsProps) {
   const [viewMode, setViewMode] = React.useState<"grid" | "list">("grid");
+  const createSavedSearch = useCreateSavedSearch();
 
   const SORT_OPTIONS = [
     { value: "newest", label: "Newest First" },
@@ -73,30 +75,71 @@ export function SearchResults({
     { value: "quality:desc", label: "Highest Quality" },
   ];
 
-  const handleSaveSearch = () => {
-    try {
-      const currentSaved = JSON.parse(localStorage.getItem("rp-saved-searches") || "[]");
-      const newSaved = {
-        id: Date.now().toString(),
-        query,
-        filters: activeFilters,
-        date: new Date().toISOString()
-      };
-      
-      // Prevent exact duplicates
-      const isDuplicate = currentSaved.some((s: any) => 
-        s.query === query && JSON.stringify(s.filters) === JSON.stringify(activeFilters)
-      );
+  /**
+   * Parse Meilisearch filter strings (e.g. 'listingType = SALE', 'bedrooms = 3')
+   * into the structured filters object the SavedSearch API expects.
+   */
+  const parseFiltersToObject = (filterStrings: string[]): Record<string, unknown> => {
+    const result: Record<string, unknown> = {};
+    for (const f of filterStrings) {
+      const match = f.match(/^(\w+)\s*=\s*(.+)$/);
+      if (!match) continue;
+      const [, key, rawValue] = match;
+      const value = rawValue.replace(/^["']|["']$/g, "").trim();
 
-      if (!isDuplicate) {
-        localStorage.setItem("rp-saved-searches", JSON.stringify([newSaved, ...currentSaved]));
-        toast.success(`Saved search: "${query}"`);
-      } else {
-        toast.info("This search is already saved.");
+      switch (key) {
+        case "listingType":
+        case "category":
+        case "categoryName":
+        case "propertyType": {
+          const normalizedKey = key === "categoryName" ? "category" : key;
+          const existing = result[normalizedKey];
+          if (Array.isArray(existing)) {
+            (existing as string[]).push(value);
+          } else if (typeof existing === "string") {
+            result[normalizedKey] = [existing, value];
+          } else {
+            result[normalizedKey] = value;
+          }
+          break;
+        }
+        case "bedrooms":
+        case "bathrooms":
+        case "parking":
+          result[key] = parseInt(value, 10);
+          break;
+        case "minPrice":
+        case "maxPrice":
+          result[key] = parseFloat(value);
+          break;
+        case "state":
+        case "area":
+        case "furnishing":
+          result[key] = value;
+          break;
+        case "serviced":
+          result[key] = value === "true";
+          break;
+        default:
+          result[key] = value;
       }
-    } catch (e) {
-      toast.error("Failed to save search.");
     }
+    return result;
+  };
+
+  const handleSaveSearch = () => {
+    if (createSavedSearch.isPending) return;
+
+    const filters = parseFiltersToObject(activeFilters);
+    const name = query || Object.values(filters).flat().join(", ") || "Untitled Search";
+
+    createSavedSearch.mutate({
+      name,
+      filters,
+      naturalQuery: query || undefined,
+      notifyInApp: true,
+      notifyEmail: false,
+    });
   };
 
   if (isLoading) {
@@ -149,14 +192,15 @@ export function SearchResults({
           )}
 
           {/* Save Search Button */}
-          {query && (
+          {(query || activeFilters.length > 0) && (
             <button
               onClick={handleSaveSearch}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+              disabled={createSavedSearch.isPending}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition-colors disabled:opacity-50"
               style={{ color: "var(--primary)" }}
             >
-              <Bookmark size={15} />
-              Save Search
+              {createSavedSearch.isPending ? <Loader2 size={15} className="animate-spin" /> : <Bookmark size={15} />}
+              {createSavedSearch.isPending ? "Saving..." : "Save Search"}
             </button>
           )}
 
@@ -315,5 +359,3 @@ export function SearchResults({
   );
 }
 
-// Need React for useState
-import React from "react";

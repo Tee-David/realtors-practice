@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { SystemSettingsService } from "../services/systemSettings.service";
+import { CronService } from "../services/cron.service";
 import { sendSuccess, sendError } from "../utils/apiResponse.util";
 import { Logger } from "../utils/logger.util";
 
@@ -62,6 +63,17 @@ export class SystemSettingsController {
       }
 
       const results = await SystemSettingsService.bulkUpdate(settings);
+
+      // If any scraper settings were updated, reschedule the cron job
+      const hasScraperSettings = settings.some(
+        (s: any) => s.category === "scraper" || s.key?.startsWith("scrape_schedule")
+      );
+      if (hasScraperSettings) {
+        CronService.rescheduleScrapeCron().catch((err: any) => {
+          Logger.warn(`Failed to reschedule scrape cron: ${err.message}`);
+        });
+      }
+
       return sendSuccess(res, results, "Settings updated");
     } catch (err: any) {
       Logger.error("Failed to bulk update settings", err);

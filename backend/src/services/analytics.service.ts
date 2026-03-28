@@ -266,6 +266,161 @@ export class AnalyticsService {
   }
 
   /**
+   * Scraping activity heatmap — property counts by day-of-week × hour.
+   * Returns a 7×24 grid for the last 90 days.
+   */
+  static async getActivityHeatmap() {
+    try {
+      const cacheKey = "analytics:activity_heatmap";
+      const cached = await RedisClient.get(cacheKey);
+      if (cached) return JSON.parse(cached);
+
+      const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+
+      const properties = await prisma.property.findMany({
+        where: {
+          deletedAt: null,
+          createdAt: { gte: ninetyDaysAgo },
+        },
+        select: { createdAt: true },
+      });
+
+      // Build 7×24 grid (day 0=Sunday, hour 0-23)
+      const grid: number[][] = Array.from({ length: 7 }, () => Array(24).fill(0));
+      for (const p of properties) {
+        const d = p.createdAt;
+        grid[d.getUTCDay()][d.getUTCHours()]++;
+      }
+
+      const result = grid.map((hours, day) => ({
+        day,
+        hours,
+      }));
+
+      await RedisClient.set(cacheKey, JSON.stringify(result), CACHE_TTL);
+      return result;
+    } catch (error: any) {
+      Logger.error(`Error in getActivityHeatmap: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Weekly sparkline — property counts per week over the past 12 weeks.
+   * Used for dashboard KPI sparklines.
+   */
+  static async getWeeklySparkline() {
+    try {
+      const cacheKey = "analytics:weekly_sparkline";
+      const cached = await RedisClient.get(cacheKey);
+      if (cached) return JSON.parse(cached);
+
+      const twelveWeeksAgo = new Date(Date.now() - 12 * 7 * 24 * 60 * 60 * 1000);
+
+      const properties = await prisma.property.findMany({
+        where: {
+          deletedAt: null,
+          createdAt: { gte: twelveWeeksAgo },
+        },
+        select: { createdAt: true },
+      });
+
+      // Group by ISO week number
+      const weekMap = new Map<string, number>();
+      for (const p of properties) {
+        const d = p.createdAt;
+        const weekStart = new Date(d);
+        weekStart.setUTCDate(weekStart.getUTCDate() - weekStart.getUTCDay());
+        const key = weekStart.toISOString().split("T")[0];
+        weekMap.set(key, (weekMap.get(key) || 0) + 1);
+      }
+
+      // Sort by date and return array of counts
+      const sorted = Array.from(weekMap.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([week, count]) => ({ week, count }));
+
+      await RedisClient.set(cacheKey, JSON.stringify(sorted), CACHE_TTL);
+      return sorted;
+    } catch (error: any) {
+      Logger.error(`Error in getWeeklySparkline: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * KPI trends — period-over-period percentage changes.
+   * Compares the last 30 days with the prior 30 days for each KPI.
+   */
+  static async getKPITrends() {
+    try {
+      const cacheKey = "analytics:kpi_trends";
+      const cached = await RedisClient.get(cacheKey);
+      if (cached) return JSON.parse(cached);
+
+      const now = new Date();
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+
+      const currentPeriod = { createdAt: { gte: thirtyDaysAgo }, deletedAt: null };
+      const previousPeriod = { createdAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo }, deletedAt: null };
+
+      const [
+        currentTotal, previousTotal,
+        currentForSale, previousForSale,
+        currentForRent, previousForRent,
+        currentAvgPrice, previousAvgPrice,
+      ] = await Promise.all([
+        prisma.property.count({ where: currentPeriod as any }),
+        prisma.property.count({ where: previousPeriod as any }),
+        prisma.property.count({ where: { ...currentPeriod, listingType: "SALE" } as any }),
+        prisma.property.count({ where: { ...previousPeriod, listingType: "SALE" } as any }),
+        prisma.property.count({ where: { ...currentPeriod, listingType: "RENT" } as any }),
+        prisma.property.count({ where: { ...previousPeriod, listingType: "RENT" } as any }),
+        prisma.property.aggregate({ where: { ...currentPeriod, price: { not: null, gt: 0 } } as any, _avg: { price: true } }),
+        prisma.property.aggregate({ where: { ...previousPeriod, price: { not: null, gt: 0 } } as any, _avg: { price: true } }),
+      ]);
+
+      function calcChange(current: number, previous: number): number {
+        if (previous === 0) return current > 0 ? 100 : 0;
+        return Math.round(((current - previous) / previous) * 100);
+      }
+
+      const currentAvg = Math.round(currentAvgPrice._avg.price || 0);
+      const previousAvg = Math.round(previousAvgPrice._avg.price || 0);
+
+      const result = {
+        totalProperties: {
+          current: currentTotal,
+          previous: previousTotal,
+          changePercent: calcChange(currentTotal, previousTotal),
+        },
+        forSale: {
+          current: currentForSale,
+          previous: previousForSale,
+          changePercent: calcChange(currentForSale, previousForSale),
+        },
+        forRent: {
+          current: currentForRent,
+          previous: previousForRent,
+          changePercent: calcChange(currentForRent, previousForRent),
+        },
+        avgPrice: {
+          current: currentAvg,
+          previous: previousAvg,
+          changePercent: calcChange(currentAvg, previousAvg),
+        },
+      };
+
+      await RedisClient.set(cacheKey, JSON.stringify(result), CACHE_TTL);
+      return result;
+    } catch (error: any) {
+      Logger.error(`Error in getKPITrends: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
    * Listing velocity — new listings per day over the past 30 days.
    */
   static async getListingVelocity() {

@@ -35,17 +35,21 @@ export class MeiliService {
       await index.updateSearchableAttributes([
         "title",
         "description",
-        "location",
+        "locationText",
         "features",
         "categoryName",
         "state",
         "lga",
         "area",
-        "estate",
+        "estateName",
+        "fullAddress",
+        "streetName",
       ]);
 
       await index.updateSortableAttributes(["price", "createdAt", "qualityScore"]);
 
+      // Custom ranking rules must be in the format "attribute:direction"
+      // but only AFTER the built-in rules. Meilisearch does not allow mixing.
       await index.updateRankingRules([
         "words",
         "typo",
@@ -53,8 +57,6 @@ export class MeiliService {
         "attribute",
         "sort",
         "exactness",
-        "qualityScore:desc",
-        "createdAt:desc",
       ]);
 
       Logger.info(`Meilisearch index '${this.INDEX_NAME}' configured successfully.`);
@@ -74,25 +76,29 @@ export class MeiliService {
       status: property.status,
       listingType: property.listingType,
       price: property.price ? Number(property.price) : null,
-      currency: property.currency,
+      priceCurrency: property.priceCurrency,
       bedrooms: property.bedrooms,
       bathrooms: property.bathrooms,
       toilets: property.toilets,
       parkingSpaces: property.parkingSpaces,
-      totalArea: property.totalArea,
-      location: property.location,
+      buildingSizeSqm: property.buildingSizeSqm,
+      landSizeSqm: property.landSizeSqm,
+      locationText: property.locationText,
+      fullAddress: property.fullAddress,
+      streetName: property.streetName,
       state: property.state,
       lga: property.lga,
       area: property.area,
-      estate: property.estate,
+      estateName: property.estateName,
       features: property.features || [],
       qualityScore: property.qualityScore,
       createdAt: new Date(property.createdAt).getTime(),
       updatedAt: new Date(property.updatedAt).getTime(),
-      categoryId: property.category, // category is an enum in the Prisma schema
+      categoryId: property.category,
       categoryName: property.category,
       mainImage: property.images && Array.isArray(property.images) ? property.images[0] : null,
-      slug: property.slug,
+      propertyType: property.propertyType,
+      rentFrequency: property.rentFrequency,
     };
   }
 

@@ -31,13 +31,36 @@ class Config:
     proxy_urls: list[str] = field(default_factory=list)
 
     def __post_init__(self):
+        env = os.getenv("ENVIRONMENT", "development")
+        is_production = env == "production"
+
         # Validate internal API key
         if not self.internal_api_key or self.internal_api_key == "dev-internal-key":
-            env = os.getenv("ENVIRONMENT", "development")
-            if env == "production":
-                raise RuntimeError("INTERNAL_API_KEY must be set in production (cannot use default)")
+            if is_production:
+                raise RuntimeError(
+                    "INTERNAL_API_KEY must be set in production (cannot use default). "
+                    "Set the INTERNAL_API_KEY environment variable or GitHub Actions secret."
+                )
             if not self.internal_api_key:
                 self.internal_api_key = "dev-internal-key"
+
+        # Validate callback URL is not localhost in production
+        if is_production:
+            from urllib.parse import urlparse
+            parsed = urlparse(self.api_base_url)
+            if parsed.hostname in ("localhost", "127.0.0.1", "0.0.0.0"):
+                raise RuntimeError(
+                    f"API_BASE_URL resolves to localhost ({self.api_base_url}) in production. "
+                    "This means callbacks will go nowhere. "
+                    "Set the PROD_API_URL GitHub Actions secret to your live backend URL "
+                    "(e.g. https://your-app.onrender.com/api)."
+                )
+
+        # Log callback URL at startup for visibility in GH Actions logs
+        print(f"[CONFIG] Callback URL: {self.api_base_url}")
+        print(f"[CONFIG] Environment: {env}")
+        print(f"[CONFIG] INTERNAL_API_KEY: {'SET (' + str(len(self.internal_api_key)) + ' chars)' if self.internal_api_key else 'NOT SET'}")
+
         # Parse proxy URLs
         if self.proxy_urls_raw:
             self.proxy_urls = [p.strip() for p in self.proxy_urls_raw.split(",") if p.strip()]

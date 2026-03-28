@@ -4,10 +4,14 @@ import { SavedSearchService } from "./savedSearch.service";
 import { NotificationService } from "./notification.service";
 import { EmailService } from "./email.service";
 import { ScrapeService } from "./scrape.service";
+import { SystemSettingsService } from "./systemSettings.service";
 import { Logger } from "../utils/logger.util";
 import prisma from "../prismaClient";
 
 export class CronService {
+  /** Track the scheduled scrape cron task so we can reschedule it */
+  private static scheduledScrapeTask: cron.ScheduledTask | null = null;
+
   /**
    * Initialize all cron jobs for the backend
    */
@@ -86,6 +90,76 @@ export class CronService {
     }, {
       timezone: "Africa/Lagos"
     });
+
+    // Initialize the configurable scheduled scrape from SystemSettings
+    this.initScheduledScrape().catch((err: any) => {
+      Logger.warn(`[CRON] Failed to init scheduled scrape: ${err.message}`);
+    });
+  }
+
+  /**
+   * Read scrape schedule settings from DB and set up (or tear down) the cron task.
+   * Called on startup and whenever settings change via `rescheduleScrapeCron()`.
+   */
+  static async initScheduledScrape() {
+    // Stop any existing task
+    if (this.scheduledScrapeTask) {
+      this.scheduledScrapeTask.stop();
+      this.scheduledScrapeTask = null;
+    }
+
+    const enabledSetting = await SystemSettingsService.get("scrape_schedule_enabled");
+    const hourSetting = await SystemSettingsService.get("scrape_schedule_hour");
+
+    const enabled = enabledSetting?.value === true;
+    const hour = typeof hourSetting?.value === "number" ? hourSetting.value : 1; // default 1 AM
+
+    if (!enabled) {
+      Logger.info("[CRON] Scheduled scraping is disabled");
+      return;
+    }
+
+    // Cron expression: run daily at the configured hour (Africa/Lagos)
+    const cronExpr = `0 ${hour} * * *`;
+
+    this.scheduledScrapeTask = cron.schedule(cronExpr, async () => {
+      try {
+        Logger.info(`[CRON] Running scheduled daily scrape (hour=${hour})`);
+
+        // Get all enabled sites
+        const sites = await prisma.site.findMany({
+          where: { enabled: true, deletedAt: null },
+          select: { id: true },
+        });
+
+        if (sites.length === 0) {
+          Logger.warn("[CRON] No enabled sites found for scheduled scrape");
+          return;
+        }
+
+        const siteIds = sites.map((s) => s.id);
+        await ScrapeService.startJob({
+          siteIds,
+          type: "SCHEDULED",
+          maxListingsPerSite: 100,
+        });
+
+        Logger.info(`[CRON] Scheduled scrape dispatched for ${siteIds.length} sites`);
+      } catch (error: any) {
+        Logger.error(`[CRON] Scheduled scrape failed: ${error.message}`);
+      }
+    }, {
+      timezone: "Africa/Lagos",
+    });
+
+    Logger.info(`[CRON] Scheduled scrape enabled — daily at ${hour}:00 Africa/Lagos`);
+  }
+
+  /**
+   * Call this after updating scrape schedule settings to apply the new schedule immediately.
+   */
+  static async rescheduleScrapeCron() {
+    await this.initScheduledScrape();
   }
 
   /**

@@ -3,6 +3,7 @@ import prisma from "../prismaClient";
 import { ScrapeJobStatus, Prisma } from "@prisma/client";
 import { PropertyService } from "./property.service";
 import { SiteService } from "./site.service";
+import { SiteIntelligenceService } from "./siteIntelligence.service";
 import { config } from "../config/env";
 import { Logger } from "../utils/logger.util";
 
@@ -146,6 +147,30 @@ export class ScrapeService {
       throw new Error("No valid enabled sites found for the given IDs");
     }
 
+    // Auto-learn unlearned sites before scrape if setting is enabled
+    try {
+      const siSettings = await SiteIntelligenceService.getSettings();
+      if (siSettings.si_auto_learn_before_scrape) {
+        const unlearnedSites = sites.filter(s => s.learnStatus !== "LEARNED");
+        if (unlearnedSites.length > 0) {
+          Logger.info(
+            `Auto-learn before scrape: ${unlearnedSites.length} unlearned site(s) — ` +
+            unlearnedSites.map(s => s.name).join(", ")
+          );
+          for (const site of unlearnedSites) {
+            try {
+              await SiteIntelligenceService.learnSite(site.id, userId);
+              Logger.info(`Auto-learn dispatched for ${site.name} (${site.id})`);
+            } catch (err: any) {
+              Logger.warn(`Auto-learn failed for ${site.name}: ${err.message}`);
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      Logger.warn(`Failed to check auto-learn settings: ${err.message}`);
+    }
+
     // Split sites into batches
     const totalBatches = Math.ceil(sites.length / ScrapeService.BATCH_SIZE);
 
@@ -174,6 +199,15 @@ export class ScrapeService {
     const callbackUrl = config.env === "production"
       ? `${process.env.API_BASE_URL || "https://realtors-practice-new-api.onrender.com/api"}`
       : `http://localhost:${config.port}/api`;
+
+    // Read SI settings for CSS confidence threshold
+    let cssConfidenceThreshold = 50;
+    try {
+      const siSettings = await SiteIntelligenceService.getSettings();
+      cssConfidenceThreshold = siSettings.si_css_confidence_threshold;
+    } catch (err: any) {
+      Logger.warn(`Failed to read SI settings for scrape, using default: ${err.message}`);
+    }
 
     // Build site payload configs
     const sitePayloads = sites.map((site) => {
@@ -225,6 +259,7 @@ export class ScrapeService {
           jobId: job.id,
           sites: batch.sites,
           maxListingsPerSite,
+          cssConfidenceThreshold,
           callbackUrl,
           parameters: {
             ...(parameters || {}),
@@ -286,6 +321,7 @@ export class ScrapeService {
         jobId: job.id,
         sites: sitePayloads,
         maxListingsPerSite,
+        cssConfidenceThreshold,
         callbackUrl,
         parameters: parameters || {},
       };
@@ -543,6 +579,7 @@ export class ScrapeService {
 
     let newCount = 0;
     let dupCount = 0;
+    let errCount = 0;
 
     for (const rawProp of properties) {
       try {
@@ -555,8 +592,11 @@ export class ScrapeService {
           dupCount++;
         } else {
           newCount++;
+          // Broadcast live feed for each new property
+          broadcastScrapeProperty(jobId, prop);
         }
       } catch (err: any) {
+        errCount++;
         Logger.error(`Failed to upsert property (title="${(rawProp as any).title}", listingUrl="${(rawProp as any).listingUrl}"): ${err.message}`);
       }
     }
@@ -569,10 +609,11 @@ export class ScrapeService {
           totalListings: { increment: properties.length },
           newListings: { increment: newCount },
           duplicates: { increment: dupCount },
+          errors: { increment: errCount },
         },
       });
       Logger.info(
-        `Job ${jobId} incremental: +${newCount} new, +${dupCount} dups (batch of ${properties.length})`
+        `Job ${jobId} incremental: +${newCount} new, +${dupCount} dups, +${errCount} errs (batch of ${properties.length})`
       );
     } else {
       // A batch has finished — check if this is a multi-batch job
@@ -590,7 +631,16 @@ export class ScrapeService {
         const completedBatches = (jobParams.completedBatches as number || 0) + 1;
         const updatedParams = { ...jobParams, completedBatches };
 
+        // Warn if completedBatches exceeds totalBatches (shouldn't happen)
+        if (completedBatches > totalBatches) {
+          Logger.warn(
+            `Job ${jobId} batch mismatch: completedBatches (${completedBatches}) > totalBatches (${totalBatches}). ` +
+            `Possible duplicate callback — completing job anyway.`
+          );
+        }
+
         const allDone = completedBatches >= totalBatches;
+        const batchErrors = errCount + ((stats.totalErrors as number) || 0);
         const durationMs = allDone && job.startedAt
           ? Date.now() - new Date(job.startedAt).getTime()
           : undefined;
@@ -602,7 +652,7 @@ export class ScrapeService {
             totalListings: prevTotal + properties.length,
             newListings: prevNew + newCount,
             duplicates: prevDups + dupCount,
-            errors: { increment: (stats.totalErrors as number) || 0 },
+            errors: { increment: batchErrors },
             ...(allDone ? {
               status: "COMPLETED",
               completedAt: new Date(),
@@ -611,21 +661,36 @@ export class ScrapeService {
           },
         });
 
+        const totalErrors = (currentJob?.errors ?? 0) + batchErrors;
+
         Logger.info(
           `Job ${jobId} batch ${completedBatches}/${totalBatches} done: ` +
-          `+${newCount} new, +${dupCount} dups` +
+          `+${newCount} new, +${dupCount} dups, +${batchErrors} errs` +
           (allDone ? " — ALL BATCHES COMPLETE" : "")
         );
 
         if (allDone) {
+          const finalNew = prevNew + newCount;
+          const finalDups = prevDups + dupCount;
+          const finalTotal = prevTotal + properties.length;
+
           for (const siteId of job.siteIds) {
-            await SiteService.updateHealth(siteId, true, prevNew + newCount);
+            await SiteService.updateHealth(siteId, true, finalNew);
           }
+
+          // Log a final summary for easy debugging
+          Logger.info(
+            `[SCRAPE SUMMARY] Job ${jobId}: ${finalNew} new, ${finalDups} duplicates, ` +
+            `${totalErrors} errors, ${finalTotal} total processed, ` +
+            `duration ${durationMs ? Math.round(durationMs / 1000) + "s" : "unknown"}`
+          );
+
           broadcastScrapeComplete(jobId, {
-            totalListings: prevTotal + properties.length,
-            newListings: prevNew + newCount,
-            duplicates: prevDups + dupCount,
-            errors: (currentJob?.errors ?? 0) + ((stats.totalErrors as number) || 0),
+            totalListings: finalTotal,
+            newListings: finalNew,
+            duplicates: finalDups,
+            errors: totalErrors,
+            durationMs,
           });
         }
       } else {
@@ -634,33 +699,42 @@ export class ScrapeService {
           ? Date.now() - new Date(job.startedAt).getTime()
           : undefined;
 
+        const totalErrors = errCount + ((stats.totalErrors as number) || 0);
+        const finalNew = prevNew + newCount;
+        const finalDups = prevDups + dupCount;
+        const finalTotal = prevTotal + properties.length;
+
         await prisma.scrapeJob.update({
           where: { id: jobId },
           data: {
             status: "COMPLETED",
             completedAt: new Date(),
-            totalListings: prevTotal + properties.length,
-            newListings: prevNew + newCount,
-            duplicates: prevDups + dupCount,
-            errors: (stats.totalErrors as number) || 0,
+            totalListings: finalTotal,
+            newListings: finalNew,
+            duplicates: finalDups,
+            errors: totalErrors,
             durationMs,
           },
         });
 
         for (const siteId of job.siteIds) {
-          await SiteService.updateHealth(siteId, true, prevNew + newCount);
+          await SiteService.updateHealth(siteId, true, finalNew);
         }
 
-        broadcastScrapeComplete(jobId, {
-          totalListings: prevTotal + properties.length,
-          newListings: prevNew + newCount,
-          duplicates: prevDups + dupCount,
-          errors: stats.totalErrors || 0,
-        });
-
+        // Log a final summary for easy debugging
         Logger.info(
-          `Job ${jobId} completed: ${prevNew + newCount} new, ${prevDups + dupCount} dups, ${(stats.totalErrors as number) || 0} errors`
+          `[SCRAPE SUMMARY] Job ${jobId}: ${finalNew} new, ${finalDups} duplicates, ` +
+          `${totalErrors} errors, ${finalTotal} total processed, ` +
+          `duration ${durationMs ? Math.round(durationMs / 1000) + "s" : "unknown"}`
         );
+
+        broadcastScrapeComplete(jobId, {
+          totalListings: finalTotal,
+          newListings: finalNew,
+          duplicates: finalDups,
+          errors: totalErrors,
+          durationMs,
+        });
       }
     }
   }
@@ -773,10 +847,13 @@ export class ScrapeService {
     } else {
       // Single-batch job or cancellation — original behavior
       const finalStatus = isCancelled ? "CANCELLED" : "FAILED";
+      const durationMs = job.startedAt
+        ? Date.now() - new Date(job.startedAt).getTime()
+        : undefined;
 
       await prisma.scrapeJob.update({
         where: { id: jobId },
-        data: { status: finalStatus, completedAt: new Date() },
+        data: { status: finalStatus, completedAt: new Date(), durationMs },
       });
 
       if (!isCancelled) {

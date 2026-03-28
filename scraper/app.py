@@ -42,6 +42,7 @@ from utils.callback import (
     report_learn_results, set_api_base_url,
     start_batcher, stop_batcher,
 )
+import httpx
 from utils.robots_checker import is_allowed as robots_allowed, get_crawl_delay
 from utils.url_normalizer import normalize_url, VisitedSet
 from utils.logger import get_logger
@@ -65,16 +66,26 @@ except Exception as _redis_err:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info(f"Scraper service starting on {config.host}:{config.port}")
-    # Log LLM provider status at startup
+    # Log LLM provider status at startup — compact single-line for GH Actions visibility
     from engine.llm_providers import PROVIDERS
+    status_parts = []
     for p in PROVIDERS:
-        status = "CONFIGURED" if p.api_key else "NO KEY"
-        logger.info(f"  LLM: {p.name} ({p.model}) — {status}")
+        has_key = bool(p.api_key)
+        mark = "OK" if has_key else "NO KEY"
+        status_parts.append(f"{p.name} {mark}")
+        logger.info(f"  LLM: {p.name} ({p.model}) -- {mark}")
     configured = [p.name for p in PROVIDERS if p.api_key]
+    # Single-line summary for easy scanning in GH Actions logs
+    summary = ", ".join(status_parts)
+    logger.info(f"LLM Providers: {summary}")
     if not configured:
-        logger.error("WARNING: No LLM API keys configured — extraction will fail!")
+        logger.error(
+            "FATAL: No LLM API keys configured! "
+            "Set at least one of: GROQ_API_KEY, CEREBRAS_API_KEY, SAMBANOVA_API_KEY, GEMINI_API_KEY. "
+            "Without LLM keys, property extraction will fail and no properties will be found."
+        )
     else:
-        logger.info(f"  Available LLM providers: {', '.join(configured)}")
+        logger.info(f"Available LLM providers: {', '.join(configured)} ({len(configured)}/{len(PROVIDERS)})")
     yield
     logger.info("Scraper service shutting down")
 
@@ -360,6 +371,38 @@ def _to_property_dict(listing: dict, site_name: str, site_id: str = "") -> dict:
 
 
 # --- Scrape Pipeline ---
+
+async def _ping_backend_health(api_base_url: str, retries: int = 3, delay: float = 10.0) -> None:
+    """Ping the backend /health endpoint to verify it's reachable before scraping.
+
+    Prevents wasting 30+ minutes of GH Actions time when the backend is sleeping
+    or misconfigured. Retries with delays to handle Render cold starts.
+    """
+    # Derive health URL from the API base URL (e.g. https://app.onrender.com/api -> /health)
+    health_url = api_base_url.rstrip("/").rsplit("/api", 1)[0] + "/health"
+    logger.info(f"Pinging backend health: {health_url}")
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        for attempt in range(1, retries + 1):
+            try:
+                resp = await client.get(health_url)
+                if resp.status_code < 300:
+                    logger.info(f"Backend health OK (HTTP {resp.status_code}, attempt {attempt})")
+                    return
+                logger.warning(f"Backend health returned HTTP {resp.status_code} (attempt {attempt}/{retries})")
+            except Exception as e:
+                logger.warning(f"Backend health ping failed (attempt {attempt}/{retries}): {e}")
+
+            if attempt < retries:
+                logger.info(f"Retrying in {delay}s...")
+                await asyncio.sleep(delay)
+
+    raise RuntimeError(
+        f"Backend unreachable at {health_url} after {retries} attempts. "
+        "The backend may be sleeping (Render free tier) or the PROD_API_URL secret is wrong. "
+        "Aborting to avoid wasting GH Actions minutes."
+    )
+
 
 async def _run_scrape_job(request: ScrapeJobRequest) -> None:
     """Run a scrape job with a hard timeout scaled to site count."""
@@ -772,6 +815,12 @@ async def _run_scrape_job_inner(request: ScrapeJobRequest) -> None:
     await start_batcher()
 
     try:
+        # Health-check the backend before doing any real work
+        # This catches sleeping Render instances and misconfigured URLs early
+        callback_base = request.callbackUrl or config.api_base_url
+        logger.info(f"Callback target: {callback_base}")
+        await _ping_backend_health(callback_base)
+
         # Check LLM providers upfront
         from engine.llm_providers import get_available_providers, PROVIDERS
         avail = get_available_providers()

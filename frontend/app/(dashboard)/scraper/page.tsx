@@ -31,6 +31,10 @@ import {
   Pencil,
   Save,
   ChevronRight,
+  RotateCcw,
+  TrendingUp,
+  ArrowUpRight,
+  Timer,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
@@ -48,6 +52,7 @@ import {
 import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { ScrapeLogsSection } from "@/components/scraper/scrape-logs-section";
 import { AIPlaceholderCard } from "@/components/ai/ai-placeholder";
+import { useSettingsByCategory, useUpdateSettings } from "@/hooks/use-system-settings";
 import Link from "next/link";
 
 // ─── Config Types ────────────────────────────────────────────────────────────
@@ -441,6 +446,92 @@ export default function ScraperPage() {
     });
   }, [jobs, historyStatusFilter]);
 
+  // ── Scrape health summary (last 5 runs)
+  const healthSummary = useMemo(() => {
+    if (!jobs || jobs.length === 0) return null;
+    const completedOrFailed = jobs.filter(j => j.status === "COMPLETED" || j.status === "FAILED");
+    const last5 = completedOrFailed.slice(0, 5);
+    if (last5.length === 0) return null;
+
+    const successes = last5.filter(j => j.status === "COMPLETED").length;
+    const totalProps = last5.reduce((acc, j) => acc + (j.totalListings || j.successfulItems || 0), 0);
+    const avgProps = last5.length > 0 ? Math.round(totalProps / last5.length) : 0;
+    const lastSuccess = completedOrFailed.find(j => j.status === "COMPLETED");
+
+    return {
+      runs: last5.map(j => j.status as string),
+      successRate: last5.length > 0 ? Math.round((successes / last5.length) * 100) : 0,
+      avgPropertiesPerRun: avgProps,
+      lastSuccessDate: lastSuccess?.completedAt ? new Date(lastSuccess.completedAt) : null,
+    };
+  }, [jobs]);
+
+  // ── Scrape schedule settings
+  const { data: scraperSettings } = useSettingsByCategory("scraper");
+  const updateScraperSettings = useUpdateSettings("scraper");
+
+  const scheduleEnabled = scraperSettings?.scrape_schedule_enabled === true;
+  const scheduleHour = typeof scraperSettings?.scrape_schedule_hour === "number"
+    ? scraperSettings.scrape_schedule_hour as number
+    : 1;
+
+  const [localScheduleHour, setLocalScheduleHour] = useState(1);
+  const [localScheduleEnabled, setLocalScheduleEnabled] = useState(false);
+
+  // Sync local state from server settings
+  useEffect(() => {
+    if (scraperSettings) {
+      setLocalScheduleEnabled(scraperSettings.scrape_schedule_enabled === true);
+      setLocalScheduleHour(
+        typeof scraperSettings.scrape_schedule_hour === "number"
+          ? scraperSettings.scrape_schedule_hour as number
+          : 1
+      );
+    }
+  }, [scraperSettings]);
+
+  // ── Re-run handler
+  const handleRerun = useCallback((job: any) => {
+    const jobSiteIds = job.siteIds || job.sites?.map((s: any) => s.id) || [];
+    if (jobSiteIds.length === 0) {
+      toast.error("No sites found for re-run.");
+      return;
+    }
+
+    storeResetLiveState();
+    storeSetPageState("running");
+
+    startScrape.mutate(
+      {
+        type: job.type || "PASSIVE_BULK",
+        siteIds: jobSiteIds,
+        maxListingsPerSite: (job.parameters as any)?.maxListingsPerSite || 100,
+      },
+      {
+        onSuccess: (newJob: any) => {
+          toast.success("Re-run dispatched!");
+          if (newJob?.id) {
+            useScraperStore.getState().setActiveJobId(newJob.id);
+            useScraperStore.getState().setJobStartTime(Date.now());
+          }
+          refetch();
+        },
+        onError: (err: any) => {
+          storeSetPageState("idle");
+          toast.error(err.response?.data?.message || "Failed to re-run job");
+        },
+      }
+    );
+  }, [startScrape, storeResetLiveState, storeSetPageState, refetch]);
+
+  // ── Save schedule settings
+  const handleSaveSchedule = useCallback(() => {
+    updateScraperSettings.mutate({
+      scrape_schedule_enabled: localScheduleEnabled,
+      scrape_schedule_hour: localScheduleHour,
+    });
+  }, [localScheduleEnabled, localScheduleHour, updateScraperSettings]);
+
   // ─── Config Sheet Content ─────────────────────────────────────────────────
 
   const configContent = (
@@ -645,11 +736,11 @@ export default function ScraperPage() {
           </p>
         </div>
 
-        {/* Schedule */}
+        {/* One-Time Schedule */}
         <div className="space-y-2">
           <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
             <span className="flex items-center gap-1.5">
-              <CalendarDays className="w-3.5 h-3.5" /> Schedule (Optional)
+              <CalendarDays className="w-3.5 h-3.5" /> One-Time Schedule (Optional)
             </span>
             {scheduleTime && (
               <button
@@ -667,9 +758,73 @@ export default function ScraperPage() {
               if (date) setScheduleTime(date.toISOString().slice(0, 16));
               else setScheduleTime("");
             }}
-            placeholder="Select date and time"
+            placeholder="Select date and time for a single run"
           />
-          <p className="text-[10px] text-muted-foreground pl-1">Leave empty to run immediately.</p>
+          <p className="text-[10px] text-muted-foreground pl-1">Pick a specific date and time to run once. Leave empty to run immediately.</p>
+        </div>
+
+        {/* Recurring Daily Schedule */}
+        <div className="space-y-3">
+          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+            <Timer className="w-3.5 h-3.5" /> Recurring Daily Schedule
+          </label>
+          <div className="p-3 rounded-xl border bg-secondary/10 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-foreground">Auto-scrape daily</p>
+                <p className="text-[10px] text-muted-foreground">Scrapes all enabled sources at the configured time (Africa/Lagos timezone).</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLocalScheduleEnabled(!localScheduleEnabled)}
+                className={`relative w-10 h-5 rounded-full transition-colors ${
+                  localScheduleEnabled ? "bg-primary" : "bg-secondary border border-border"
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${
+                    localScheduleEnabled ? "translate-x-5" : "translate-x-0.5"
+                  }`}
+                />
+              </button>
+            </div>
+            {localScheduleEnabled && (
+              <div className="space-y-2 animate-in fade-in slide-in-from-top-1">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Run At (Hour, 24h format)
+                </label>
+                <div className="flex items-center gap-3">
+                  <select
+                    value={localScheduleHour}
+                    onChange={e => setLocalScheduleHour(parseInt(e.target.value))}
+                    className="flex-1 px-3 py-2 rounded-xl border bg-background text-sm font-medium focus:ring-2 focus:ring-primary/50 outline-none"
+                  >
+                    {Array.from({ length: 24 }, (_, i) => (
+                      <option key={i} value={i}>
+                        {i.toString().padStart(2, "0")}:00 {i < 12 ? "AM" : "PM"} ({i === 0 ? "midnight" : i === 12 ? "noon" : ""})
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handleSaveSchedule}
+                    disabled={updateScraperSettings.isPending}
+                    className="px-3 py-2 rounded-xl text-xs font-bold text-white transition-all hover:-translate-y-0.5 disabled:opacity-50"
+                    style={{ background: "var(--primary)" }}
+                  >
+                    {updateScraperSettings.isPending ? (
+                      <RefreshCcw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      "Save"
+                    )}
+                  </button>
+                </div>
+                <p className="text-[10px] text-muted-foreground pl-1">
+                  Currently {scheduleEnabled ? `enabled, runs daily at ${scheduleHour.toString().padStart(2, "0")}:00` : "disabled"} (server setting).
+                </p>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Unlearned Sites Warning */}
@@ -1050,6 +1205,24 @@ export default function ScraperPage() {
 
               {pageState === "complete" && completionStats && (
                 <div className="space-y-3">
+                  {/* Property count delta */}
+                  {completionStats.propertiesFound > 0 && (
+                    <div className="flex items-center justify-center gap-2 py-2 px-3 rounded-xl border border-border/50 bg-secondary/20">
+                      <span className="text-sm text-muted-foreground">
+                        {completionStats.propertiesFound - (completionStats.propertiesFound - completionStats.duplicates)} total
+                      </span>
+                      <span className="text-sm text-muted-foreground">&rarr;</span>
+                      <span className="text-sm font-bold text-foreground">
+                        {completionStats.propertiesFound} total
+                      </span>
+                      {(completionStats.propertiesFound - completionStats.duplicates) > 0 && (
+                        <span className="inline-flex items-center gap-0.5 text-sm font-bold" style={{ color: "var(--primary)" }}>
+                          <ArrowUpRight className="w-3.5 h-3.5" />
+                          +{completionStats.propertiesFound - completionStats.duplicates} new
+                        </span>
+                      )}
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-2">
                     <MiniStat label="Found" value={completionStats.propertiesFound} color="text-primary" />
                     <MiniStat label="Duplicates" value={completionStats.duplicates} color="text-yellow-500" />
@@ -1104,6 +1277,63 @@ export default function ScraperPage() {
                     )}
                   </div>
                 ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Scrape Health Summary */}
+          {healthSummary && pageState === "idle" && (
+            <Card className="border shadow-sm overflow-hidden">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-muted-foreground" />
+                  Scrape Health
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0 space-y-3">
+                {/* Last 5 runs indicator dots */}
+                <div className="space-y-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Last {healthSummary.runs.length} Runs
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {healthSummary.runs.map((status, i) => (
+                      <div
+                        key={i}
+                        className={`w-5 h-5 rounded-full flex items-center justify-center ${
+                          status === "COMPLETED"
+                            ? "bg-green-500/15 border border-green-500/30"
+                            : "bg-red-500/15 border border-red-500/30"
+                        }`}
+                        title={`Run ${i + 1}: ${status}`}
+                      >
+                        {status === "COMPLETED" ? (
+                          <CheckCircle2 className="w-3 h-3 text-green-500" />
+                        ) : (
+                          <AlertCircle className="w-3 h-3 text-red-500" />
+                        )}
+                      </div>
+                    ))}
+                    <span className="text-xs font-bold ml-1.5" style={{ color: healthSummary.successRate >= 60 ? "var(--success, #0a6906)" : "var(--destructive, #ef4444)" }}>
+                      {healthSummary.successRate}%
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-2.5 rounded-xl bg-secondary/30 border border-border/40">
+                    <span className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground block">Avg Properties</span>
+                    <span className="text-base font-bold tabular-nums text-foreground">{healthSummary.avgPropertiesPerRun}</span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-secondary/30 border border-border/40">
+                    <span className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground block">Last Success</span>
+                    <span className="text-xs font-medium text-foreground">
+                      {healthSummary.lastSuccessDate
+                        ? formatDistanceToNow(healthSummary.lastSuccessDate, { addSuffix: true })
+                        : "Never"}
+                    </span>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           )}
@@ -1197,12 +1427,40 @@ export default function ScraperPage() {
                           </div>
                         </div>
                       </div>
-                      <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                        <span className="text-foreground font-medium">{job.successfulItems}</span>
-                        indexed &bull;
-                        <span className="text-foreground font-medium">{job.failedItems}</span>
-                        errors
-                      </p>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs text-muted-foreground flex items-center gap-1.5 flex-1 min-w-0">
+                          <span className="text-foreground font-medium">{job.totalListings || job.successfulItems || 0}</span>
+                          total
+                          {(job.newListings ?? 0) > 0 && (
+                            <span className="inline-flex items-center gap-0.5 font-bold" style={{ color: "var(--primary)" }}>
+                              <ArrowUpRight className="w-3 h-3" />+{job.newListings} new
+                            </span>
+                          )}
+                          {(job.duplicates ?? 0) > 0 && (
+                            <>
+                              &bull; <span className="text-yellow-500 font-medium">{job.duplicates}</span> dups
+                            </>
+                          )}
+                          {(job.errors || job.failedItems || 0) > 0 && (
+                            <>
+                              &bull; <span className="text-red-500 font-medium">{job.errors || job.failedItems}</span> err
+                            </>
+                          )}
+                        </p>
+                        {(job.status === "COMPLETED" || job.status === "FAILED") && !activeJob && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRerun(job);
+                            }}
+                            disabled={startScrape.isPending}
+                            className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold border border-border/50 hover:bg-secondary/80 transition-colors text-muted-foreground hover:text-foreground shrink-0 opacity-0 group-hover:opacity-100"
+                            title="Re-run with same sites"
+                          >
+                            <RotateCcw className="w-3 h-3" /> Re-run
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>

@@ -89,4 +89,10 @@ router.get("/quality-distribution", authenticate, AnalyticsController.getQuality
  */
 router.get("/listing-velocity", authenticate, AnalyticsController.getListingVelocity);
 
+router.get("/activity-heatmap", authenticate, AnalyticsController.getActivityHeatmap);
+
+router.get("/kpi-trends", AnalyticsController.getKPITrends);
+
+router.get("/weekly-sparkline", AnalyticsController.getWeeklySparkline);
+
 export default router;

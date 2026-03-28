@@ -99,5 +99,39 @@ export class AnalyticsController {
       return sendError(res, "Failed to retrieve listing velocity", 500, error.message);
     }
   }
+
+  static async getActivityHeatmap(req: Request, res: Response) {
+    try {
+      const heatmap = await AnalyticsService.getActivityHeatmap();
+      return sendSuccess(res, heatmap, "Activity heatmap retrieved successfully");
+    } catch (error: any) {
+      Logger.error(`AnalyticsController.getActivityHeatmap error: ${error.message}`);
+      return sendError(res, "Failed to retrieve activity heatmap", 500, error.message);
+    }
+  }
+
+  /**
+   * GET /api/analytics/kpi-trends
+   * Period-over-period percentage changes for dashboard KPIs
+   */
+  static async getKPITrends(req: Request, res: Response) {
+    try {
+      const trends = await AnalyticsService.getKPITrends();
+      return sendSuccess(res, trends, "KPI trends retrieved successfully");
+    } catch (error: any) {
+      Logger.error(`AnalyticsController.getKPITrends error: ${error.message}`);
+      return sendError(res, "Failed to retrieve KPI trends", 500, error.message);
+    }
+  }
+
+  static async getWeeklySparkline(req: Request, res: Response) {
+    try {
+      const sparkline = await AnalyticsService.getWeeklySparkline();
+      return sendSuccess(res, sparkline, "Weekly sparkline retrieved successfully");
+    } catch (error: any) {
+      Logger.error(`AnalyticsController.getWeeklySparkline error: ${error.message}`);
+      return sendError(res, "Failed to retrieve weekly sparkline", 500, error.message);
+    }
+  }
 }
 

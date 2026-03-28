@@ -1,8 +1,10 @@
 import { Request, Response } from "express";
 import { SiteService } from "../services/site.service";
+import { SiteIntelligenceService } from "../services/siteIntelligence.service";
 import { sendSuccess, sendError, sendPaginated } from "../utils/apiResponse.util";
 import prisma from "../prismaClient";
 import { logAudit, getClientInfo } from "../middlewares/auditLog.middleware";
+import { Logger } from "../utils/logger.util";
 
 export class SiteController {
   static async list(req: Request, res: Response) {
@@ -65,6 +67,20 @@ export class SiteController {
         details: { name: site.name },
         ...getClientInfo(req),
       });
+
+      // Auto-learn on creation if setting is enabled (fire-and-forget)
+      void (async () => {
+        try {
+          const siSettings = await SiteIntelligenceService.getSettings();
+          if (siSettings.si_auto_learn_on_create) {
+            Logger.info(`Auto-learn on creation triggered for site ${site.name} (${site.id})`);
+            await SiteIntelligenceService.learnSite(site.id, (req as any).user?.id);
+          }
+        } catch (err: any) {
+          Logger.warn(`Auto-learn on creation failed for site ${site.id}: ${err.message}`);
+        }
+      })();
+
       return sendSuccess(res, site, "Site created", 201);
     } catch (err: any) {
       if (err?.code === "P2002") {

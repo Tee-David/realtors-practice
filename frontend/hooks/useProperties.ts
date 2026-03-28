@@ -147,6 +147,8 @@ export function useUpdateProperty() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["properties"] });
       queryClient.invalidateQueries({ queryKey: ["property"] });
+      queryClient.invalidateQueries({ queryKey: ["property-versions"] });
+      queryClient.invalidateQueries({ queryKey: ["property-price-history"] });
     },
   });
 }

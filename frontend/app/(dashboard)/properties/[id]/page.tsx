@@ -15,9 +15,12 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import type { Property, PropertyVersion, PriceHistoryEntry } from "@/types/property";
+import type { Property } from "@/types/property";
 import { AIPlaceholderCard } from "@/components/ai/ai-placeholder";
-import { Sparkles, Brain, BarChart3 as BarChartIcon } from "lucide-react";
+import { Sparkles, Brain, BarChart3 as BarChartIcon, Pencil } from "lucide-react";
+import { VersionTimeline } from "@/components/property/version-timeline";
+import { PriceHistoryChart } from "@/components/property/price-history-chart";
+import { PropertyEditForm } from "@/components/property/property-edit-form";
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -309,117 +312,9 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Version Timeline                                                   */
-/* ------------------------------------------------------------------ */
+/* VersionTimeline is now imported from @/components/property/version-timeline */
 
-function VersionTimeline({ versions = [] }: { versions: PropertyVersion[] }) {
-  if (!versions.length) {
-    return <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>No version history available</p>;
-  }
-
-  return (
-    <div className="space-y-0">
-      {versions.map((v, i) => (
-        <div key={v.id} className="flex gap-3">
-          <div className="flex flex-col items-center">
-            <div className="w-2.5 h-2.5 rounded-full mt-1.5" style={{ backgroundColor: "var(--primary)" }} />
-            {i < versions.length - 1 && (
-              <div className="w-px flex-1 min-h-[20px]" style={{ backgroundColor: "var(--border)" }} />
-            )}
-          </div>
-          <div className="pb-4 flex-1">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold" style={{ color: "var(--foreground)" }}>v{v.version}</span>
-              <span
-                className="text-[10px] px-1.5 py-0.5 rounded font-medium"
-                style={{ backgroundColor: "var(--secondary)", color: "var(--muted-foreground)" }}
-              >
-                {v.changeSource}
-              </span>
-            </div>
-            <p className="text-xs mt-0.5" style={{ color: "var(--muted-foreground)" }}>
-              {v.changeSummary || v.changedFields?.join(", ") || "Initial version"}
-            </p>
-            <p className="text-[10px] mt-1" style={{ color: "var(--muted-foreground)" }}>
-              {new Date(v.createdAt).toLocaleString()}
-              {v.editor && ` by ${v.editor.firstName || v.editor.email}`}
-            </p>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Price History Chart                                                */
-/* ------------------------------------------------------------------ */
-
-function PriceChart({ history }: { history: PriceHistoryEntry[] }) {
-  if (!history.length) {
-    return <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>No price history recorded</p>;
-  }
-
-  const prices = history.map((h) => h.price);
-  const maxPrice = Math.max(...prices);
-  const minPrice = Math.min(...prices);
-  const range = maxPrice - minPrice || 1;
-  const latestChange = history.length > 1
-    ? ((history[history.length - 1].price - history[history.length - 2].price) / history[history.length - 2].price) * 100
-    : 0;
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between text-xs" style={{ color: "var(--muted-foreground)" }}>
-        <div className="flex items-center gap-4">
-          <span>Low: <strong style={{ color: "var(--foreground)" }}>{formatPrice(minPrice)}</strong></span>
-          <span>High: <strong style={{ color: "var(--foreground)" }}>{formatPrice(maxPrice)}</strong></span>
-        </div>
-        {latestChange !== 0 && (
-          <span className="font-semibold" style={{ color: latestChange > 0 ? "var(--success)" : "var(--destructive)" }}>
-            {latestChange > 0 ? "+" : ""}{latestChange.toFixed(1)}%
-          </span>
-        )}
-      </div>
-      <div className="flex items-end gap-1.5 h-28">
-        {history.map((h, i) => {
-          const height = ((h.price - minPrice) / range) * 100 || 20;
-          return (
-            <motion.div
-              key={h.id}
-              className="flex-1 flex flex-col items-center gap-1 group relative"
-              initial={{ height: 0 }}
-              animate={{ height: "100%" }}
-              transition={{ duration: 0.5, delay: i * 0.05 }}
-            >
-              <div className="flex-1 w-full flex items-end">
-                <div
-                  className="w-full rounded-t-sm transition-colors group-hover:opacity-100"
-                  style={{
-                    height: `${Math.max(height, 8)}%`,
-                    backgroundColor: "var(--accent)",
-                    opacity: 0.5 + (i / history.length) * 0.5,
-                  }}
-                />
-              </div>
-              <span className="text-[8px] sm:text-[9px]" style={{ color: "var(--muted-foreground)" }}>
-                {new Date(h.recordedAt).toLocaleDateString("en-NG", { month: "short", year: "2-digit" })}
-              </span>
-              {/* Hover tooltip */}
-              <div
-                className="absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-1 rounded text-[10px] font-medium opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10"
-                style={{ backgroundColor: "var(--foreground)", color: "var(--background)" }}
-              >
-                {formatPrice(h.price)}
-              </div>
-            </motion.div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
+/* PriceHistoryChart is now imported from @/components/property/price-history-chart */
 
 /* ------------------------------------------------------------------ */
 /*  Skeleton Loading                                                   */
@@ -481,6 +376,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
   const [copied, setCopied] = useState(false);
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
   const [compareIds, setCompareIds] = useState<string[]>([]);
+  const [editOpen, setEditOpen] = useState(false);
   const carouselRef = useRef<HTMLDivElement>(null);
 
   const mockProperty = MOCK_PROPERTIES.find(p => p.id === id);
@@ -611,6 +507,17 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
 
         {/* Action buttons */}
         <div className="flex items-center gap-2 shrink-0">
+          {/* Edit Property Button (Hidden in Print) */}
+          <button
+            onClick={() => setEditOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-white transition-opacity hover:opacity-90 print:hidden"
+            style={{ backgroundColor: "var(--primary)" }}
+            title="Edit Property"
+          >
+            <Pencil size={14} />
+            <span className="hidden sm:inline">Edit</span>
+          </button>
+
           {/* Print Button (Hidden in Print) */}
           <button
             onClick={() => window.print()}
@@ -652,19 +559,19 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
                     <div className="absolute w-3 h-px bg-white -rotate-45" />
                   </button>
                   <div className="flex items-center gap-1.5 px-1 pr-2 overflow-hidden whitespace-nowrap">
-                    <button className="w-8 h-8 rounded-full flex items-center justify-center text-[#124266] dark:text-zinc-300 hover:bg-black/5 dark:hover:bg-white/5 transition-colors shrink-0">
+                    <button onClick={() => window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(window.location.href)}`, "_blank", "width=600,height=400")} className="w-8 h-8 rounded-full flex items-center justify-center text-[#124266] dark:text-zinc-300 hover:bg-black/5 dark:hover:bg-white/5 transition-colors shrink-0" title="Share on Facebook">
                       <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"></path></svg>
                     </button>
-                    <button className="w-8 h-8 rounded-full flex items-center justify-center text-[#124266] dark:text-zinc-300 hover:bg-black/5 dark:hover:bg-white/5 transition-colors shrink-0">
+                    <button onClick={() => navigator.clipboard.writeText(window.location.href).then(() => { /* copied */ })} className="w-8 h-8 rounded-full flex items-center justify-center text-[#124266] dark:text-zinc-300 hover:bg-black/5 dark:hover:bg-white/5 transition-colors shrink-0" title="Copy link">
                       <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
                     </button>
-                    <button className="w-8 h-8 rounded-full flex items-center justify-center text-[#124266] dark:text-zinc-300 hover:bg-black/5 dark:hover:bg-white/5 transition-colors shrink-0">
+                    <button onClick={() => window.open(`https://t.me/share/url?url=${encodeURIComponent(window.location.href)}&text=${encodeURIComponent(property?.title || "")}`, "_blank", "width=600,height=400")} className="w-8 h-8 rounded-full flex items-center justify-center text-[#124266] dark:text-zinc-300 hover:bg-black/5 dark:hover:bg-white/5 transition-colors shrink-0" title="Share on Telegram">
                       <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
                     </button>
-                    <button className="w-8 h-8 rounded-full flex items-center justify-center text-[#124266] dark:text-zinc-300 hover:bg-black/5 dark:hover:bg-white/5 transition-colors shrink-0">
+                    <button onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent((property?.title || "") + " " + window.location.href)}`, "_blank")} className="w-8 h-8 rounded-full flex items-center justify-center text-[#124266] dark:text-zinc-300 hover:bg-black/5 dark:hover:bg-white/5 transition-colors shrink-0" title="Share on WhatsApp">
                       <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
                     </button>
-                    <button className="w-8 h-8 rounded-full flex items-center justify-center text-[#124266] dark:text-zinc-300 hover:bg-black/5 dark:hover:bg-white/5 transition-colors shrink-0">
+                    <button onClick={() => window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(window.location.href)}`, "_blank", "width=600,height=400")} className="w-8 h-8 rounded-full flex items-center justify-center text-[#124266] dark:text-zinc-300 hover:bg-black/5 dark:hover:bg-white/5 transition-colors shrink-0" title="Share on LinkedIn">
                       <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle cx="4" cy="4" r="2"></circle></svg>
                     </button>
                   </div>
@@ -840,7 +747,11 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
 
           {/* Version History */}
           <CollapsibleSection title="Version History" icon={Clock} defaultOpen={false}>
-            <VersionTimeline versions={versions} />
+            <VersionTimeline
+              versions={versions}
+              propertyId={property.id}
+              currentVersion={property.currentVersion}
+            />
           </CollapsibleSection>
         </div>
 
@@ -1121,7 +1032,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
                 Price History
               </h3>
             </div>
-            <PriceChart history={priceHistory || []} />
+            <PriceHistoryChart history={priceHistory || []} currentPrice={property.price} />
           </div>
 
           {/* ── Related Listings (Same Agent) ── */}
@@ -1396,6 +1307,13 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ============= Property Edit Form ============= */}
+      <PropertyEditForm
+        property={property}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+      />
     </div>
   );
 }

@@ -5,16 +5,27 @@ import api from "@/lib/api";
 
 export interface ScrapeJob {
   id: string;
+  type: string;
   siteId?: string;
+  siteIds: string[];
+  sites?: Array<{ id: string; name: string }>;
   status: "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED";
+  totalListings: number;
+  newListings: number;
+  updatedListings: number;
+  duplicates: number;
+  errors: number;
+  // Legacy aliases used by UI
   totalItems: number;
   processedItems: number;
   successfulItems: number;
   failedItems: number;
   startedAt: string | null;
   completedAt: string | null;
+  durationMs: number | null;
   errorMessage: string | null;
   progressData?: LiveProgress | null;
+  parameters?: Record<string, any> | null;
   createdAt: string;
   updatedAt: string;
 }

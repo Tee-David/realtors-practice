@@ -5,6 +5,7 @@ import { VersionService } from "./version.service";
 import { QualityService } from "./quality.service";
 import { DedupService } from "./dedup.service";
 import { MeiliService } from "./meili.service";
+import { GeocodingService } from "./geocoding.service";
 import { Logger } from "../utils/logger.util";
 
 export class PropertyService {
@@ -134,6 +135,26 @@ export class PropertyService {
     // Sync to Meilisearch
     MeiliService.upsertProperty(property.id);
 
+    // Geocode asynchronously if lat/lng are missing
+    if (!data.latitude && !data.longitude) {
+      const locationQuery = data.area || data.locationText || data.estateName;
+      if (locationQuery) {
+        GeocodingService.geocode(locationQuery).then(async (geo) => {
+          if (geo) {
+            await prisma.property.update({
+              where: { id: property.id },
+              data: { latitude: geo.lat, longitude: geo.lng },
+            });
+            // Re-sync to Meilisearch with coordinates
+            MeiliService.upsertProperty(property.id);
+            Logger.debug(`Geocoded property ${property.id}: ${geo.lat}, ${geo.lng} (${geo.confidence})`);
+          }
+        }).catch((err) => {
+          Logger.warn(`Geocode failed for property ${property.id}: ${err.message}`);
+        });
+      }
+    }
+
     Logger.info(`Property created: ${property.id} (quality: ${qualityScore})`);
     return { property, duplicate: false };
   }
@@ -216,6 +237,10 @@ export class PropertyService {
       flag: { verificationStatus: "FLAGGED" },
       delete: { deletedAt: new Date() },
       restore: { deletedAt: null },
+      status_available: { status: "AVAILABLE" },
+      status_sold: { status: "SOLD" },
+      status_expired: { status: "EXPIRED" },
+      status_rented: { status: "RENTED" },
     };
 
     const updateData = statusMap[action];

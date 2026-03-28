@@ -174,7 +174,9 @@
       "Bash(find /home/teedavid/Desktop/Projects/Realtors-Practice -name *seed* -o -name *fixture*)",
       "Bash(find /home/teedavid/Desktop/Projects/Realtors-Practice -path *node_modules -prune -o -name *.yaml -type f)",
       "Bash(find /home/teedavid/Desktop/Projects/Realtors-Practice/frontend/app -type f -name *.tsx)",
-      "Bash(echo \"exit: $?\")"
+      "Bash(echo \"exit: $?\")",
+      "Bash(npm i:*)",
+      "Bash(find /home/teedavid/Desktop/Projects/Realtors-Practice/frontend/app -type d -name \"\\(dashboard\\)\")"
     ],
     "additionalDirectories": [
       "/home/teedavid/Desktop/Projects/Realtors-Practice/docs/superpowers/plans",

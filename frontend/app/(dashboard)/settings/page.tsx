@@ -10,9 +10,9 @@ import { useMapProvider } from "@/hooks/use-map-provider";
 import {
   User, Lock, Bell, Palette, LayoutDashboard, Mail, Database,
   Info, Users, ChevronRight, ChevronLeft, Upload, Eye, EyeOff,
-  ToggleLeft, ToggleRight, Map, Monitor, Server, Download, RefreshCw,
+  ToggleLeft, ToggleRight, Map, Monitor, Server, RefreshCw,
   Trash2, Plus, Check, X, Link, ExternalLink, Shield, Terminal,
-  AlertTriangle, HardDrive, Chrome, Smartphone, ChevronDown, Sparkles, Brain,
+  AlertTriangle, Chrome, Smartphone, ChevronDown, Sparkles, Brain,
 } from "lucide-react";
 import { EmailTemplateBuilder } from "@/components/dashboard/email-template-builder";
 import { AIProviderStatus } from "@/components/ai/ai-provider-status";
@@ -25,6 +25,8 @@ const Lanyard = dynamic(() => import("@/components/ui/lanyard"), {
   loading: () => <div className="w-full h-64 flex items-center justify-center text-muted-foreground text-sm">Loading 3D preview...</div>,
 });
 import AnimatedList from "@/components/ui/animated-list";
+import { useSettingsByCategory, useUpdateSettings } from "@/hooks/use-system-settings";
+import packageJson from "../../../package.json";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -648,9 +650,9 @@ function NotificationsSection() {
         />
       </Card>
 
-      <button onClick={() => toast.success("Preferences saved")} className="px-5 py-2 rounded-xl text-sm font-semibold transition-colors hover:opacity-90" style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}>
-        Save Preferences
-      </button>
+      <p className="text-xs font-medium" style={{ color: "var(--muted-foreground)" }}>
+        Preferences auto-save as you toggle them.
+      </p>
     </div>
   );
 }
@@ -773,7 +775,9 @@ function AppearanceSection() {
             ]} 
           />
         </div>
-        <SaveBtn className="mt-4" onClick={() => toast.success("Appearance settings saved")} />
+        <p className="text-xs font-medium mt-4" style={{ color: "var(--muted-foreground)" }}>
+          Appearance changes apply instantly and are saved automatically.
+        </p>
       </Card>
     </div>
   );
@@ -884,7 +888,9 @@ function DisplaySection() {
         <div className="mt-4 divide-y" style={{ borderColor: "var(--border)" }}>
           <Toggle checked={voiceAuto} onChange={() => setVoiceAuto(v => !v)} label="Voice search auto-submit" sub="Auto-search when voice input pauses" />
         </div>
-        <SaveBtn onClick={() => toast.success("Display preferences saved")} />
+        <p className="text-xs font-medium mt-4" style={{ color: "var(--muted-foreground)" }}>
+          Display preferences are saved automatically.
+        </p>
       </Card>
     </div>
   );
@@ -1011,68 +1017,21 @@ function EmailSection() {
 // ─── Backups ────────────────────────────────────────────────────────────────
 
 function BackupsSection() {
-  const [schedule, setSchedule] = useState("weekly");
-  const [retention, setRetention] = useState("10");
-  const mockBackups = [
-    { id: "1", date: "2025-03-10 03:00", size: "42 MB", status: "success" },
-    { id: "2", date: "2025-03-03 03:00", size: "39 MB", status: "success" },
-    { id: "3", date: "2025-02-24 03:00", size: "37 MB", status: "failed" },
-  ];
-
   return (
     <div className="space-y-4 max-w-2xl">
       <Card>
-        <CardHeader icon={Database} title="Create Backup" />
-        <p className="text-sm mb-4" style={{ color: "var(--muted-foreground)" }}>Manually trigger a full database backup. This may take a few minutes.</p>
-        <button onClick={() => toast.loading("Backup started…")} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors hover:opacity-90" style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}>
-          <HardDrive className="w-4 h-4" /> Create Backup Now
-        </button>
-      </Card>
-
-      <Card>
-        <CardHeader icon={RefreshCw} title="Automatic Backup Schedule" />
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Schedule</label>
-            <select value={schedule} onChange={e => setSchedule(e.target.value)} className={inputBase} style={inputStyle}>
-              <option value="off">Disabled</option>
-              <option value="daily">Daily (3 AM)</option>
-              <option value="weekly">Weekly (Mon 3 AM)</option>
-              <option value="monthly">Monthly (1st, 3 AM)</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Keep last</label>
-            <select value={retention} onChange={e => setRetention(e.target.value)} className={inputBase} style={inputStyle}>
-              <option value="5">5 backups</option>
-              <option value="10">10 backups</option>
-              <option value="30">30 backups</option>
-              <option value="unlimited">Unlimited</option>
-            </select>
-          </div>
-        </div>
-        <SaveBtn onClick={() => toast.success("Backup schedule saved")} />
-      </Card>
-
-      <Card>
-        <CardHeader icon={HardDrive} title="Backup History" />
-        <div className="space-y-2">
-          {mockBackups.map(b => (
-            <div key={b.id} className="flex items-center justify-between p-3 rounded-xl border" style={{ borderColor: "var(--border)" }}>
-              <div className="flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: b.status === "success" ? "#16a34a" : "#dc2626" }} />
-                <div>
-                  <p className="text-sm font-medium" style={{ color: "var(--foreground)" }}>{b.date}</p>
-                  <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>{b.size} · {b.status}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button onClick={() => toast.success("Downloading…")} className="p-1.5 rounded-lg hover:bg-[var(--secondary)]" title="Download"><Download className="w-4 h-4" style={{ color: "var(--muted-foreground)" }} /></button>
-                <button onClick={() => toast.info("Restore started")} className="p-1.5 rounded-lg hover:bg-[var(--secondary)]" title="Restore"><RefreshCw className="w-4 h-4" style={{ color: "var(--muted-foreground)" }} /></button>
-                <button onClick={() => toast.error("Backup deleted")} className="p-1.5 rounded-lg hover:bg-[var(--secondary)]" title="Delete"><Trash2 className="w-4 h-4" style={{ color: "var(--destructive)" }} /></button>
-              </div>
+        <CardHeader icon={Database} title="Database Backups" />
+        <div className="py-4">
+          <div className="flex items-start gap-3 p-4 rounded-xl border" style={{ borderColor: "var(--border)", backgroundColor: "rgba(0,1,252,0.03)" }}>
+            <Info className="w-5 h-5 shrink-0 mt-0.5" style={{ color: "var(--primary)" }} />
+            <div>
+              <p className="text-sm font-medium mb-1" style={{ color: "var(--foreground)" }}>Managed by CockroachDB</p>
+              <p className="text-xs leading-relaxed" style={{ color: "var(--muted-foreground)" }}>
+                Database backups are automatically handled by CockroachDB with built-in replication and point-in-time recovery.
+                Manual backup controls coming soon.
+              </p>
             </div>
-          ))}
+          </div>
         </div>
       </Card>
     </div>
@@ -1089,7 +1048,7 @@ function AboutSection() {
         <div className="space-y-3">
           {[
             { label: "App Name",     value: "Realtors' Practice" },
-            { label: "Version",      value: "v2.5.0" },
+            { label: "Version",      value: `v${packageJson.version}` },
             { label: "Environment",  value: process.env.NODE_ENV || "production" },
             { label: "Database",     value: "PostgreSQL (CockroachDB)" },
             { label: "Search",       value: "Meilisearch" },
@@ -1322,30 +1281,69 @@ const SI_SETTINGS = [
 ];
 
 function ScraperIntelligenceSection() {
-  const [settings, setSettings] = usePersistedState<Record<string, boolean | number>>("si-settings", {
+  const SI_DEFAULTS: Record<string, boolean | number> = {
     si_auto_learn_on_create: true,
     si_auto_learn_before_scrape: true,
     si_relearn_interval_days: 0,
     si_css_confidence_threshold: 50,
-  });
+  };
+
+  const { data: serverSettings, isLoading } = useSettingsByCategory("site_intelligence");
+  const updateMutation = useUpdateSettings("site_intelligence");
+
+  // Merge server settings with defaults for local editing
+  const [localSettings, setLocalSettings] = useState<Record<string, boolean | number>>(SI_DEFAULTS);
+  const [dirty, setDirty] = useState(false);
+
+  // Sync server -> local when data arrives
+  useEffect(() => {
+    if (serverSettings) {
+      setLocalSettings({
+        ...SI_DEFAULTS,
+        ...serverSettings as Record<string, boolean | number>,
+      });
+      setDirty(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverSettings]);
 
   const toggleSetting = (key: string) => {
-    setSettings(prev => ({ ...prev, [key]: !prev[key] }));
+    setLocalSettings(prev => ({ ...prev, [key]: !prev[key] }));
+    setDirty(true);
   };
 
   const setNumber = (key: string, val: number) => {
-    setSettings(prev => ({ ...prev, [key]: val }));
+    setLocalSettings(prev => ({ ...prev, [key]: val }));
+    setDirty(true);
+  };
+
+  const handleSave = () => {
+    updateMutation.mutate(localSettings, {
+      onSuccess: () => setDirty(false),
+    });
   };
 
   return (
     <div className="space-y-4 max-w-2xl">
       <Card>
-        <CardHeader icon={Brain} title="Site Intelligence" />
+        <CardHeader icon={Brain} title="Site Intelligence" action={
+          <button
+            onClick={handleSave}
+            disabled={updateMutation.isPending || !dirty}
+            className={`px-4 py-1.5 rounded-xl text-xs font-semibold transition-all hover:opacity-90 disabled:opacity-40 ${dirty ? "" : "pointer-events-none"}`}
+            style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
+          >
+            {updateMutation.isPending ? "Saving..." : "Save Changes"}
+          </button>
+        } />
         <p className="text-xs mb-4" style={{ color: "var(--muted-foreground)" }}>
           Configure how the scraper learns site structure, navigation patterns, and extraction selectors.
           Learning a site before scraping makes future scrapes faster and more accurate.
         </p>
 
+        {isLoading ? (
+          <div className="py-8 text-center text-sm" style={{ color: "var(--muted-foreground)" }}>Loading settings...</div>
+        ) : (
         <div className="space-y-1">
           {SI_SETTINGS.map(setting => {
             if (setting.type === "number") {
@@ -1360,7 +1358,7 @@ function ScraperIntelligenceSection() {
                       type="number"
                       min={0}
                       max={365}
-                      value={Number(settings[setting.key]) || 0}
+                      value={Number(localSettings[setting.key]) || 0}
                       onChange={e => setNumber(setting.key, parseInt(e.target.value) || 0)}
                       className="w-16 px-2 py-1 rounded-lg border text-sm text-center outline-none focus:ring-2 focus:ring-primary/50"
                       style={{ backgroundColor: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" }}
@@ -1371,7 +1369,7 @@ function ScraperIntelligenceSection() {
               );
             }
             if (setting.type === "slider") {
-              const val = Number(settings[setting.key]) || 50;
+              const val = Number(localSettings[setting.key]) || 50;
               return (
                 <div key={setting.key} className="py-3 px-3 rounded-xl">
                   <div className="flex items-center justify-between mb-2">
@@ -1394,7 +1392,7 @@ function ScraperIntelligenceSection() {
               );
             }
             // Toggle
-            const isOn = !!settings[setting.key];
+            const isOn = !!localSettings[setting.key];
             return (
               <div key={setting.key} className="flex items-center justify-between py-3 px-3 rounded-xl">
                 <div className="min-w-0 flex-1">
@@ -1412,6 +1410,7 @@ function ScraperIntelligenceSection() {
             );
           })}
         </div>
+        )}
       </Card>
 
       <Card>

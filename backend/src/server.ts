@@ -8,6 +8,20 @@ import { Logger } from "./utils/logger.util";
 const PORT = config.port;
 
 async function startServer() {
+  // Startup validation for critical env vars
+  if (!config.scraper.internalKey || config.scraper.internalKey === "dev-internal-key") {
+    if (config.env === "production") {
+      Logger.error("FATAL: INTERNAL_API_KEY is not set or using default value in production. Scraper callbacks will fail.");
+      process.exit(1);
+    } else {
+      Logger.warn("INTERNAL_API_KEY is not set — using dev default. Scraper callbacks won't work in production.");
+    }
+  }
+
+  if (!process.env.DATABASE_URL) {
+    Logger.warn("DATABASE_URL is missing — database connection will fail.");
+  }
+
   try {
     let connected = false;
     let retries = 3;
@@ -45,6 +59,12 @@ async function startServer() {
       // Initialize Cron Jobs
       const { CronService } = require("./services/cron.service");
       CronService.init();
+
+      // Configure Meilisearch index on startup (idempotent)
+      const { MeiliService } = require("./services/meili.service");
+      MeiliService.configureIndex().catch((err: any) =>
+        Logger.warn(`Meilisearch index config skipped: ${err.message}`)
+      );
     });
   } catch (error) {
     Logger.error("Failed to start server:", error);

@@ -2,8 +2,37 @@ import prisma from "../prismaClient";
 import { Prisma } from "@prisma/client";
 import { config } from "../config/env";
 import { Logger } from "../utils/logger.util";
+import { SystemSettingsService } from "./systemSettings.service";
+
+/** Site Intelligence settings stored in the SystemSetting table (category: site_intelligence). */
+export interface SISettings {
+  si_auto_learn_on_create: boolean;
+  si_auto_learn_before_scrape: boolean;
+  si_relearn_interval_days: number;
+  si_css_confidence_threshold: number;
+}
+
+const SI_DEFAULTS: SISettings = {
+  si_auto_learn_on_create: true,
+  si_auto_learn_before_scrape: true,
+  si_relearn_interval_days: 0,
+  si_css_confidence_threshold: 50,
+};
 
 export class SiteIntelligenceService {
+  /**
+   * Read the Site Intelligence settings from the database, merged with defaults.
+   */
+  static async getSettings(): Promise<SISettings> {
+    const rows = await SystemSettingsService.getByCategory("site_intelligence");
+    const merged = { ...SI_DEFAULTS };
+    for (const row of rows) {
+      if (row.key in merged) {
+        (merged as any)[row.key] = row.value;
+      }
+    }
+    return merged;
+  }
   /**
    * Trigger a learn job for a single site.
    * Creates a ScrapeJob with type LEARN_SITE and dispatches to the Python scraper.
@@ -53,10 +82,14 @@ export class SiteIntelligenceService {
       data: { learnStatus: "LEARNING", learnJobId: job.id },
     });
 
+    // Read SI settings for the CSS confidence threshold
+    const siSettings = await SiteIntelligenceService.getSettings();
+
     // Build learn payload
     const selectors = (site.selectors || {}) as Record<string, any>;
     const learnPayload = {
       jobId: job.id,
+      cssConfidenceThreshold: siSettings.si_css_confidence_threshold,
       site: {
         id: site.id,
         name: site.name,

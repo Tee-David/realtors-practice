@@ -95,6 +95,8 @@ export const sites = {
 export const search = {
   search: (params?: Record<string, unknown>) => api.get("/search", { params, timeout: 30000 }),
   suggestions: (params?: Record<string, unknown>) => api.get("/search/suggestions", { params, timeout: 15000 }),
+  logQuery: (data: { query: string; resultCount: number; filters?: Record<string, unknown> }) =>
+    api.post("/market/log-search", data),
 };
 
 export const savedSearches = {
@@ -142,6 +144,15 @@ export const aiFeatures = {
   list: () => api.get("/settings/ai-features"),
   toggle: (key: string, enabled: boolean) =>
     api.patch(`/settings/ai-features/${key}`, { enabled }),
+};
+
+export const systemSettings = {
+  list: () => api.get("/settings"),
+  getByCategory: (category: string) => api.get(`/settings/${category}`),
+  bulkUpdate: (settings: Array<{ key: string; value: unknown; category?: string }>) =>
+    api.put("/settings", { settings }),
+  update: (key: string, value: unknown, category?: string) =>
+    api.put(`/settings/${key}`, { value, category }),
 };
 
 export default api;

@@ -174,11 +174,18 @@ export function SearchBar({
   const containerRef = useRef<HTMLDivElement>(null);
   const categoryRef = useRef<HTMLDivElement>(null);
 
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [debouncedGeoQuery, setDebouncedGeoQuery] = useState("");
-  const { data: suggestions, isLoading: suggestionsLoading } = useSearchSuggestions(query);
+  const { data: suggestions, isLoading: suggestionsLoading } = useSearchSuggestions(debouncedQuery, 8);
   const { data: geoSuggestions } = useGeocode(debouncedGeoQuery);
 
-  // Debounce geocoding requests
+  // Debounce search suggestions (300ms)
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(query), 300);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  // Debounce geocoding requests (400ms)
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedGeoQuery(query), 400);
     return () => clearTimeout(timer);

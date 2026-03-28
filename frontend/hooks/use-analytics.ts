@@ -69,3 +69,72 @@ export function useSiteQualityRankings() {
     staleTime: 5 * 60 * 1000,
   });
 }
+
+export function useListingVelocity() {
+  return useQuery<{ date: string; count: number }[]>({
+    queryKey: ["analytics", "listing-velocity"],
+    queryFn: async () => {
+      const { data } = await api.get("/analytics/listing-velocity");
+      return data.data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useActivityHeatmap() {
+  return useQuery<{ day: number; hours: number[] }[]>({
+    queryKey: ["analytics", "activity-heatmap"],
+    queryFn: async () => {
+      const { data } = await api.get("/analytics/activity-heatmap");
+      return data.data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export interface PriceTrendPoint {
+  month: string;
+  listingType: string;
+  avgPrice: number;
+  count: number;
+}
+
+export function usePriceTrends() {
+  return useQuery<PriceTrendPoint[]>({
+    queryKey: ["analytics", "price-trends"],
+    queryFn: async () => {
+      const { data } = await api.get("/analytics/price-trends");
+      return data.data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export interface KPITrends {
+  totalProperties: { current: number; previous: number; changePercent: number };
+  forSale: { current: number; previous: number; changePercent: number };
+  forRent: { current: number; previous: number; changePercent: number };
+  avgPrice: { current: number; previous: number; changePercent: number };
+}
+
+export function useKPITrends() {
+  return useQuery<KPITrends>({
+    queryKey: ["analytics", "kpi-trends"],
+    queryFn: async () => {
+      const { data } = await api.get("/analytics/kpi-trends");
+      return data.data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useWeeklySparkline() {
+  return useQuery<{ week: string; count: number }[]>({
+    queryKey: ["analytics", "weekly-sparkline"],
+    queryFn: async () => {
+      const { data } = await api.get("/analytics/weekly-sparkline");
+      return data.data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}

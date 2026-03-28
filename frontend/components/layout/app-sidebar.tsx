@@ -90,8 +90,24 @@ const navSections: NavSection[] = [
 ];
 
 function UserAvatar({ expanded }: { expanded: boolean }) {
-  const initials = "AD";
-  const name = "Admin";
+  const [user, setUser] = useState<{ firstName?: string; lastName?: string; email?: string; avatarUrl?: string | null } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    import("@/lib/api").then(({ auth }) => {
+      auth.me().then(({ data }) => {
+        if (!cancelled && data?.data) setUser(data.data);
+      }).catch(() => {});
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const firstName = user?.firstName || "";
+  const lastName = user?.lastName || "";
+  const name = [firstName, lastName].filter(Boolean).join(" ") || user?.email?.split("@")[0] || "User";
+  const initials = firstName && lastName
+    ? `${firstName[0]}${lastName[0]}`.toUpperCase()
+    : name.slice(0, 2).toUpperCase();
 
   return (
     <div
@@ -100,17 +116,26 @@ function UserAvatar({ expanded }: { expanded: boolean }) {
         !expanded && "justify-center px-0"
       )}
     >
-      <div
-        className="flex items-center justify-center shrink-0 rounded-full font-semibold text-xs select-none"
-        style={{
-          width: 32,
-          height: 32,
-          backgroundColor: "var(--primary)",
-          color: "var(--primary-foreground)",
-        }}
-      >
-        {initials}
-      </div>
+      {user?.avatarUrl ? (
+        <img
+          src={user.avatarUrl}
+          alt={name}
+          className="shrink-0 rounded-full object-cover"
+          style={{ width: 32, height: 32 }}
+        />
+      ) : (
+        <div
+          className="flex items-center justify-center shrink-0 rounded-full font-semibold text-xs select-none"
+          style={{
+            width: 32,
+            height: 32,
+            backgroundColor: "var(--primary)",
+            color: "var(--primary-foreground)",
+          }}
+        >
+          {initials}
+        </div>
+      )}
       {expanded && (
         <span
           className="text-sm font-medium truncate"

@@ -400,4 +400,87 @@ router.post("/seed-sites", async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * POST /internal/reindex
+ * Trigger a full Meilisearch reindex of all properties.
+ */
+router.post("/reindex", async (req: Request, res: Response) => {
+  try {
+    const { MeiliService } = require("../services/meili.service");
+    Logger.info("Manual Meilisearch reindex triggered via /internal/reindex");
+    // Run async — respond immediately
+    MeiliService.fullReindex().catch((err: any) =>
+      Logger.error(`Reindex failed: ${err.message}`)
+    );
+    return res.json({ success: true, message: "Reindex started in background" });
+  } catch (err: any) {
+    Logger.error(`Reindex trigger error: ${err.message}`);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /internal/geocode-backfill
+ * Batch geocode all properties with null lat/lng.
+ */
+router.post("/geocode-backfill", async (req: Request, res: Response) => {
+  try {
+    const { GeocodingService } = require("../services/geocoding.service");
+    const { MeiliService } = require("../services/meili.service");
+    const batchSize = 50;
+    let cursor: string | undefined = undefined;
+    let totalProcessed = 0;
+    let totalGeocoded = 0;
+
+    Logger.info("Geocoding backfill started via /internal/geocode-backfill");
+
+    // Run in background — respond immediately
+    res.json({ success: true, message: "Geocode backfill started in background" });
+
+    while (true) {
+      const properties: { id: string; area: string | null; locationText: string | null; estateName: string | null; state: string | null }[] = await prisma.property.findMany({
+        take: batchSize,
+        skip: cursor ? 1 : 0,
+        cursor: cursor ? { id: cursor } : undefined,
+        where: {
+          deletedAt: null,
+          latitude: null,
+          longitude: null,
+        },
+        orderBy: { id: "asc" },
+        select: { id: true, area: true, locationText: true, estateName: true, state: true },
+      });
+
+      if (properties.length === 0) break;
+
+      for (const prop of properties) {
+        const query = prop.area || prop.locationText || prop.estateName;
+        if (!query) continue;
+
+        try {
+          const geo = await GeocodingService.geocode(query);
+          if (geo) {
+            await prisma.property.update({
+              where: { id: prop.id },
+              data: { latitude: geo.lat, longitude: geo.lng },
+            });
+            MeiliService.upsertProperty(prop.id);
+            totalGeocoded++;
+          }
+        } catch (err: any) {
+          Logger.debug(`Geocode backfill skip ${prop.id}: ${err.message}`);
+        }
+      }
+
+      totalProcessed += properties.length;
+      cursor = properties[properties.length - 1].id;
+      Logger.info(`Geocode backfill: ${totalProcessed} checked, ${totalGeocoded} geocoded so far...`);
+    }
+
+    Logger.info(`Geocode backfill complete: ${totalProcessed} checked, ${totalGeocoded} geocoded`);
+  } catch (err: any) {
+    Logger.error(`Geocode backfill error: ${err.message}`);
+  }
+});
+
 export default router;

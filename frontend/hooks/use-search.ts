@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { search } from "@/lib/api";
 
@@ -13,7 +14,9 @@ export interface SearchFilters {
 }
 
 export function useSearch(filters: SearchFilters = {}) {
-  return useQuery({
+  const lastLoggedRef = useRef<string>("");
+
+  const query = useQuery({
     queryKey: ["search", filters],
     queryFn: async () => {
       try {
@@ -21,7 +24,7 @@ export function useSearch(filters: SearchFilters = {}) {
         const cleanFilters = Object.fromEntries(
           Object.entries(filters).filter(([, v]) => v !== undefined && v !== "")
         );
-        
+
         // Handle array formatting if needed (axios might handle this, but adding for safety)
         if (cleanFilters.facets && Array.isArray(cleanFilters.facets)) {
           cleanFilters.facets = cleanFilters.facets.join(",");
@@ -37,6 +40,30 @@ export function useSearch(filters: SearchFilters = {}) {
     // Only search if there's a query or explicit filters
     enabled: !!filters.q || (filters.filters && filters.filters.length > 0)
   });
+
+  // Fire-and-forget: log search query after results come back
+  useEffect(() => {
+    if (!query.data || !filters.q) return;
+
+    const logKey = `${filters.q}|${JSON.stringify(filters.filters || [])}`;
+    if (lastLoggedRef.current === logKey) return;
+    lastLoggedRef.current = logKey;
+
+    const resultCount = query.data.estimatedTotalHits ?? query.data.hits?.length ?? 0;
+    search.logQuery({
+      query: filters.q,
+      resultCount,
+      filters: {
+        facets: filters.facets,
+        filters: filters.filters,
+        sort: filters.sort,
+      },
+    }).catch(() => {
+      // Logging should never break the search flow
+    });
+  }, [query.data, filters.q, filters.filters, filters.facets, filters.sort]);
+
+  return query;
 }
 
 export function useSearchSuggestions(q: string, limit: number = 5) {

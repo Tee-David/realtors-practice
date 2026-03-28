@@ -2,8 +2,7 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { useProperty } from "@/hooks/useProperties";
-import { MOCK_PROPERTIES } from "@/lib/mock-data";
+import { useProperty, useProperties } from "@/hooks/useProperties";
 import { formatPrice, formatNumber, pluralize, cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -40,8 +39,7 @@ const LISTING_TYPE_LABELS: Record<string, string> = {
 
 function useCompareProperty(id: string | null) {
   const { data, isLoading } = useProperty(id || "");
-  const mock = id ? MOCK_PROPERTIES.find(p => p.id === id) : null;
-  return { property: data || mock || null, isLoading: !!id && isLoading };
+  return { property: data || null, isLoading: !!id && isLoading };
 }
 
 /* ------------------------------------------------------------------ */
@@ -231,22 +229,23 @@ function AddPropertyModal({
   excludeIds: string[];
 }) {
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const { data: propertiesData, isLoading: searchLoading } = useProperties({
+    search: debouncedSearch || undefined,
+    limit: 12,
+    page: 1,
+  });
 
   if (!open) return null;
 
-  const filtered = MOCK_PROPERTIES
-    .filter(p => !excludeIds.includes(p.id))
-    .filter(p => {
-      if (!search) return true;
-      const s = search.toLowerCase();
-      return (
-        p.title.toLowerCase().includes(s) ||
-        (p.area && p.area.toLowerCase().includes(s)) ||
-        (p.state && p.state.toLowerCase().includes(s)) ||
-        (p.locationText && p.locationText.toLowerCase().includes(s))
-      );
-    })
-    .slice(0, 12);
+  const allResults = (propertiesData as any)?.data ?? [];
+  const filtered = allResults.filter((p: any) => !excludeIds.includes(p.id));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
