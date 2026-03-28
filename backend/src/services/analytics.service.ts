@@ -458,4 +458,280 @@ export class AnalyticsService {
       throw error;
     }
   }
+
+  /**
+   * Category distribution over time — property counts grouped by category and month (last 6 months).
+   * Returns rows shaped as: { month: "2025-10", category: "RESIDENTIAL", count: 42 }
+   */
+  static async getCategoryDistribution() {
+    try {
+      const cacheKey = "analytics:category_distribution";
+      const cached = await RedisClient.get(cacheKey);
+      if (cached) return JSON.parse(cached);
+
+      const sixMonthsAgo = new Date();
+      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+      const properties = await prisma.property.findMany({
+        where: {
+          deletedAt: null,
+          createdAt: { gte: sixMonthsAgo },
+        },
+        select: {
+          category: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: "asc" },
+      });
+
+      // Group by month+category
+      const mapKey = (cat: string, year: number, month: number) =>
+        `${year}-${String(month + 1).padStart(2, "0")}::${cat}`;
+
+      const buckets = new Map<string, number>();
+      for (const p of properties) {
+        const d = p.createdAt;
+        const key = mapKey(p.category, d.getFullYear(), d.getMonth());
+        buckets.set(key, (buckets.get(key) || 0) + 1);
+      }
+
+      const result = Array.from(buckets.entries()).map(([key, count]) => {
+        const [month, category] = key.split("::");
+        return { month, category, count };
+      });
+
+      // Sort by month asc
+      result.sort((a, b) => a.month.localeCompare(b.month));
+
+      await RedisClient.set(cacheKey, JSON.stringify(result), CACHE_TTL);
+      return result;
+    } catch (error: any) {
+      Logger.error(`Error in getCategoryDistribution: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Listing type distribution — current counts by listing type.
+   * Returns: [{ listingType: "SALE", count: 120 }, ...]
+   */
+  static async getListingTypeDistribution() {
+    try {
+      const cacheKey = "analytics:listing_type_dist";
+      const cached = await RedisClient.get(cacheKey);
+      if (cached) return JSON.parse(cached);
+
+      const groups = await prisma.property.groupBy({
+        by: ["listingType"],
+        where: { deletedAt: null },
+        _count: true,
+      });
+
+      const result = groups.map((g) => ({
+        listingType: g.listingType,
+        count: g._count,
+      }));
+
+      await RedisClient.set(cacheKey, JSON.stringify(result), CACHE_TTL);
+      return result;
+    } catch (error: any) {
+      Logger.error(`Error in getListingTypeDistribution: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Verification trends — property counts by verificationStatus grouped by week (last 12 weeks).
+   * Returns: [{ week: "2025-10-07", status: "VERIFIED", count: 5 }, ...]
+   */
+  static async getVerificationTrends() {
+    try {
+      const cacheKey = "analytics:verification_trends";
+      const cached = await RedisClient.get(cacheKey);
+      if (cached) return JSON.parse(cached);
+
+      const twelveWeeksAgo = new Date(Date.now() - 12 * 7 * 24 * 60 * 60 * 1000);
+
+      const properties = await prisma.property.findMany({
+        where: {
+          deletedAt: null,
+          createdAt: { gte: twelveWeeksAgo },
+        },
+        select: {
+          verificationStatus: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: "asc" },
+      });
+
+      // Group by week start + verification status
+      const buckets = new Map<string, number>();
+      for (const p of properties) {
+        const d = new Date(p.createdAt);
+        // Get ISO week start (Monday)
+        const day = d.getUTCDay(); // 0=Sun
+        const diff = d.getUTCDate() - day + (day === 0 ? -6 : 1);
+        const weekStart = new Date(d);
+        weekStart.setUTCDate(diff);
+        const weekKey = weekStart.toISOString().split("T")[0];
+        const key = `${weekKey}::${p.verificationStatus}`;
+        buckets.set(key, (buckets.get(key) || 0) + 1);
+      }
+
+      const result = Array.from(buckets.entries()).map(([key, count]) => {
+        const [week, status] = key.split("::");
+        return { week, status, count };
+      });
+
+      result.sort((a, b) => a.week.localeCompare(b.week));
+
+      await RedisClient.set(cacheKey, JSON.stringify(result), CACHE_TTL);
+      return result;
+    } catch (error: any) {
+      Logger.error(`Error in getVerificationTrends: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Scraper health — per-site metrics based on the last 5 scrape jobs.
+   * Returns for each site: name, lastScrapeDate, successRate, avgPropertiesFound, totalRuns
+   */
+  static async getScraperHealth() {
+    try {
+      const cacheKey = "analytics:scraper_health";
+      const cached = await RedisClient.get(cacheKey);
+      if (cached) return JSON.parse(cached);
+
+      // Get all sites with their recent scrape jobs (via the many-to-many relation)
+      const sites = await prisma.site.findMany({
+        where: { deletedAt: null },
+        select: {
+          id: true,
+          name: true,
+          baseUrl: true,
+          scrapeJobs: {
+            orderBy: { createdAt: "desc" },
+            take: 5,
+            select: {
+              id: true,
+              status: true,
+              newListings: true,
+              totalListings: true,
+              startedAt: true,
+              completedAt: true,
+              createdAt: true,
+            },
+          },
+        },
+      });
+
+      const result = sites.map((site) => {
+        const jobs = site.scrapeJobs;
+        const totalRuns = jobs.length;
+
+        if (totalRuns === 0) {
+          return {
+            siteId: site.id,
+            siteName: site.name,
+            siteUrl: site.baseUrl,
+            lastScrapeDate: null,
+            successRate: 0,
+            avgPropertiesFound: 0,
+            totalRuns: 0,
+          };
+        }
+
+        const succeeded = jobs.filter((j: { status: string }) => j.status === "COMPLETED").length;
+        const successRate = Math.round((succeeded / totalRuns) * 100);
+        const avgPropertiesFound = Math.round(
+          jobs.reduce((sum: number, j: { newListings: number | null }) => sum + (j.newListings || 0), 0) / totalRuns
+        );
+        const lastScrapeDate = jobs[0].completedAt || jobs[0].createdAt;
+
+        return {
+          siteId: site.id,
+          siteName: site.name,
+          siteUrl: site.baseUrl,
+          lastScrapeDate,
+          successRate,
+          avgPropertiesFound,
+          totalRuns,
+        };
+      });
+
+      // Sort: sites with runs first, by lastScrapeDate desc
+      result.sort((a, b) => {
+        if (!a.lastScrapeDate && !b.lastScrapeDate) return 0;
+        if (!a.lastScrapeDate) return 1;
+        if (!b.lastScrapeDate) return -1;
+        return new Date(b.lastScrapeDate).getTime() - new Date(a.lastScrapeDate).getTime();
+      });
+
+      await RedisClient.set(cacheKey, JSON.stringify(result), CACHE_TTL);
+      return result;
+    } catch (error: any) {
+      Logger.error(`Error in getScraperHealth: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Price per sqm by area — top 10 areas ranked by avg price per sqm.
+   * Only uses properties where buildingSizeSqm or landSizeSqm is available.
+   */
+  static async getPricePerSqm() {
+    try {
+      const cacheKey = "analytics:price_per_sqm";
+      const cached = await RedisClient.get(cacheKey);
+      if (cached) return JSON.parse(cached);
+
+      const properties = await prisma.property.findMany({
+        where: {
+          deletedAt: null,
+          area: { not: null },
+          price: { not: null, gt: 0 },
+          OR: [
+            { buildingSizeSqm: { not: null, gt: 0 } },
+            { landSizeSqm: { not: null, gt: 0 } },
+          ],
+        },
+        select: {
+          area: true,
+          price: true,
+          buildingSizeSqm: true,
+          landSizeSqm: true,
+        },
+      });
+
+      // Group by area, compute avg price per sqm
+      const areaMap = new Map<string, { totalPricePerSqm: number; count: number }>();
+      for (const p of properties) {
+        const area = p.area!;
+        const sizeSqm = p.buildingSizeSqm || p.landSizeSqm;
+        if (!sizeSqm || sizeSqm <= 0) continue;
+        const pricePerSqm = p.price! / sizeSqm;
+        const existing = areaMap.get(area) || { totalPricePerSqm: 0, count: 0 };
+        existing.totalPricePerSqm += pricePerSqm;
+        existing.count += 1;
+        areaMap.set(area, existing);
+      }
+
+      const result = Array.from(areaMap.entries())
+        .filter(([, data]) => data.count >= 1)
+        .map(([area, data]) => ({
+          area,
+          avgPricePerSqm: Math.round(data.totalPricePerSqm / data.count),
+          sampleCount: data.count,
+        }))
+        .sort((a, b) => b.avgPricePerSqm - a.avgPricePerSqm)
+        .slice(0, 10);
+
+      await RedisClient.set(cacheKey, JSON.stringify(result), CACHE_TTL);
+      return result;
+    } catch (error: any) {
+      Logger.error(`Error in getPricePerSqm: ${error.message}`);
+      throw error;
+    }
+  }
 }

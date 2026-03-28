@@ -1375,14 +1375,25 @@ export default function ScraperPage() {
             </CardHeader>
             <CardContent className="pt-0 px-0 flex-1 overflow-hidden flex flex-col">
               {isLoading ? (
-                <div className="p-8 flex flex-col items-center justify-center text-muted-foreground flex-1">
-                  <RefreshCcw className="w-4 h-4 animate-spin mb-2 opacity-50" />
-                  <span className="text-xs">Loading history...</span>
+                <div className="p-8 flex flex-col items-center justify-center flex-1">
+                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-3" style={{ backgroundColor: "rgba(0,1,252,0.08)" }}>
+                    <RefreshCcw className="w-5 h-5 animate-spin" style={{ color: "var(--primary)", opacity: 0.6 }} />
+                  </div>
+                  <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>Loading execution history...</span>
                 </div>
               ) : filteredJobs.length === 0 ? (
-                <div className="p-8 text-sm text-center text-muted-foreground flex flex-col items-center flex-1 justify-center">
-                  <Terminal className="w-6 h-6 mb-2 opacity-20" />
-                  {jobs && jobs.length > 0 ? "No jobs match current filter." : "No execution history yet."}
+                <div className="p-8 flex flex-col items-center justify-center flex-1">
+                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-3" style={{ backgroundColor: "rgba(0,1,252,0.08)" }}>
+                    <Terminal className="w-5 h-5" style={{ color: "var(--primary)", opacity: 0.5 }} />
+                  </div>
+                  <p className="text-sm font-semibold mb-1" style={{ color: "var(--foreground)" }}>
+                    {jobs && jobs.length > 0 ? "No jobs match current filter" : "No execution history yet"}
+                  </p>
+                  <p className="text-xs text-center max-w-[200px]" style={{ color: "var(--muted-foreground)" }}>
+                    {jobs && jobs.length > 0
+                      ? "Try selecting a different status filter."
+                      : "Run your first scrape to see execution history here."}
+                  </p>
                 </div>
               ) : (
                 <div className="divide-y divide-border/40 overflow-y-auto max-h-72">

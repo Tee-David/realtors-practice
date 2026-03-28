@@ -4,6 +4,7 @@ import { ScrapeJobStatus, Prisma } from "@prisma/client";
 import { PropertyService } from "./property.service";
 import { SiteService } from "./site.service";
 import { SiteIntelligenceService } from "./siteIntelligence.service";
+import { NotificationService } from "./notification.service";
 import { config } from "../config/env";
 import { Logger } from "../utils/logger.util";
 
@@ -692,6 +693,21 @@ export class ScrapeService {
             errors: totalErrors,
             durationMs,
           });
+
+          // Create notification for job creator
+          if (job.createdById) {
+            try {
+              await NotificationService.create({
+                userId: job.createdById,
+                type: "SCRAPE_COMPLETE",
+                title: "Scrape completed",
+                message: `Found ${finalNew} new ${finalNew === 1 ? "property" : "properties"}, ${finalDups} duplicates, ${totalErrors} errors. Total processed: ${finalTotal}.`,
+                data: { jobId, totalListings: finalTotal, newListings: finalNew, duplicates: finalDups, errors: totalErrors, durationMs },
+              });
+            } catch (err: any) {
+              Logger.warn(`Failed to create scrape-complete notification: ${err.message}`);
+            }
+          }
         }
       } else {
         // Single-batch job — original behavior
@@ -735,6 +751,21 @@ export class ScrapeService {
           errors: totalErrors,
           durationMs,
         });
+
+        // Create notification for job creator
+        if (job.createdById) {
+          try {
+            await NotificationService.create({
+              userId: job.createdById,
+              type: "SCRAPE_COMPLETE",
+              title: "Scrape completed",
+              message: `Found ${finalNew} new ${finalNew === 1 ? "property" : "properties"}, ${finalDups} duplicates, ${totalErrors} errors. Total processed: ${finalTotal}.`,
+              data: { jobId, totalListings: finalTotal, newListings: finalNew, duplicates: finalDups, errors: totalErrors, durationMs },
+            });
+          } catch (err: any) {
+            Logger.warn(`Failed to create scrape-complete notification: ${err.message}`);
+          }
+        }
       }
     }
   }
@@ -835,6 +866,21 @@ export class ScrapeService {
             await SiteService.updateHealth(siteId, false);
           }
           broadcastScrapeError(jobId, `All ${totalBatches} batches failed. Last error: ${error}`);
+
+          // Create SCRAPE_FAILED notification for job creator
+          if (job.createdById) {
+            try {
+              await NotificationService.create({
+                userId: job.createdById,
+                type: "SCRAPE_FAILED",
+                title: "Scrape failed",
+                message: `All ${totalBatches} batches failed. Last error: ${error.slice(0, 200)}`,
+                data: { jobId, error, totalBatches, failedBatches },
+              });
+            } catch (err: any) {
+              Logger.warn(`Failed to create scrape-failed notification: ${err.message}`);
+            }
+          }
         } else {
           broadcastScrapeComplete(jobId, {
             totalListings: job.totalListings,
@@ -864,6 +910,21 @@ export class ScrapeService {
 
       broadcastScrapeError(jobId, error);
       Logger.error(`Job ${jobId} ${finalStatus}: ${error}`);
+
+      // Create SCRAPE_FAILED notification for job creator
+      if (!isCancelled && job.createdById) {
+        try {
+          await NotificationService.create({
+            userId: job.createdById,
+            type: "SCRAPE_FAILED",
+            title: "Scrape failed",
+            message: `Job failed: ${error.slice(0, 200)}`,
+            data: { jobId, error },
+          });
+        } catch (err: any) {
+          Logger.warn(`Failed to create scrape-failed notification: ${err.message}`);
+        }
+      }
     }
   }
 

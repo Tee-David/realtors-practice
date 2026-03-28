@@ -1,4 +1,4 @@
-import cron from "node-cron";
+import cron, { ScheduledTask } from "node-cron";
 import { MeiliService } from "./meili.service";
 import { SavedSearchService } from "./savedSearch.service";
 import { NotificationService } from "./notification.service";
@@ -10,7 +10,7 @@ import prisma from "../prismaClient";
 
 export class CronService {
   /** Track the scheduled scrape cron task so we can reschedule it */
-  private static scheduledScrapeTask: cron.ScheduledTask | null = null;
+  private static scheduledScrapeTask: ScheduledTask | null = null;
 
   /**
    * Initialize all cron jobs for the backend

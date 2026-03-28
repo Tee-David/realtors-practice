@@ -120,7 +120,17 @@ export const users = {
   list: () => api.get("/users"),
   updateRole: (id: string, role: string) => api.patch(`/users/${id}/role`, { role }),
   toggleActive: (id: string) => api.patch(`/users/${id}/toggle-active`),
+  deleteUser: (id: string) => api.delete(`/users/${id}`),
   updateProfile: (data: Record<string, unknown>) => api.patch("/users/me", data),
+  getNotificationPreferences: () => api.get("/users/me/notification-preferences"),
+  updateNotificationPreferences: (data: Record<string, unknown>) => api.patch("/users/me/notification-preferences", data),
+};
+
+export const emailTemplates = {
+  list: () => api.get("/email-templates"),
+  getByName: (name: string) => api.get(`/email-templates/${encodeURIComponent(name)}`),
+  save: (data: { name: string; html: string; design?: unknown }) => api.post("/email-templates", data),
+  delete: (id: string) => api.delete(`/email-templates/${id}`),
 };
 
 export const auditLogs = {

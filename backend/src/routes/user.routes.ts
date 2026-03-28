@@ -30,6 +30,11 @@ const router = Router();
  */
 router.get("/", authenticate, authorize("ADMIN"), UserController.getAllUsers);
 
+// /me routes must come before /:id routes to avoid "me" being treated as an ID
+router.patch("/me", authenticate, UserController.updateProfile);
+router.get("/me/notification-preferences", authenticate, UserController.getNotificationPreferences);
+router.patch("/me/notification-preferences", authenticate, UserController.updateNotificationPreferences);
+
 /**
  * @swagger
  * /users/{id}/role:
@@ -71,6 +76,6 @@ router.get("/", authenticate, authorize("ADMIN"), UserController.getAllUsers);
  */
 router.patch("/:id/role", authenticate, authorize("ADMIN"), UserController.updateUserRole);
 router.patch("/:id/toggle-active", authenticate, authorize("ADMIN"), UserController.toggleActive);
-router.patch("/me", authenticate, UserController.updateProfile);
+router.delete("/:id", authenticate, authorize("ADMIN"), UserController.deleteUser);
 
 export default router;

@@ -133,5 +133,55 @@ export class AnalyticsController {
       return sendError(res, "Failed to retrieve weekly sparkline", 500, error.message);
     }
   }
+
+  static async getCategoryDistribution(req: Request, res: Response) {
+    try {
+      const data = await AnalyticsService.getCategoryDistribution();
+      return sendSuccess(res, data, "Category distribution retrieved");
+    } catch (error: any) {
+      Logger.error(`AnalyticsController.getCategoryDistribution error: ${error.message}`);
+      return sendError(res, "Failed to retrieve category distribution", 500, error.message);
+    }
+  }
+
+  static async getListingTypeDistribution(req: Request, res: Response) {
+    try {
+      const data = await AnalyticsService.getListingTypeDistribution();
+      return sendSuccess(res, data, "Listing type distribution retrieved");
+    } catch (error: any) {
+      Logger.error(`AnalyticsController.getListingTypeDistribution error: ${error.message}`);
+      return sendError(res, "Failed to retrieve listing type distribution", 500, error.message);
+    }
+  }
+
+  static async getVerificationTrends(req: Request, res: Response) {
+    try {
+      const data = await AnalyticsService.getVerificationTrends();
+      return sendSuccess(res, data, "Verification trends retrieved");
+    } catch (error: any) {
+      Logger.error(`AnalyticsController.getVerificationTrends error: ${error.message}`);
+      return sendError(res, "Failed to retrieve verification trends", 500, error.message);
+    }
+  }
+
+  static async getScraperHealth(req: Request, res: Response) {
+    try {
+      const data = await AnalyticsService.getScraperHealth();
+      return sendSuccess(res, data, "Scraper health retrieved");
+    } catch (error: any) {
+      Logger.error(`AnalyticsController.getScraperHealth error: ${error.message}`);
+      return sendError(res, "Failed to retrieve scraper health", 500, error.message);
+    }
+  }
+
+  static async getPricePerSqm(req: Request, res: Response) {
+    try {
+      const data = await AnalyticsService.getPricePerSqm();
+      return sendSuccess(res, data, "Price per sqm retrieved");
+    } catch (error: any) {
+      Logger.error(`AnalyticsController.getPricePerSqm error: ${error.message}`);
+      return sendError(res, "Failed to retrieve price per sqm", 500, error.message);
+    }
+  }
 }
 

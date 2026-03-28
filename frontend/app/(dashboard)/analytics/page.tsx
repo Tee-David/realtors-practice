@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useDashboardKPIs, useDashboardCharts, useListingVelocity, useActivityHeatmap, usePriceTrends, useKPITrends } from "@/hooks/use-analytics";
+import { useDashboardKPIs, useDashboardCharts, useListingVelocity, useActivityHeatmap, usePriceTrends, useKPITrends, useCategoryDistribution, useListingTypeDistribution, useVerificationTrends, useScraperHealth, usePricePerSqm } from "@/hooks/use-analytics";
 import {
   Building2, TrendingUp, TrendingDown, Home, DollarSign, BarChart3,
   ArrowUpRight, ArrowDownRight, Download, Search, Filter,
@@ -16,7 +16,7 @@ import AnimatedCounter from "@/components/ui/animated-counter";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  ComposedChart, Legend,
+  ComposedChart, Legend, PieChart, Pie, Cell,
 } from "recharts";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -557,6 +557,11 @@ export default function AnalyticsPage() {
   const { data: heatmapRaw } = useActivityHeatmap();
   const { data: priceTrends } = usePriceTrends();
   const { data: kpiTrends } = useKPITrends();
+  const { data: catDistribution } = useCategoryDistribution();
+  const { data: listingTypeDist } = useListingTypeDistribution();
+  const { data: verificationTrends } = useVerificationTrends();
+  const { data: scraperHealth } = useScraperHealth();
+  const { data: pricePerSqm } = usePricePerSqm();
   const isLoading = kpisLoading || chartsLoading;
 
   // Live data — no hardcoded fallbacks
@@ -654,6 +659,138 @@ export default function AnalyticsPage() {
         setTab={setTableTab}
         onExport={exportCsv}
       />
+
+      {/* Row 4: Category Distribution + Listing Type Donut */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Category Distribution Over Time */}
+        <div className="rounded-xl p-4" style={{ backgroundColor: "var(--card)", border: "1px solid var(--border)" }}>
+          <h3 className="font-display text-sm font-semibold mb-3" style={{ color: "var(--foreground)" }}>Category Distribution (6 months)</h3>
+          <div className="h-[260px]">
+            {catDistribution && catDistribution.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={catDistribution}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="month" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
+                  <YAxis tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
+                  <Tooltip contentStyle={{ backgroundColor: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Area type="monotone" dataKey="RESIDENTIAL" stackId="1" stroke="#0001FC" fill="#0001FC" fillOpacity={0.6} />
+                  <Area type="monotone" dataKey="COMMERCIAL" stackId="1" stroke="#FF6600" fill="#FF6600" fillOpacity={0.6} />
+                  <Area type="monotone" dataKey="LAND" stackId="1" stroke="#0a6906" fill="#0a6906" fillOpacity={0.6} />
+                  <Area type="monotone" dataKey="SHORTLET" stackId="1" stroke="#9333ea" fill="#9333ea" fillOpacity={0.6} />
+                  <Area type="monotone" dataKey="INDUSTRIAL" stackId="1" stroke="#64748b" fill="#64748b" fillOpacity={0.6} />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full text-xs" style={{ color: "var(--muted-foreground)" }}>No data yet</div>
+            )}
+          </div>
+        </div>
+
+        {/* Listing Type Distribution Donut */}
+        <div className="rounded-xl p-4" style={{ backgroundColor: "var(--card)", border: "1px solid var(--border)" }}>
+          <h3 className="font-display text-sm font-semibold mb-3" style={{ color: "var(--foreground)" }}>Listing Type Distribution</h3>
+          <div className="h-[260px]">
+            {listingTypeDist && listingTypeDist.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={listingTypeDist} dataKey="count" nameKey="listingType" cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={2} label={({ listingType, percent }) => `${listingType} ${(percent * 100).toFixed(0)}%`}>
+                    {listingTypeDist.map((_, i) => <Cell key={i} fill={["#0001FC", "#FF6600", "#0a6906", "#9333ea", "#64748b"][i % 5]} />)}
+                  </Pie>
+                  <Tooltip contentStyle={{ backgroundColor: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full text-xs" style={{ color: "var(--muted-foreground)" }}>No data yet</div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Row 5: Verification Trends + Price per Sqm */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Verification Status Over Time */}
+        <div className="rounded-xl p-4" style={{ backgroundColor: "var(--card)", border: "1px solid var(--border)" }}>
+          <h3 className="font-display text-sm font-semibold mb-3" style={{ color: "var(--foreground)" }}>Verification Status (12 weeks)</h3>
+          <div className="h-[260px]">
+            {verificationTrends && verificationTrends.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={verificationTrends}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="week" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
+                  <YAxis tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
+                  <Tooltip contentStyle={{ backgroundColor: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Area type="monotone" dataKey="UNVERIFIED" stackId="1" stroke="#eab308" fill="#eab308" fillOpacity={0.5} />
+                  <Area type="monotone" dataKey="VERIFIED" stackId="1" stroke="#22c55e" fill="#22c55e" fillOpacity={0.5} />
+                  <Area type="monotone" dataKey="FLAGGED" stackId="1" stroke="#ef4444" fill="#ef4444" fillOpacity={0.5} />
+                  <Area type="monotone" dataKey="REJECTED" stackId="1" stroke="#64748b" fill="#64748b" fillOpacity={0.5} />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full text-xs" style={{ color: "var(--muted-foreground)" }}>No data yet</div>
+            )}
+          </div>
+        </div>
+
+        {/* Price per Sqm by Area */}
+        <div className="rounded-xl p-4" style={{ backgroundColor: "var(--card)", border: "1px solid var(--border)" }}>
+          <h3 className="font-display text-sm font-semibold mb-3" style={{ color: "var(--foreground)" }}>Price per Sqm (Top 10 Areas)</h3>
+          <div className="h-[260px]">
+            {pricePerSqm && pricePerSqm.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={pricePerSqm} layout="vertical" margin={{ left: 80 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis type="number" tick={{ fontSize: 10 }} stroke="var(--muted-foreground)" tickFormatter={(v) => `₦${(v / 1000).toFixed(0)}k`} />
+                  <YAxis type="category" dataKey="area" tick={{ fontSize: 10 }} stroke="var(--muted-foreground)" width={75} />
+                  <Tooltip contentStyle={{ backgroundColor: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} formatter={(v: number) => [`₦${v.toLocaleString()}/sqm`, "Avg Price"]} />
+                  <Bar dataKey="avgPricePerSqm" fill="#0001FC" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full text-xs" style={{ color: "var(--muted-foreground)" }}>No data yet (requires properties with size data)</div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Row 6: Scraper Health Table */}
+      {scraperHealth && scraperHealth.length > 0 && (
+        <div className="rounded-xl p-4" style={{ backgroundColor: "var(--card)", border: "1px solid var(--border)" }}>
+          <h3 className="font-display text-sm font-semibold mb-3" style={{ color: "var(--foreground)" }}>Scraper Health by Site</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                  <th className="text-left py-2 px-3 font-semibold" style={{ color: "var(--muted-foreground)" }}>Site</th>
+                  <th className="text-right py-2 px-3 font-semibold" style={{ color: "var(--muted-foreground)" }}>Last Scrape</th>
+                  <th className="text-right py-2 px-3 font-semibold" style={{ color: "var(--muted-foreground)" }}>Success Rate</th>
+                  <th className="text-right py-2 px-3 font-semibold" style={{ color: "var(--muted-foreground)" }}>Avg Props/Run</th>
+                  <th className="text-right py-2 px-3 font-semibold" style={{ color: "var(--muted-foreground)" }}>Total Runs</th>
+                </tr>
+              </thead>
+              <tbody>
+                {scraperHealth.map((site, i) => (
+                  <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
+                    <td className="py-2 px-3 font-medium" style={{ color: "var(--foreground)" }}>{site.siteName}</td>
+                    <td className="py-2 px-3 text-right" style={{ color: "var(--muted-foreground)" }}>{site.lastScrapeDate ? new Date(site.lastScrapeDate).toLocaleDateString() : "Never"}</td>
+                    <td className="py-2 px-3 text-right">
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold" style={{
+                        backgroundColor: site.successRate >= 80 ? "rgba(34,197,94,0.1)" : site.successRate >= 50 ? "rgba(234,179,8,0.1)" : "rgba(239,68,68,0.1)",
+                        color: site.successRate >= 80 ? "#16a34a" : site.successRate >= 50 ? "#ca8a04" : "#dc2626"
+                      }}>
+                        {site.successRate.toFixed(0)}%
+                      </span>
+                    </td>
+                    <td className="py-2 px-3 text-right" style={{ color: "var(--foreground)" }}>{site.avgPropertiesPerRun.toFixed(0)}</td>
+                    <td className="py-2 px-3 text-right" style={{ color: "var(--muted-foreground)" }}>{site.totalRuns}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* AI Insights */}
       <div className="grid sm:grid-cols-2 gap-3">

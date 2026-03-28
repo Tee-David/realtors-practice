@@ -112,12 +112,25 @@ model User {
   lastLoginAt   DateTime?
   loginCount    Int       @default(0)
 
+  // Notification preferences
+  notifEmailMatch         Boolean   @default(true)
+  notifEmailPriceDrop     Boolean   @default(true)
+  notifEmailScrapeComplete Boolean  @default(true)
+  notifInAppMatch         Boolean   @default(true)
+  notifInAppPriceDrop     Boolean   @default(true)
+  notifInAppScrapeComplete Boolean  @default(true)
+  notifQuietHoursEnabled  Boolean   @default(false)
+  notifQuietStart         Int       @default(23)
+  notifQuietEnd           Int       @default(7)
+  notifDigestFrequency    String    @default("realtime")
+
   savedSearches   SavedSearch[]
   propertyEdits   PropertyVersion[]   @relation("EditedBy")
   scrapeJobs      ScrapeJob[]         @relation("CreatedBy")
   notifications   Notification[]
   auditLogs       AuditLog[]
   invitations     Invitation[]        @relation("InvitedBy")
+  emailTemplates  EmailTemplate[]
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -487,6 +500,23 @@ model Notification {
   @@index([userId])
   @@index([userId, read])
   @@index([createdAt])
+}
+
+// ==================== EMAIL TEMPLATES ====================
+
+model EmailTemplate {
+  id        String    @id @default(cuid())
+  name      String
+  html      String
+  design    Json?
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([name, userId])
+  @@index([userId])
+  @@index([name])
 }
 
 // ==================== AUDIT & SYSTEM ====================

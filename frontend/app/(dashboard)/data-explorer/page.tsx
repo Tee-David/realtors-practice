@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { AIPlaceholderCard } from "@/components/ai/ai-placeholder";
 import ModernLoader from "@/components/ui/modern-loader";
+import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import {
   SideSheet,
@@ -2009,7 +2010,18 @@ export default function DataExplorerPage() {
       {viewMode === "cards" && (
         <>
           {isLoading ? (
-            <div className="py-8"><ModernLoader words={["Loading properties...", "Preparing cards..."]} /></div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="rounded-2xl border overflow-hidden" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+                  <Skeleton className="aspect-[4/3] w-full" />
+                  <div className="p-4 space-y-3">
+                    <Skeleton className="h-4 w-4/5" />
+                    <Skeleton className="h-5 w-1/2" />
+                    <Skeleton className="h-3 w-3/5" />
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : items.length === 0 ? (
             <div className="flex flex-col items-center gap-3 py-20">
               <Database size={28} style={{ color: "var(--primary)", opacity: 0.4 }} />
@@ -2082,13 +2094,19 @@ export default function DataExplorerPage() {
             </thead>
             <tbody>
               {isLoading ? (
-                <tr>
-                  <td colSpan={visibleColumns.length + 2}>
-                    <ModernLoader
-                      words={["Querying property database...", "Enriching data fields...", "Validating records...", "Preparing data view..."]}
-                    />
-                  </td>
-                </tr>
+                <>
+                  {Array.from({ length: 10 }).map((_, i) => (
+                    <tr key={i} className="border-b" style={{ borderColor: "var(--border)" }}>
+                      <td className="px-3 py-3"><Skeleton className="w-4 h-4 rounded" /></td>
+                      {visibleColumns.map((col) => (
+                        <td key={col.key} className="px-3 py-3">
+                          <Skeleton className="h-4 w-full" style={{ maxWidth: col.key === "title" ? 200 : col.key === "price" ? 80 : 120 }} />
+                        </td>
+                      ))}
+                      <td className="px-3 py-3"><Skeleton className="w-6 h-4 rounded" /></td>
+                    </tr>
+                  ))}
+                </>
               ) : items.length === 0 ? (
                 <tr>
                   <td colSpan={visibleColumns.length + 2} className="text-center py-16">

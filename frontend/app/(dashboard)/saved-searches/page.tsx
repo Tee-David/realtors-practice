@@ -1,16 +1,17 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useSavedSearches, useCreateSavedSearch, useUpdateSavedSearch, useDeleteSavedSearch } from "@/hooks/use-saved-searches";
 import { savedSearches as savedSearchesApi } from "@/lib/api";
 import {
   Search, Plus, Trash2, Eye, EyeOff, Bell, BellOff, Mail,
   ChevronRight, X, Bookmark, SlidersHorizontal, Home, Building2,
-  TreePine, Sunset, Factory, Car, Layers, Bed, Bath, 
-  CheckSquare, ChevronDown, MapPin, DollarSign,
+  TreePine, Sunset, Factory, Car, Layers, Bed, Bath,
+  CheckSquare, ChevronDown, MapPin, DollarSign, ExternalLink,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import ModernLoader from "@/components/ui/modern-loader";
+import { Skeleton } from "@/components/ui/skeleton";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -488,11 +489,12 @@ function MatchesPanel({ searchId, searchName, onClose }: { searchId: string; sea
 
 // ─── Search Card ──────────────────────────────────────────────────────────
 
-function SearchCard({ s, onEdit, onDelete, onToggle, onViewMatches }: {
-  s: any; onEdit: () => void; onDelete: () => void; onToggle: () => void; onViewMatches: () => void;
+function SearchCard({ s, onEdit, onDelete, onToggle, onViewMatches, onSearchNow }: {
+  s: any; onEdit: () => void; onDelete: () => void; onToggle: () => void; onViewMatches: () => void; onSearchNow: () => void;
 }) {
   const filters = (s.filters || {}) as SavedSearchFilters;
-  const matchCount = s._count?.matches || 0;
+  const matchCount = s._count?.matches || s.matchCount || 0;
+  const newSinceCheck = s.newSinceCheck || 0;
   const tags: string[] = [];
   if (filters.listingType) {
     const list = Array.isArray(filters.listingType) ? filters.listingType : [filters.listingType];
@@ -533,11 +535,18 @@ function SearchCard({ s, onEdit, onDelete, onToggle, onViewMatches }: {
           <h3 className="text-base font-semibold truncate" style={{ color: "var(--foreground)" }}>{s.name}</h3>
           {s.description && <p className="text-xs mt-0.5 truncate" style={{ color: "var(--muted-foreground)" }}>{s.description}</p>}
         </div>
-        {matchCount > 0 && (
-          <span className="shrink-0 ml-2 inline-flex items-center justify-center min-w-[22px] h-5 rounded-full text-[10px] font-bold px-1.5" style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}>
-            {matchCount}
-          </span>
-        )}
+        <div className="flex items-center gap-1.5 shrink-0 ml-2">
+          {matchCount > 0 && (
+            <span className="inline-flex items-center justify-center min-w-[22px] h-5 rounded-full text-[10px] font-bold px-1.5" style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}>
+              {matchCount}
+            </span>
+          )}
+          {newSinceCheck > 0 && (
+            <span className="inline-flex items-center justify-center min-w-[22px] h-5 rounded-full text-[10px] font-bold px-1.5" style={{ backgroundColor: "#16a34a", color: "#fff" }}>
+              +{newSinceCheck} new
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Tag chips */}
@@ -567,8 +576,11 @@ function SearchCard({ s, onEdit, onDelete, onToggle, onViewMatches }: {
 
       {/* Actions */}
       <div className="flex items-center gap-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+        <button onClick={onSearchNow} className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-semibold transition-colors hover:opacity-90" style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }} title="Search Now">
+          <Search className="w-3.5 h-3.5" /> Search Now
+        </button>
         <button onClick={onViewMatches} className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium transition-colors hover:bg-[var(--secondary)]" style={{ color: "var(--primary)" }}>
-          View Matches <ChevronRight className="w-3.5 h-3.5" />
+          Matches ({matchCount}) <ChevronRight className="w-3.5 h-3.5" />
         </button>
         <button onClick={onToggle} className="p-2 rounded-lg hover:bg-[var(--secondary)] transition-colors" title={s.isActive ? "Pause" : "Resume"}>
           {s.isActive ? <EyeOff className="w-4 h-4" style={{ color: "var(--muted-foreground)" }} /> : <Eye className="w-4 h-4" style={{ color: "var(--muted-foreground)" }} />}
@@ -586,7 +598,45 @@ function SearchCard({ s, onEdit, onDelete, onToggle, onViewMatches }: {
 
 // ─── Main Page ────────────────────────────────────────────────────────────
 
+/**
+ * Build a search page URL from saved search filters.
+ * The search page uses ?q= for the natural query and filter params.
+ */
+function buildSearchUrl(filters: SavedSearchFilters, naturalQuery?: string): string {
+  const params = new URLSearchParams();
+
+  // Use natural query as the search query if available
+  if (naturalQuery) params.set("q", naturalQuery);
+
+  // Map filters to URL params
+  if (filters.listingType) {
+    const list = Array.isArray(filters.listingType) ? filters.listingType : [filters.listingType];
+    if (list.length) params.set("listingType", list.join(","));
+  }
+  if (filters.category) {
+    const list = Array.isArray(filters.category) ? filters.category : [filters.category];
+    if (list.length) params.set("category", list.join(","));
+  }
+  if (filters.propertyType) {
+    const list = Array.isArray(filters.propertyType) ? filters.propertyType : [filters.propertyType];
+    if (list.length) params.set("propertyType", list.join(","));
+  }
+  if (filters.minPrice) params.set("minPrice", String(filters.minPrice));
+  if (filters.maxPrice) params.set("maxPrice", String(filters.maxPrice));
+  if (filters.bedrooms) params.set("bedrooms", String(filters.bedrooms));
+  if (filters.bathrooms) params.set("bathrooms", String(filters.bathrooms));
+  if (filters.state) params.set("state", filters.state);
+  if (filters.area) params.set("area", filters.area);
+  if (filters.furnishing) params.set("furnishing", filters.furnishing);
+  if (filters.parking) params.set("parking", String(filters.parking));
+  if (filters.serviced) params.set("serviced", "true");
+
+  const qs = params.toString();
+  return `/search${qs ? `?${qs}` : ""}`;
+}
+
 export default function SavedSearchesPage() {
+  const router = useRouter();
   const { data: searches = [], isLoading } = useSavedSearches();
   const createMutation = useCreateSavedSearch();
   const updateMutation = useUpdateSavedSearch();
@@ -600,6 +650,10 @@ export default function SavedSearchesPage() {
   const handleUpdate = (data: any) => { if (!editItem) return; updateMutation.mutate({ id: editItem.id, data }, { onSuccess: () => setEditItem(null), onError: () => { /* toast handled by hook */ } }); };
   const handleDelete = (id: string) => { if (confirm("Delete this saved search?")) deleteMutation.mutate(id); };
   const handleToggle = (item: any) => updateMutation.mutate({ id: item.id, data: { isActive: !item.isActive } });
+  const handleSearchNow = (item: any) => {
+    const url = buildSearchUrl(item.filters || {}, item.naturalQuery);
+    router.push(url);
+  };
 
   return (
     <div>
@@ -625,7 +679,31 @@ export default function SavedSearchesPage() {
 
       {/* Grid */}
       {isLoading ? (
-        <ModernLoader words={['Loading saved searches...', 'Checking for new matches...', 'Preparing your alerts...']} />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="rounded-2xl border p-5" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-3 w-1/2" />
+                </div>
+                <Skeleton className="w-6 h-5 rounded-full shrink-0 ml-2" />
+              </div>
+              <div className="flex flex-wrap gap-1.5 mb-4">
+                <Skeleton className="h-5 w-14 rounded-md" />
+                <Skeleton className="h-5 w-20 rounded-md" />
+                <Skeleton className="h-5 w-16 rounded-md" />
+              </div>
+              <div className="flex items-center gap-3 mb-4">
+                <Skeleton className="h-3 w-12" />
+                <Skeleton className="h-3 w-12" />
+              </div>
+              <div className="border-t pt-3" style={{ borderColor: "var(--border)" }}>
+                <Skeleton className="h-7 w-full rounded-lg" />
+              </div>
+            </div>
+          ))}
+        </div>
       ) : searches.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 rounded-2xl border" style={{ borderColor: "var(--border)" }}>
           <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ backgroundColor: "rgba(0,1,252,0.08)" }}>
@@ -649,6 +727,7 @@ export default function SavedSearchesPage() {
               onDelete={() => handleDelete(s.id)}
               onToggle={() => handleToggle(s)}
               onViewMatches={() => setMatchesView({ id: s.id, name: s.name })}
+              onSearchNow={() => handleSearchNow(s)}
             />
           ))}
         </div>

@@ -138,3 +138,58 @@ export function useWeeklySparkline() {
     staleTime: 5 * 60 * 1000,
   });
 }
+
+export function useCategoryDistribution() {
+  return useQuery<{ month: string; RESIDENTIAL: number; COMMERCIAL: number; LAND: number; SHORTLET: number; INDUSTRIAL: number }[]>({
+    queryKey: ["analytics", "category-distribution"],
+    queryFn: async () => {
+      const { data } = await api.get("/analytics/category-distribution");
+      return data.data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useListingTypeDistribution() {
+  return useQuery<{ listingType: string; count: number }[]>({
+    queryKey: ["analytics", "listing-type-distribution"],
+    queryFn: async () => {
+      const { data } = await api.get("/analytics/listing-type-distribution");
+      return data.data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useVerificationTrends() {
+  return useQuery<{ week: string; UNVERIFIED: number; VERIFIED: number; FLAGGED: number; REJECTED: number }[]>({
+    queryKey: ["analytics", "verification-trends"],
+    queryFn: async () => {
+      const { data } = await api.get("/analytics/verification-trends");
+      return data.data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useScraperHealth() {
+  return useQuery<{ siteName: string; siteUrl: string; lastScrapeDate: string | null; successRate: number; avgPropertiesPerRun: number; totalRuns: number }[]>({
+    queryKey: ["analytics", "scraper-health"],
+    queryFn: async () => {
+      const { data } = await api.get("/analytics/scraper-health");
+      return data.data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function usePricePerSqm() {
+  return useQuery<{ area: string; avgPricePerSqm: number; count: number }[]>({
+    queryKey: ["analytics", "price-per-sqm"],
+    queryFn: async () => {
+      const { data } = await api.get("/analytics/price-per-sqm");
+      return data.data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}

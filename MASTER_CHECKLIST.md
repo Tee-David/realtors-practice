@@ -642,11 +642,11 @@ Job 3: "Scrape-Dispatch" (45 min timeout)
 - **Needs update after Phase 9 (Better Auth migration)**
 
 ### 6.3 Notifications
-- [~] **ALL preferences save to localStorage only** — `usePersistedState("notif-email-match", true)` etc.
-- [x] Removed fake "Save Preferences" button — replaced with "auto-save" info text (prefs use `usePersistedState`)
-- [ ] Create backend NotificationPreference model or add fields to User model
-- [ ] Create API endpoint to save/load notification preferences
-- [ ] Wire frontend toggles to real API
+- [x] **Preferences wired to backend** — 10 fields added to User model (notifEmail*, notifInApp*, quietHours, digest)
+- [x] Removed fake "Save Preferences" button — replaced with "auto-save" info text
+- [x] Create backend NotificationPreference fields on User model
+- [x] Create API endpoints: `GET /api/users/me/notification-preferences`, `PATCH /api/users/me/notification-preferences`
+- [x] Wire frontend toggles to real API — `useNotificationPreferences()` hook with debounced 500ms PATCH
 - [ ] Implement actual email sending for:
   - [ ] New saved search matches
   - [ ] Price drops on watched properties
@@ -679,8 +679,8 @@ Job 3: "Scrape-Dispatch" (45 min timeout)
 - [x] Send test email (calls real `auth.testEmail()` API)
 - [x] Email template builder (drag-and-drop Unlayer editor)
 - [~] SMTP/Resend config saved to localStorage, not backend — should be env vars
-- [ ] Clarify that email provider config is via backend env vars (UI already shows this note)
-- [ ] Template saves just show toast — wire to backend template storage
+- [x] Clarify that email provider config is via backend env vars (UI already shows this note)
+- [x] Template saves wired to backend — `EmailTemplate` model + `POST /api/email-templates` upsert + `GET /api/email-templates` list; builder loads saved design on edit
 
 ### 6.7 Backups
 - [x] Stripped mock data and fake controls
@@ -699,8 +699,8 @@ Job 3: "Scrape-Dispatch" (45 min timeout)
 - [x] Toggle user active/inactive
 - [x] Invite user modal (email, name, role)
 - [x] Super admin protection (wedigcreativity@gmail.com)
-- [~] Delete user shows toast "Requires backend implementation"
-- [ ] Implement user deletion backend endpoint
+- [x] Delete user — wired to `DELETE /api/users/:id` (soft delete via `deletedAt` + deactivate, super admin protected)
+- [x] Implement user deletion backend endpoint — soft delete, audit logged, excludes deleted users from list
 - [ ] Add user search/filter for large teams
 
 ### 6.10 Site Intelligence (Scraper Settings)
@@ -723,13 +723,13 @@ Job 3: "Scrape-Dispatch" (45 min timeout)
 - [x] Notification list with mark as read (real API: `notifications.list()`, `markRead()`, `markAllRead()`)
 - [x] Real-time via Socket.io `/notify` namespace (unread count polls 30s + socket events)
 - [x] Pagination, tab filtering (all/unread), time-ago display
-- [ ] Verify notifications are being created by backend events (scrape complete, new matches, etc.)
+- [x] Verify notifications are being created by backend events (scrape complete, new matches, etc.) — `NotificationService.create()` called in `scrape.service.ts` on COMPLETED and FAILED
 
 ### 7.2 Saved Searches Page
 - [x] CRUD operations work
 - [x] Filter display
-- [ ] Show match count and "new since last check" badge
-- [ ] Link to search results for each saved search
+- [x] Show match count and "new since last check" badge — badge shows `_count.matches` + green `+N new` badge from `newSinceCheck`
+- [x] Link to search results for each saved search — "Matches (N)" button opens matches panel + "Search Now" button navigates to `/search` with filters as URL params
 
 ### 7.3 Audit Log
 - [x] Log display with filters
@@ -737,7 +737,7 @@ Job 3: "Scrape-Dispatch" (45 min timeout)
 - **Working correctly.**
 
 ### 7.4 Privacy Center
-- **STRIP** — static placeholder text, not needed now
+- [x] **STRIPPED** — replaced with redirect to dashboard
 
 ### 7.5 AI Assistant Page
 - **DEFER** — 100% placeholder, will be built with AI Elements in AI phase
@@ -747,37 +747,7 @@ Job 3: "Scrape-Dispatch" (45 min timeout)
 ## Phase 8: App-Wide UX & Responsive Improvements
 
 ### 8.1 Navigation Rethink
-Current sidebar sections: OVERVIEW | SEARCH & DISCOVER | DATA & SCRAPING | INTELLIGENCE | SYSTEM
-
-Suggestions:
-- [ ] **Merge "Properties" and "Data Explorer"** into one section since Data Explorer becomes the primary tool
-- [ ] **Move "Compare" under Search & Discover** — it's a discovery action
-- [ ] **Consider combining Search & Map with Properties** — they serve similar purposes, just different views
-- [ ] Proposed nav:
-  ```
-  OVERVIEW
-    Dashboard
-
-  PROPERTIES
-    Browse & Map        (current Properties + Search merged)
-    Data Explorer       (primary management tool)
-    Compare
-    Saved Searches
-
-  SCRAPING
-    Scraper             (control center)
-    Sites               (source management)
-
-  INTELLIGENCE
-    Analytics
-    Market Intel
-    AI Assistant        (later)
-
-  SYSTEM
-    Notifications
-    Audit Log
-    Settings
-  ```
+- [x] Reorganized sidebar into: OVERVIEW (Dashboard) | PROPERTIES (Browse & Map, Data Explorer, Compare, Saved Searches) | SCRAPING (Scraper, Sites) | INTELLIGENCE (Analytics, Market Intel, AI Assistant) | SYSTEM (Notifications, Audit Log, Settings)
 
 ### 8.2 Responsive Design Audit
 - [ ] **Scraper page**: Terminal and stats should stack cleanly on mobile; incoming properties should be swipeable cards
@@ -788,8 +758,8 @@ Suggestions:
 - [ ] **Sidebar**: Verify mobile drawer works correctly with all new nav changes
 
 ### 8.3 Global UX Improvements
-- [ ] **Consistent empty states** — every page/section should have a helpful empty state (not just blank)
-- [ ] **Loading skeletons everywhere** — replace any missing loading states with skeleton UI
+- [x] **Consistent empty states** — all key pages audited: Properties, Notifications, Saved Searches, Scraper history, Sites, Data Explorer all have icon + title + description + action button empty states
+- [x] **Loading skeletons everywhere** — replaced ModernLoader spinners with skeleton UI on: notification list, saved searches grid, data explorer table/cards, properties list, sites list, scraper history
 - [x] **Toast consolidation** — removed fake "Saved!" toasts from Settings (Notifications, Appearance, Display sections); replaced with "auto-saved" info text.
 - [ ] **Breadcrumbs** — add breadcrumb navigation for deep pages (property detail, settings sections)
 

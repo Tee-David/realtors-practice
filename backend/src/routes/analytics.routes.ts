@@ -95,4 +95,14 @@ router.get("/kpi-trends", AnalyticsController.getKPITrends);
 
 router.get("/weekly-sparkline", AnalyticsController.getWeeklySparkline);
 
+router.get("/category-distribution", authenticate, AnalyticsController.getCategoryDistribution);
+
+router.get("/listing-type-distribution", authenticate, AnalyticsController.getListingTypeDistribution);
+
+router.get("/verification-trends", authenticate, AnalyticsController.getVerificationTrends);
+
+router.get("/scraper-health", authenticate, AnalyticsController.getScraperHealth);
+
+router.get("/price-per-sqm", authenticate, AnalyticsController.getPricePerSqm);
+
 export default router;

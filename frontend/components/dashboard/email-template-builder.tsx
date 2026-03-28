@@ -9,16 +9,19 @@ import { motion, AnimatePresence } from "framer-motion";
 export function EmailTemplateBuilder({
   open,
   templateName,
+  initialDesign,
   onClose,
   onSave
 }: {
   open: boolean;
   templateName: string;
+  initialDesign?: any;
   onClose: () => void;
-  onSave: (html: string, design: any) => void;
+  onSave: (html: string, design: any) => void | Promise<void>;
 }) {
   const emailEditorRef = useRef<EditorRef>(null);
   const [editorHeight, setEditorHeight] = useState(600);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -29,15 +32,22 @@ export function EmailTemplateBuilder({
     }
   }, [open]);
 
-  const saveDesign = () => {
-    emailEditorRef.current?.editor?.exportHtml((data: any) => {
+  const saveDesign = async () => {
+    setSaving(true);
+    emailEditorRef.current?.editor?.exportHtml(async (data: any) => {
       const { design, html } = data;
-      onSave(html, design);
+      await onSave(html, design);
+      setSaving(false);
     });
   };
 
   const onLoad = () => {};
-  const onReady = () => {};
+  const onReady = () => {
+    // Load existing design if available
+    if (initialDesign && emailEditorRef.current?.editor) {
+      emailEditorRef.current.editor.loadDesign(initialDesign);
+    }
+  };
 
   if (!open) return null;
 
@@ -70,11 +80,12 @@ export function EmailTemplateBuilder({
             </button>
             <button
               onClick={saveDesign}
-              className="flex items-center gap-2 px-4 sm:px-5 py-2 rounded-xl text-sm font-semibold transition-colors hover:opacity-90"
+              disabled={saving}
+              className="flex items-center gap-2 px-4 sm:px-5 py-2 rounded-xl text-sm font-semibold transition-colors hover:opacity-90 disabled:opacity-50"
               style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
             >
               <Save className="w-4 h-4" />
-              <span className="hidden sm:inline">Save Template</span>
+              <span className="hidden sm:inline">{saving ? "Saving..." : "Save Template"}</span>
             </button>
           </div>
         </div>

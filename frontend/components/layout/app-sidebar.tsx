@@ -11,7 +11,6 @@ import { motion, useAnimation, PanInfo, useMotionValue, useTransform } from "mot
 import {
   LayoutDashboard,
   Building2,
-  Search,
   Database,
   Bot,
   Globe,
@@ -24,7 +23,6 @@ import {
   X,
   LogOut,
   ChevronDown,
-  MessageSquareText,
   Sparkles,
   GitCompareArrows,
   Bell,
@@ -48,25 +46,24 @@ const navSections: NavSection[] = [
     icon: LayoutDashboard,
     items: [
       { label: "Dashboard", href: "/", icon: LayoutDashboard },
-      { label: "Properties", href: "/properties", icon: Building2 },
-      { label: "Compare", href: "/properties/compare", icon: GitCompareArrows },
     ],
   },
   {
-    label: "SEARCH & DISCOVER",
-    icon: Search,
+    label: "PROPERTIES",
+    icon: Building2,
     items: [
-      { label: "Search & Map", href: "/search", icon: Search },
+      { label: "Browse & Map", href: "/properties", icon: Building2 },
+      { label: "Data Explorer", href: "/data-explorer", icon: Database },
+      { label: "Compare", href: "/properties/compare", icon: GitCompareArrows },
       { label: "Saved Searches", href: "/saved-searches", icon: Bookmark },
     ],
   },
   {
-    label: "DATA & SCRAPING",
-    icon: Database,
+    label: "SCRAPING",
+    icon: Bot,
     items: [
       { label: "Scraper", href: "/scraper", icon: Bot },
       { label: "Sites", href: "/scraper/sites", icon: Globe },
-      { label: "Data Explorer", href: "/data-explorer", icon: Database },
     ],
   },
   {
@@ -149,7 +146,7 @@ function UserAvatar({ expanded }: { expanded: boolean }) {
 }
 
 /** Hrefs that should only match exactly (not prefix-match child routes) */
-const EXACT_MATCH_HREFS = new Set(["/", "/properties", "/scraper", "/search"]);
+const EXACT_MATCH_HREFS = new Set(["/", "/properties", "/scraper"]);
 
 function isItemActive(href: string, pathname: string): boolean {
   if (href.includes("?")) {

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { auth, users as usersApi, ai } from "@/lib/api";
+import { auth, users as usersApi, ai, emailTemplates as emailTemplatesApi } from "@/lib/api";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { usePersistedState } from "@/hooks/use-persisted-state";
@@ -26,6 +26,7 @@ const Lanyard = dynamic(() => import("@/components/ui/lanyard"), {
 });
 import AnimatedList from "@/components/ui/animated-list";
 import { useSettingsByCategory, useUpdateSettings } from "@/hooks/use-system-settings";
+import { useNotificationPreferences } from "@/hooks/use-notification-preferences";
 import packageJson from "../../../package.json";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -601,14 +602,21 @@ function SecuritySection() {
 // ─── Notifications ──────────────────────────────────────────────────────────
 
 function NotificationsSection() {
-  const [emailMatch, setEmailMatch] = usePersistedState("notif-email-match", true);
-  const [emailScrape, setEmailScrape] = usePersistedState("notif-email-scrape", false);
-  const [emailPriceDrop, setEmailPriceDrop] = usePersistedState("notif-email-price-drop", true);
-  const [inAppMatch, setInAppMatch] = usePersistedState("notif-inapp-match", true);
-  const [inAppPriceDrop, setInAppPriceDrop] = usePersistedState("notif-inapp-price-drop", true);
-  const [inAppScrape, setInAppScrape] = usePersistedState("notif-inapp-scrape", true);
-  const [quietHours, setQuietHours] = usePersistedState("notif-quiet-hours", false);
-  const [digest, setDigest] = usePersistedState("notif-digest", "daily");
+  const { prefs, isLoading, updatePref, isSaving } = useNotificationPreferences();
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4 max-w-2xl">
+        {[1, 2].map(i => (
+          <div key={i} className="rounded-2xl border p-6" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+            <div className="space-y-3">{Array.from({ length: 3 }).map((_, j) => (
+              <div key={j} className="h-10 rounded-xl animate-pulse" style={{ backgroundColor: "var(--secondary)" }} />
+            ))}</div>
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 max-w-2xl">
@@ -619,14 +627,14 @@ function NotificationsSection() {
           displayScrollbar={false}
           className="overflow-visible"
           items={[
-            <Toggle key="1" checked={emailMatch}     onChange={() => setEmailMatch(v => !v)}     label="New saved search matches" sub="Alerts when matching properties appear" />,
-            <Toggle key="2" checked={emailPriceDrop} onChange={() => setEmailPriceDrop(v => !v)} label="Price drops" sub="Properties you've viewed drop in price" />,
-            <Toggle key="3" checked={emailScrape}    onChange={() => setEmailScrape(v => !v)}    label="Scrape job completed" />
+            <Toggle key="1" checked={prefs.notifEmailMatch}           onChange={() => updatePref("notifEmailMatch", !prefs.notifEmailMatch)}                     label="New saved search matches" sub="Alerts when matching properties appear" />,
+            <Toggle key="2" checked={prefs.notifEmailPriceDrop}       onChange={() => updatePref("notifEmailPriceDrop", !prefs.notifEmailPriceDrop)}             label="Price drops" sub="Properties you've viewed drop in price" />,
+            <Toggle key="3" checked={prefs.notifEmailScrapeComplete}  onChange={() => updatePref("notifEmailScrapeComplete", !prefs.notifEmailScrapeComplete)}   label="Scrape job completed" />
           ]}
         />
         <div className="mt-4">
           <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Digest Frequency</label>
-          <select value={digest} onChange={e => setDigest(e.target.value)} className={inputBase} style={inputStyle}>
+          <select value={prefs.notifDigestFrequency} onChange={e => updatePref("notifDigestFrequency", e.target.value)} className={inputBase} style={inputStyle}>
             <option value="realtime">Real-time</option>
             <option value="daily">Daily digest</option>
             <option value="weekly">Weekly digest</option>
@@ -642,16 +650,16 @@ function NotificationsSection() {
           displayScrollbar={false}
           className="overflow-visible"
           items={[
-            <Toggle key="1" checked={inAppMatch}     onChange={() => setInAppMatch(v => !v)}     label="New property matches" />,
-            <Toggle key="2" checked={inAppPriceDrop} onChange={() => setInAppPriceDrop(v => !v)} label="Price drops on watched properties" />,
-            <Toggle key="3" checked={inAppScrape}    onChange={() => setInAppScrape(v => !v)}    label="Scrape completion alerts" />,
-            <Toggle key="4" checked={quietHours}     onChange={() => setQuietHours(v => !v)}     label="Quiet hours (11pm–7am)" sub="Pause all notifications overnight" />
+            <Toggle key="1" checked={prefs.notifInAppMatch}           onChange={() => updatePref("notifInAppMatch", !prefs.notifInAppMatch)}                     label="New property matches" />,
+            <Toggle key="2" checked={prefs.notifInAppPriceDrop}       onChange={() => updatePref("notifInAppPriceDrop", !prefs.notifInAppPriceDrop)}             label="Price drops on watched properties" />,
+            <Toggle key="3" checked={prefs.notifInAppScrapeComplete}  onChange={() => updatePref("notifInAppScrapeComplete", !prefs.notifInAppScrapeComplete)}   label="Scrape completion alerts" />,
+            <Toggle key="4" checked={prefs.notifQuietHoursEnabled}    onChange={() => updatePref("notifQuietHoursEnabled", !prefs.notifQuietHoursEnabled)}       label="Quiet hours (11pm–7am)" sub="Pause all notifications overnight" />
           ]}
         />
       </Card>
 
       <p className="text-xs font-medium" style={{ color: "var(--muted-foreground)" }}>
-        Preferences auto-save as you toggle them.
+        {isSaving ? "Saving..." : "Preferences auto-save as you toggle them."}
       </p>
     </div>
   );
@@ -909,7 +917,15 @@ function EmailSection() {
   const [replyTo, setReplyTo] = usePersistedState("email-reply-to", "");
   const [testTo, setTestTo] = useState("");
   const [sendingTest, setSendingTest] = useState(false);
-  const [editingTemplate, setEditingTemplate] = useState<{ name: string } | null>(null);
+  const [editingTemplate, setEditingTemplate] = useState<{ name: string; design?: any } | null>(null);
+  const { data: savedTemplates } = useQuery({
+    queryKey: ["email-templates"],
+    queryFn: async () => {
+      const res = await emailTemplatesApi.list();
+      return (res.data.data || []) as Array<{ id: string; name: string; html: string; design: any; updatedAt: string }>;
+    },
+  });
+  const savedTemplateMap = new Map((savedTemplates || []).map(t => [t.name, t]));
 
   const handleTestEmail = async () => {
     try {
@@ -992,22 +1008,40 @@ function EmailSection() {
       <Card>
         <CardHeader icon={Mail} title="Email Templates" />
         <div className="space-y-2">
-          {["Welcome", "Saved Search Match Alert", "Scrape Report", "Password Reset"].map(t => (
-            <div key={t} className="flex items-center justify-between p-3 rounded-xl border transition-colors hover:bg-[var(--secondary)]" style={{ borderColor: "var(--border)" }}>
-              <span className="text-sm font-medium" style={{ color: "var(--foreground)" }}>{t}</span>
-              <button className="text-xs font-medium" style={{ color: "var(--primary)" }} onClick={() => setEditingTemplate({ name: t })}>Edit ✎</button>
-            </div>
-          ))}
+          {["Welcome", "Saved Search Match Alert", "Scrape Report", "Password Reset"].map(t => {
+            const saved = savedTemplateMap.get(t);
+            return (
+              <div key={t} className="flex items-center justify-between p-3 rounded-xl border transition-colors hover:bg-[var(--secondary)]" style={{ borderColor: "var(--border)" }}>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium" style={{ color: "var(--foreground)" }}>{t}</span>
+                  {saved && (
+                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "rgba(10,105,6,0.1)", color: "#0a6906" }}>Saved</span>
+                  )}
+                </div>
+                <button className="text-xs font-medium" style={{ color: "var(--primary)" }} onClick={() => setEditingTemplate({ name: t, design: saved?.design })}>Edit ✎</button>
+              </div>
+            );
+          })}
         </div>
       </Card>
 
       <EmailTemplateBuilder
         open={!!editingTemplate}
         templateName={editingTemplate?.name || ""}
+        initialDesign={editingTemplate?.design}
         onClose={() => setEditingTemplate(null)}
-        onSave={(html, design) => {
-          toast.success(`${editingTemplate?.name} template saved`);
-          setEditingTemplate(null);
+        onSave={async (html, design) => {
+          try {
+            await emailTemplatesApi.save({
+              name: editingTemplate?.name || "",
+              html,
+              design,
+            });
+            toast.success(`${editingTemplate?.name} template saved`);
+            setEditingTemplate(null);
+          } catch (err: any) {
+            toast.error(err?.response?.data?.error || "Failed to save template");
+          }
         }}
       />
     </div>
@@ -1134,9 +1168,20 @@ function UsersSection() {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["users"] }); },
   });
 
+  const deleteUser = useMutation({
+    mutationFn: (id: string) => usersApi.deleteUser(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      toast.success("User deleted successfully");
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || "Failed to delete user");
+    },
+  });
+
   const handleDelete = (id: string) => {
-    if (confirm("Are you sure you want to permanently delete this user?")) {
-      toast.error("User deleted (Requires backend implementation)");
+    if (confirm("Are you sure you want to permanently delete this user? This action cannot be undone.")) {
+      deleteUser.mutate(id);
     }
   };
 
