@@ -17,13 +17,13 @@ export class AIFeaturesController {
   static async toggle(req: Request, res: Response) {
     try {
       const { key } = req.params;
-      const { enabled } = req.body;
+      const { enabled, config } = req.body;
 
       if (typeof enabled !== "boolean") {
         return sendError(res, "enabled must be a boolean", 400);
       }
 
-      const flag = await AIFeaturesService.toggle(key, enabled);
+      const flag = await AIFeaturesService.toggle(key, enabled, config);
       return sendSuccess(res, flag, `${key} ${enabled ? "enabled" : "disabled"}`);
     } catch (err: any) {
       Logger.error("Failed to toggle AI feature", err);

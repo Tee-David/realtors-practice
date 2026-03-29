@@ -9,8 +9,9 @@ import {
   Plus, Search, MoreVertical, Trash2, Power, Globe, RefreshCcw, Database,
   Code, Zap, X, Copy, CheckSquare, Square, Layers, ListPlus, Download,
   Upload, List, LayoutGrid, ChevronLeft, ChevronRight, ToggleLeft, ToggleRight,
-  Check, Grid2X2, Grid3X3, Brain, Eye, Sparkles
+  Check, Grid2X2, Grid3X3, Brain, Eye, Sparkles, Home
 } from "lucide-react";
+import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   SideSheet,
@@ -490,7 +491,16 @@ export default function SitesPage() {
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto px-4 md:px-8 py-8 animate-in fade-in duration-700">
+    <div className="space-y-6 max-w-7xl mx-auto px-4 md:px-8 py-4 md:py-8 animate-in fade-in duration-700">
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-1.5 text-xs" style={{ color: "var(--muted-foreground)" }}>
+        <Link href="/scraper" className="hover:underline flex items-center gap-1" style={{ color: "var(--muted-foreground)" }}>
+          <Home size={11} /> Scraper
+        </Link>
+        <ChevronRight size={10} />
+        <span className="font-semibold" style={{ color: "var(--foreground)" }}>Sites</span>
+      </div>
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative">
         <div className="relative z-10">

@@ -152,8 +152,8 @@ export const ai = {
 
 export const aiFeatures = {
   list: () => api.get("/settings/ai-features"),
-  toggle: (key: string, enabled: boolean) =>
-    api.patch(`/settings/ai-features/${key}`, { enabled }),
+  toggle: (key: string, enabled: boolean, config?: Record<string, unknown>) =>
+    api.patch(`/settings/ai-features/${key}`, { enabled, ...(config && { config }) }),
 };
 
 export const systemSettings = {

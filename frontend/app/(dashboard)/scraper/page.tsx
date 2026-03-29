@@ -953,18 +953,18 @@ export default function ScraperPage() {
   // ─── JSX ──────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto px-4 md:px-8 py-8 animate-in fade-in duration-500">
+    <div className="space-y-6 max-w-7xl mx-auto px-4 md:px-8 py-4 md:py-8 animate-in fade-in duration-500">
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-xs font-bold uppercase tracking-widest mb-2" style={{ color: "var(--primary)" }}>
             <Sparkles className="w-3 h-3" /> Data Collection
           </div>
-          <h1 className="font-display text-3xl md:text-4xl font-bold tracking-tight text-foreground">
+          <h1 className="font-display text-2xl md:text-4xl font-bold tracking-tight text-foreground">
             Scraper
           </h1>
-          <p className="text-muted-foreground mt-1 text-sm max-w-lg">
+          <p className="text-muted-foreground mt-1 text-xs sm:text-sm max-w-lg">
             Live command center for Nigerian property data collection. Monitor streams and control jobs in real-time.
           </p>
         </div>
@@ -1095,10 +1095,11 @@ export default function ScraperPage() {
       )}
 
       {/* ── Main 2-column grid ───────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:items-stretch">
+      {/* On mobile: single column (stacked). On lg+: 4/8 split side-by-side */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5 lg:items-stretch">
 
-        {/* ── LEFT COLUMN ──────────────────────────────────────────────── */}
-        <div className="lg:col-span-4 flex flex-col gap-5">
+        {/* ── LEFT COLUMN — Stats + Health + History (full-width on mobile, 4-col on lg) */}
+        <div className="lg:col-span-4 flex flex-col gap-4 lg:gap-5">
 
           {/* Live Stats Card */}
           <Card data-tour="scraper-stats" className="border shadow-sm relative overflow-hidden">
@@ -1511,7 +1512,7 @@ export default function ScraperPage() {
           </Card>
         </div>
 
-        {/* ── RIGHT COLUMN ─────────────────────────────────────────────── */}
+        {/* ── RIGHT COLUMN — Terminal/Incoming/Errors tabs (full-width on mobile, 8-col on lg) */}
         <div className="lg:col-span-8 flex flex-col">
 
           {/* Tabbed right panel: Terminal / Incoming / Errors */}

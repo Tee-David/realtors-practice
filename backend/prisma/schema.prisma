@@ -141,13 +141,14 @@ model User {
   notifQuietEnd           Int       @default(7)
   notifDigestFrequency    String    @default("realtime")
 
-  savedSearches   SavedSearch[]
-  propertyEdits   PropertyVersion[]   @relation("EditedBy")
-  scrapeJobs      ScrapeJob[]         @relation("CreatedBy")
-  notifications   Notification[]
-  auditLogs       AuditLog[]
-  invitations     Invitation[]        @relation("InvitedBy")
-  emailTemplates  EmailTemplate[]
+  savedSearches    SavedSearch[]
+  propertyEdits    PropertyVersion[]   @relation("EditedBy")
+  scrapeJobs       ScrapeJob[]         @relation("CreatedBy")
+  notifications    Notification[]
+  auditLogs        AuditLog[]
+  invitations      Invitation[]        @relation("InvitedBy")
+  emailTemplates   EmailTemplate[]
+  aiConversations  AiConversation[]
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -653,4 +654,46 @@ model SearchQuery {
   @@index([resultCount])
   @@index([createdAt])
   @@index([query])
+}
+
+// ==================== AI CHAT ====================
+
+model AiConversation {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String   @default("New conversation")
+  messages  Json     @default("[]")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("ai_conversations")
+}
+
+// ==================== AI FOUNDATION ====================
+
+model AiFeatureFlag {
+  id         String   @id @default(cuid())
+  featureKey String   @unique
+  enabled    Boolean  @default(false)
+  config     Json?
+  updatedAt  DateTime @updatedAt
+
+  @@map("ai_feature_flags")
+}
+
+model AiUsageLog {
+  id         String   @id @default(cuid())
+  provider   String
+  feature    String
+  tokensIn   Int      @default(0)
+  tokensOut  Int      @default(0)
+  latencyMs  Int      @default(0)
+  success    Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  @@index([provider, createdAt])
+  @@index([feature, createdAt])
+  @@map("ai_usage_log")
 }

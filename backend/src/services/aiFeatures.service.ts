@@ -1,29 +1,29 @@
 import prisma from "../prismaClient";
 import { Logger } from "../utils/logger.util";
 
-const AI_FEATURES_CATEGORY = "ai_features";
 const MASTER_KEY = "ai_master";
 
 export interface AIFeatureFlag {
   key: string;
   enabled: boolean;
+  config?: Record<string, unknown> | null;
   updatedAt: Date;
 }
 
 export class AIFeaturesService {
   /**
-   * Get all AI feature flags.
+   * Get all AI feature flags from the dedicated AiFeatureFlag table.
    */
   static async getAll(): Promise<AIFeatureFlag[]> {
-    const settings = await prisma.systemSetting.findMany({
-      where: { category: AI_FEATURES_CATEGORY },
-      orderBy: { key: "asc" },
+    const flags = await prisma.aiFeatureFlag.findMany({
+      orderBy: { featureKey: "asc" },
     });
 
-    return settings.map((s) => ({
-      key: s.key,
-      enabled: (s.value as any)?.enabled ?? false,
-      updatedAt: s.updatedAt,
+    return flags.map((f) => ({
+      key: f.featureKey,
+      enabled: f.enabled,
+      config: f.config as Record<string, unknown> | null,
+      updatedAt: f.updatedAt,
     }));
   }
 
@@ -33,29 +33,37 @@ export class AIFeaturesService {
    */
   static async isEnabled(featureKey: string): Promise<boolean> {
     if (featureKey !== MASTER_KEY) {
-      const master = await prisma.systemSetting.findUnique({
-        where: { key: MASTER_KEY },
+      const master = await prisma.aiFeatureFlag.findUnique({
+        where: { featureKey: MASTER_KEY },
       });
-      if (!(master?.value as any)?.enabled) return false;
+      if (!master?.enabled) return false;
     }
 
-    const feature = await prisma.systemSetting.findUnique({
-      where: { key: featureKey },
+    const feature = await prisma.aiFeatureFlag.findUnique({
+      where: { featureKey },
     });
-    return (feature?.value as any)?.enabled ?? false;
+    return feature?.enabled ?? false;
   }
 
   /**
    * Toggle a single AI feature flag.
+   * Accepts optional config payload for feature-specific settings.
    */
-  static async toggle(featureKey: string, enabled: boolean): Promise<AIFeatureFlag> {
-    const setting = await prisma.systemSetting.upsert({
-      where: { key: featureKey },
-      update: { value: { enabled } },
+  static async toggle(
+    featureKey: string,
+    enabled: boolean,
+    config?: Record<string, unknown>
+  ): Promise<AIFeatureFlag> {
+    const flag = await prisma.aiFeatureFlag.upsert({
+      where: { featureKey },
+      update: {
+        enabled,
+        ...(config !== undefined && { config }),
+      },
       create: {
-        key: featureKey,
-        value: { enabled },
-        category: AI_FEATURES_CATEGORY,
+        featureKey,
+        enabled,
+        config: config ?? null,
       },
     });
 
@@ -63,20 +71,18 @@ export class AIFeaturesService {
 
     // If master is turned off, disable all features
     if (featureKey === MASTER_KEY && !enabled) {
-      await prisma.systemSetting.updateMany({
-        where: {
-          category: AI_FEATURES_CATEGORY,
-          key: { not: MASTER_KEY },
-        },
-        data: { value: { enabled: false } },
+      await prisma.aiFeatureFlag.updateMany({
+        where: { featureKey: { not: MASTER_KEY } },
+        data: { enabled: false },
       });
       Logger.info("Master AI switch turned off — all features disabled");
     }
 
     return {
-      key: setting.key,
-      enabled: (setting.value as any)?.enabled ?? false,
-      updatedAt: setting.updatedAt,
+      key: flag.featureKey,
+      enabled: flag.enabled,
+      config: flag.config as Record<string, unknown> | null,
+      updatedAt: flag.updatedAt,
     };
   }
 }

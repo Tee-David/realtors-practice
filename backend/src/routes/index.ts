@@ -17,6 +17,7 @@ import backupRoutes from "./backup.routes";
 import systemSettingsRoutes from "./systemSettings.routes";
 import marketRoutes from "./market.routes";
 import aiRoutes from "./ai.routes";
+import aiChatRoutes from "./ai-chat.routes";
 import aiFeaturesRoutes from "./aiFeatures.routes";
 import emailTemplateRoutes from "./emailTemplate.routes";
 
@@ -24,6 +25,8 @@ const router = Router();
 
 router.use("/health", healthRoutes);
 router.use("/auth", authRoutes);
+// NOTE: /properties/geo MUST be registered before /properties to avoid
+// the /:id wildcard in property.routes.ts shadowing geo sub-routes.
 router.use("/properties/geo", geoRoutes);
 router.use("/properties", propertyRoutes);
 router.use("/sites", siteRoutes);
@@ -41,6 +44,7 @@ router.use("/settings/ai-features", aiFeaturesRoutes);
 router.use("/settings", systemSettingsRoutes);
 router.use("/market", marketRoutes);
 router.use("/ai", aiRoutes);
+router.use("/ai", aiChatRoutes);
 router.use("/email-templates", emailTemplateRoutes);
 
 export default router;

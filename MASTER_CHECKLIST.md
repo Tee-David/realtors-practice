@@ -933,16 +933,30 @@ The AI layer uses a **ZeroClaw-style intent router** (from AI_INTELLIGENCE_PLAN.
 
 **LLM fallback chain**: Groq → Cerebras → SambaNova → Gemini (circuit breaker + auto-rotate on rate limit)
 **Memory**: Mem0 + Qdrant on Oracle Cloud VM — per-user preference memory injected into agent context
-**Voice**: Gemini 2.5/3.1 Flash Live API via backend WebSocket proxy — Chat + Voice + History tabs
+**Voice (REVISED)**: Oracle VM pipeline — Moonshine (STT) + Kokoro-82M (TTS) + Pipecat bridge. Gemini 2.0 Flash Live is deprecated (March 2026). Fallback: Groq Whisper STT + edge-tts.
 **Implementation**: Vercel AI SDK (TypeScript, no separate Python process) — see AI_INTELLIGENCE_PLAN.md
 
 ### AI Design Principles
 - **Enhancement, not dependency** — Every AI feature has a non-AI fallback that already works
 - **Feature toggles** — Global master switch + per-feature switches in Settings (DB-backed)
 - **Graceful degradation** — If all providers are down, features silently fall back to non-AI behavior
-- **User clarity** — AI-generated content always labeled with "AI" badge
-- **Rate limit awareness** — Track usage per provider, auto-rotate on limit, show usage in admin panel
+- **User clarity** — AI-generated content always labeled with "AI" badge; no provider names/models shown in user-facing UI
+- **Rate limit awareness** — Track usage per provider, auto-rotate on limit, show usage in admin panel only
 - **Privacy** — No property data leaves system except through AI provider APIs. mem0 stores preferences on Oracle VM only
+
+### Revised Voice Stack (as of 2026-03-29)
+
+> Gemini 2.0 Flash Live was deprecated March 3, 2026 (shutdown Sep 2026). We switch to a fully self-hosted, zero-cost pipeline on the Oracle Cloud VM.
+
+```
+Browser mic → WebRTC/WebSocket → Backend proxy → Oracle VM (Pipecat)
+                                                    ├── Moonshine (STT, ARM64-optimised, real-time)
+                                                    ├── Groq LLM (text response, streaming tokens)
+                                                    └── Kokoro-82M (TTS, near-ElevenLabs quality, CPU only)
+                             ← Audio chunks ← Backend proxy ← Oracle VM
+```
+
+**Fallback chain**: Oracle VM pipeline → Groq Whisper STT + Groq LLM + edge-tts (if Oracle VM is down)
 
 ### 11.0 AI Foundation (Do First)
 
@@ -969,20 +983,27 @@ The AI layer uses a **ZeroClaw-style intent router** (from AI_INTELLIGENCE_PLAN.
 ### 11.1 AI Chat Assistant
 
 **11.1.1 Backend Chat API**
-- [ ] `POST /api/ai/chat` — SSE streaming endpoint: accepts `{ message, conversationId?, context? }`, injects Nigerian property system prompt, respects `ai_chat` flag
+- [ ] `POST /api/ai/chat` — SSE streaming endpoint (Vercel AI SDK `streamText`): accepts `{ message, conversationId?, context?, propertyId? }`, injects Nigerian property system prompt, respects `ai_chat` flag
 - [ ] LLM tools the assistant can call: `search_properties`, `get_property_detail`, `get_market_stats`, `get_analytics`
-- [ ] Conversation history: `ai_conversations` table (userId, messages JSON, createdAt, updatedAt)
+- [ ] Conversation history: `ai_conversations` table (userId, messages JSON, title, createdAt, updatedAt)
 - [ ] Rate limit: max 30 messages/hour per user (configurable via feature flag config JSON)
+- [ ] **Voice WebSocket proxy** (`/ws/voice`): proxies audio stream between browser and Oracle VM Pipecat service via WebSocket. Handles auth, injects system prompt, streams audio chunks back. Falls back to Groq Whisper + edge-tts if Oracle VM unreachable.
+- [ ] Oracle VM setup guide in `docs/oracle-vm-voice-setup.md`: Docker Compose with Moonshine + Kokoro-82M + Pipecat container
 
-**11.1.2 Frontend Chat UI (AI Elements)**
+**11.1.2 Frontend Chat UI (AI Elements + custom voice)**
 - [ ] Install AI Elements: `npx shadcn@latest add https://elements.ai-sdk.dev/api/registry/all.json`
 - [ ] Restyle all AI Elements components to match theme (primary #0001FC, accent #FF6600, Space Grotesk/Outfit)
-- [ ] Replace placeholder chat FAB with real chat powered by `useChat` from `@ai-sdk/react`
-- [ ] Implement: ConversationWrapper, Message + MessageContent (user/assistant), PromptInput with textarea + submit + model selector, markdown renderer, ToolInvocation for property cards, reasoning panel (collapsible), typing indicator
-- [ ] Suggested action chips: "Find a property", "Market report", "Analyze investment", "Check scraper"
-- [ ] Contextual awareness: detect current page, pre-load context ("Ask about this property" on detail page, "Diagnose last failure" on scraper)
-- [ ] Conversation history sidebar (list past conversations)
-- [ ] Voice support: Chat + Voice + per-user History tabs (Jotform-style)
+- [ ] Replace ALL existing AI placeholder components with real implementations (remove skeleton cards, disabled buttons, "Coming soon" chips)
+- [ ] Replace placeholder chat FAB with real full-page AI Assistant at `/assistant` (not a floating panel — dedicated page with 3-tab layout)
+- [ ] **3-tab layout**: Chat | Voice | History
+- [ ] **Chat tab**: ConversationWrapper, Message + MessageContent (user/assistant), PromptInput with textarea + submit, markdown renderer, ToolInvocation for property cards, reasoning panel (collapsible), typing indicator
+- [ ] **Context @mentions**: Type `@` in chat to reference a property by name/ID — context chip appears in input bar (Cursor-style), property data injected into LLM context
+- [ ] **Suggested action chips** (shown on empty state, with icons): "Find a property", "Market report", "Analyze investment", "Check scraper health"
+- [ ] **Contextual awareness**: detect current page URL, auto-load context — "Ask about this property" pre-fills on property detail, "Diagnose last failure" pre-fills on scraper page with last job ID
+- [ ] **Voice tab**: Push-to-talk button (hold) + continuous listening toggle. Animated waveform visualizer. Real-time transcription shown as user speaks. AI agent avatar/icon with "Listening..." / "Thinking..." / "Speaking..." states. Mute + End Call buttons. Full-screen on mobile.
+- [ ] **Voice**: connects to backend WebSocket proxy → Oracle VM Pipecat pipeline (Moonshine STT + Kokoro TTS). Fallback: Groq Whisper + edge-tts.
+- [ ] **History tab**: list of past conversations with title (auto-generated from first message), date, message count. Click to resume. Search conversations. Delete conversation.
+- [ ] **No provider names / model names shown** to regular users — admin-only in Settings AI panel
 
 **11.1.3 Chat Edge Cases**
 - [ ] Empty/gibberish responses → "I couldn't process that. Try rephrasing?" — no raw errors shown

@@ -8,7 +8,7 @@ import { TopBar } from "@/components/layout/top-bar";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { KeyboardShortcutsModal } from "@/components/ui/keyboard-shortcuts-modal";
 import dynamic from "next/dynamic";
-import { AIChatFab } from "@/components/ai/ai-chat-fab";
+import { AIAssistantFab } from "@/components/ai/ai-assistant-fab";
 import { ScraperSocketProvider } from "@/components/scraper/scraper-socket-provider";
 import { useAuth } from "@/hooks/use-auth";
 import ModernLoader from "@/components/ui/modern-loader";
@@ -40,7 +40,7 @@ export default function DashboardLayout({
     if (pathname.startsWith("/saved-searches")) return "Saved Searches";
     if (pathname.startsWith("/audit-log")) return "Audit Log";
     if (pathname.startsWith("/settings")) return "Settings";
-    if (pathname.startsWith("/ai")) return "AI Assistant";
+    if (pathname.startsWith("/ai") || pathname.startsWith("/assistant")) return "AI Assistant";
     if (pathname.startsWith("/market")) return "Market Intel";
     if (pathname.startsWith("/notifications")) return "Notifications";
     return "Dashboard";
@@ -88,7 +88,7 @@ export default function DashboardLayout({
 
       <KeyboardShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
 
-      <AIChatFab />
+      <AIAssistantFab />
 
       <MobileBottomNav
         onOpenSidebar={() => setMobileSidebarOpen(true)}

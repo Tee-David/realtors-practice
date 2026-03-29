@@ -4,6 +4,7 @@ import { config } from "./config/env";
 import prisma from "./prismaClient";
 import { createSocketServer } from "./socketServer";
 import { Logger } from "./utils/logger.util";
+import { seedAiFlags } from "./lib/ai-flags.seed";
 
 const PORT = config.port;
 
@@ -56,6 +57,11 @@ async function startServer() {
       Logger.info(`Health check: http://localhost:${PORT}/health`);
       Logger.info(`Socket.io: ws://localhost:${PORT}/ws`);
       
+      // Seed AI feature flags (non-fatal)
+      seedAiFlags(prisma).catch((err: any) =>
+        Logger.warn(`AI flags seed skipped: ${err.message}`)
+      );
+
       // Initialize Cron Jobs
       const { CronService } = require("./services/cron.service");
       CronService.init();

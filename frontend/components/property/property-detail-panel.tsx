@@ -5,6 +5,7 @@ import { MapPin, BedDouble, Bath, Maximize2, Phone, Mail, User, ExternalLink, X 
 import { formatPrice } from "@/lib/utils";
 import type { Property } from "@/types/property";
 import AnimatedCounter from "@/components/ui/animated-counter";
+import { Badge } from "@/components/ui/badge";
 
 const STATUS_STYLES: Record<string, { bg: string; color: string }> = {
   AVAILABLE: { bg: "#dcfce7", color: "#166534" },
@@ -78,6 +79,16 @@ export function PropertyDetailPanel({ property, onClose }: PropertyDetailPanelPr
             {property.status.replace("_", " ")}
           </span>
         </div>
+        {property.source === "RAW" && (property.qualityScore ?? 100) < 50 && (
+          <div className="mt-1.5">
+            <Badge
+              variant="outline"
+              className="text-[10px] border-amber-400 text-amber-700 bg-amber-50"
+            >
+              Needs Review
+            </Badge>
+          </div>
+        )}
         <div className="flex items-center gap-1 mt-1">
           <MapPin size={13} style={{ color: "var(--muted-foreground)" }} />
           <span className="text-sm" style={{ color: "var(--muted-foreground)" }}>{location}</span>

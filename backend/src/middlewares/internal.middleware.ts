@@ -8,14 +8,15 @@ export function internalAuth(
   next: NextFunction
 ) {
   const key = req.headers["x-internal-key"];
+  const expectedKey = config.scraper.internalKey;
   if (
     typeof key !== "string" ||
-    key.length !== config.scraper.internalKey.length ||
-    !crypto.timingSafeEqual(Buffer.from(key), Buffer.from(config.scraper.internalKey))
+    key.length !== expectedKey.length ||
+    !crypto.timingSafeEqual(Buffer.from(key), Buffer.from(expectedKey))
   ) {
-    return res.status(403).json({
+    return res.status(401).json({
       success: false,
-      error: "Invalid internal API key",
+      error: "Unauthorized",
     });
   }
   next();

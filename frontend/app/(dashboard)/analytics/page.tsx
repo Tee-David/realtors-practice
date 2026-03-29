@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { useDashboardKPIs, useDashboardCharts, useListingVelocity, useActivityHeatmap, usePriceTrends, useKPITrends, useCategoryDistribution, useListingTypeDistribution, useVerificationTrends, useScraperHealth, usePricePerSqm } from "@/hooks/use-analytics";
 import {
@@ -386,7 +387,7 @@ function PriceTrendsChart({ data }: { data: { month: string; listingType: string
 
   return (
     <div className="rounded-2xl border p-5 flex flex-col" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
         <div>
           <h3 className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>Avg Price Trends</h3>
           <p className="text-[10px] mt-0.5" style={{ color: "var(--muted-foreground)" }}>Last 6 months by listing type</p>
@@ -609,10 +610,15 @@ export default function AnalyticsPage() {
   return (
     <div className="space-y-5 pb-10">
       {/* Page header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold" style={{ color: "var(--foreground)" }}>Analytics</h1>
-          <p className="text-xs mt-0.5" style={{ color: "var(--muted-foreground)" }}>Dashboard / Analytics</p>
+          {/* Breadcrumb */}
+          <div className="flex items-center gap-1.5 text-xs mt-0.5" style={{ color: "var(--muted-foreground)" }}>
+            <Link href="/" className="hover:underline">Dashboard</Link>
+            <ChevronDown className="w-3 h-3 -rotate-90" />
+            <span>Analytics</span>
+          </div>
         </div>
         <button onClick={exportCsv} className="flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-medium transition-colors hover:bg-[var(--secondary)]" style={{ borderColor: "var(--border)", color: "var(--foreground)" }}>
           <Download className="w-4 h-4" /> Export Report

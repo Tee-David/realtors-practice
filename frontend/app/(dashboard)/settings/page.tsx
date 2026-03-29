@@ -1544,17 +1544,14 @@ const AI_FEATURES = [
 ];
 
 function AISection() {
-  const { data: featureList, isLoading } = useAIFeatures();
+  const { flags, isLoading, isEnabled } = useAIFeatures();
   const toggleMutation = useToggleAIFeature();
 
-  const featureMap = Object.fromEntries(
-    (featureList || []).map(f => [f.key, f.value?.enabled ?? false])
-  );
-  const masterEnabled = featureMap["ai_master"] ?? false;
+  const masterEnabled = isEnabled("ai_master");
 
   const toggleFeature = (key: string) => {
     toggleMutation.mutate(
-      { key, enabled: !featureMap[key] },
+      { key, enabled: !flags[key] },
       { onError: () => toast.error("Failed to toggle feature") }
     );
   };
@@ -1601,9 +1598,9 @@ function AISection() {
               <button
                 onClick={() => toggleFeature(feature.key)}
                 className="transition-colors shrink-0 ml-4 outline-offset-2"
-                style={{ color: featureMap[feature.key] ? "#16a34a" : "var(--muted-foreground)" }}
+                style={{ color: flags[feature.key] ? "#16a34a" : "var(--muted-foreground)" }}
               >
-                {featureMap[feature.key] ? <ToggleRight className="w-6 h-6" /> : <ToggleLeft className="w-6 h-6" />}
+                {flags[feature.key] ? <ToggleRight className="w-6 h-6" /> : <ToggleLeft className="w-6 h-6" />}
               </button>
             </div>
           ))}
@@ -1740,9 +1737,14 @@ export default function SettingsPage() {
             </>
           ) : (
             <div>
-              <button onClick={() => setMobileOpen(false)} className="flex items-center gap-2 text-sm font-medium mb-4" style={{ color: "var(--primary)" }}>
-                <ChevronLeft className="w-4 h-4" /> Back to Settings
-              </button>
+              {/* Mobile breadcrumb nav: Settings > [Section] */}
+              <div className="flex items-center gap-1.5 text-xs mb-4" style={{ color: "var(--muted-foreground)" }}>
+                <button onClick={() => setMobileOpen(false)} className="flex items-center gap-1 hover:underline" style={{ color: "var(--primary)" }}>
+                  <ChevronLeft className="w-3 h-3" /> Settings
+                </button>
+                <ChevronRight className="w-3 h-3" />
+                <span className="font-semibold" style={{ color: "var(--foreground)" }}>{activeItem.label}</span>
+              </div>
               <h2 className="text-lg font-bold mb-4" style={{ color: "var(--foreground)" }}>{activeItem.label}</h2>
               <SectionContent section={active} />
             </div>
@@ -1751,6 +1753,12 @@ export default function SettingsPage() {
 
         {/* ── Desktop Content ── */}
         <div className="hidden md:block flex-1 min-w-0 pb-[80px]">
+          {/* Breadcrumb: Settings > [Active Section] */}
+          <div className="flex items-center gap-1.5 text-xs mb-4" style={{ color: "var(--muted-foreground)" }}>
+            <span>Settings</span>
+            <ChevronRight className="w-3 h-3" />
+            <span className="font-semibold" style={{ color: "var(--foreground)" }}>{activeItem.label}</span>
+          </div>
           <AnimatePresence mode="wait">
             <motion.div
               key={active}

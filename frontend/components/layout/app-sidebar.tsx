@@ -72,7 +72,7 @@ const navSections: NavSection[] = [
     items: [
       { label: "Analytics", href: "/analytics", icon: BarChart3 },
       { label: "Market Intel", href: "/market", icon: TrendingUp },
-      { label: "AI Assistant", href: "/ai", icon: Sparkles },
+      { label: "AI Assistant", href: "/assistant", icon: Sparkles },
     ],
   },
   {
