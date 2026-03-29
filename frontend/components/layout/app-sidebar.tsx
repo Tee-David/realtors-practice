@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/lib/supabase";
+import { signOut } from "@/lib/auth-client";
 import { ThemeSwitch } from "@/components/ui/theme-switch";
 import { motion, useAnimation, PanInfo, useMotionValue, useTransform } from "motion/react";
 import {
@@ -311,7 +311,7 @@ function SidebarContent({
 
   const handleLogout = async () => {
     try {
-      await supabase.auth.signOut();
+      await signOut();
     } catch (error) {
       console.error("Sign out error:", error);
     } finally {

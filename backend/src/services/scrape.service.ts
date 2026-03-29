@@ -139,6 +139,21 @@ export class ScrapeService {
   static async startJob(input: StartJobInput, userId?: string) {
     const { siteIds, type = "PASSIVE_BULK", maxListingsPerSite = 100, parameters, searchQuery } = input;
 
+    // Guard: prevent concurrent scrape jobs
+    const existingJob = await prisma.scrapeJob.findFirst({
+      where: {
+        status: { in: ["RUNNING", "PENDING"] },
+        type: { not: "LEARN_SITE" },
+      },
+      select: { id: true, status: true, startedAt: true },
+    });
+
+    if (existingJob) {
+      throw new Error(
+        "A scrape job is already running. Please wait for it to complete or cancel it first."
+      );
+    }
+
     // Fetch site configs
     const sites = await prisma.site.findMany({
       where: { id: { in: siteIds }, enabled: true, deletedAt: null },
@@ -148,28 +163,25 @@ export class ScrapeService {
       throw new Error("No valid enabled sites found for the given IDs");
     }
 
-    // Auto-learn unlearned sites before scrape if setting is enabled
-    try {
-      const siSettings = await SiteIntelligenceService.getSettings();
-      if (siSettings.si_auto_learn_before_scrape) {
-        const unlearnedSites = sites.filter(s => s.learnStatus !== "LEARNED");
-        if (unlearnedSites.length > 0) {
-          Logger.info(
-            `Auto-learn before scrape: ${unlearnedSites.length} unlearned site(s) — ` +
-            unlearnedSites.map(s => s.name).join(", ")
-          );
-          for (const site of unlearnedSites) {
-            try {
-              await SiteIntelligenceService.learnSite(site.id, userId);
-              Logger.info(`Auto-learn dispatched for ${site.name} (${site.id})`);
-            } catch (err: any) {
-              Logger.warn(`Auto-learn failed for ${site.name}: ${err.message}`);
-            }
-          }
-        }
+    // Check for unlearned sites — skip them instead of blocking the scrape with synchronous learning
+    const unlearnedSites = sites.filter(s => s.learnStatus !== "LEARNED");
+    if (unlearnedSites.length > 0) {
+      Logger.warn(
+        `Skipping ${unlearnedSites.length} unlearned site(s) from scrape: ` +
+        unlearnedSites.map(s => s.name).join(", ") +
+        `. Use learnAndScrape() or learn them first via Site Intelligence.`
+      );
+      // Remove unlearned sites from this scrape run
+      const unlearnedIds = new Set(unlearnedSites.map(s => s.id));
+      const learnedSites = sites.filter(s => !unlearnedIds.has(s.id));
+      if (learnedSites.length === 0) {
+        throw new Error(
+          "All selected sites are unlearned. Please learn them first via Site Intelligence before scraping."
+        );
       }
-    } catch (err: any) {
-      Logger.warn(`Failed to check auto-learn settings: ${err.message}`);
+      // Replace `sites` with only learned ones for the rest of the method
+      sites.length = 0;
+      sites.push(...learnedSites);
     }
 
     // Split sites into batches
@@ -367,6 +379,40 @@ export class ScrapeService {
     }
 
     return job;
+  }
+
+  /**
+   * Learn unlearned sites first, then start a scrape job.
+   * Unlike startJob() which skips unlearned sites, this method dispatches
+   * learn jobs for them and then starts the scrape (with only already-learned sites).
+   */
+  static async learnAndScrape(input: StartJobInput, userId?: string) {
+    const sites = await prisma.site.findMany({
+      where: { id: { in: input.siteIds }, enabled: true, deletedAt: null },
+      select: { id: true, name: true, learnStatus: true },
+    });
+
+    const unlearnedSites = sites.filter(s => s.learnStatus !== "LEARNED");
+
+    // Dispatch learn jobs for unlearned sites (non-blocking)
+    if (unlearnedSites.length > 0) {
+      Logger.info(
+        `learnAndScrape: dispatching learn for ${unlearnedSites.length} unlearned site(s): ` +
+        unlearnedSites.map(s => s.name).join(", ")
+      );
+      for (const site of unlearnedSites) {
+        try {
+          await SiteIntelligenceService.learnSite(site.id, userId);
+          Logger.info(`Learn dispatched for ${site.name} (${site.id})`);
+        } catch (err: any) {
+          Logger.warn(`Learn dispatch failed for ${site.name}: ${err.message}`);
+        }
+      }
+    }
+
+    // Start scrape with whatever sites are already learned
+    // startJob() will filter out unlearned ones automatically
+    return this.startJob(input, userId);
   }
 
   /**

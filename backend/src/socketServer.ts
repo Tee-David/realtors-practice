@@ -1,7 +1,9 @@
 import { Server as HttpServer } from "http";
 import { Server, Namespace } from "socket.io";
 import { config } from "./config/env";
-import { supabaseAdmin } from "./utils/supabase";
+import { auth } from "./lib/auth";
+import { fromNodeHeaders } from "better-auth/node";
+import prisma from "./prismaClient";
 import { Logger } from "./utils/logger.util";
 
 let io: Server;
@@ -24,24 +26,27 @@ export function createSocketServer(httpServer: HttpServer): Server {
     transports: ["websocket", "polling"],
   });
 
-  // --- Auth middleware ---
+  // --- Auth middleware (Better Auth session cookie) ---
   const authMiddleware = async (socket: any, next: any) => {
     try {
-      const token =
-        socket.handshake.auth?.token ||
-        socket.handshake.headers?.authorization?.replace("Bearer ", "");
+      // Better Auth uses httpOnly cookies — extract from handshake headers
+      const headers = socket.handshake.headers;
+      const session = await auth.api.getSession({
+        headers: fromNodeHeaders(headers as any),
+      });
 
-      if (!token) {
+      if (!session?.user) {
         return next(new Error("Authentication required"));
       }
 
-      const {
-        data: { user },
-        error,
-      } = await supabaseAdmin.auth.getUser(token);
+      // Look up our internal user by email
+      const user = await prisma.user.findUnique({
+        where: { email: session.user.email },
+        select: { id: true, email: true },
+      });
 
-      if (error || !user) {
-        return next(new Error("Invalid token"));
+      if (!user) {
+        return next(new Error("User not found"));
       }
 
       socket.data.userId = user.id;

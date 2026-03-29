@@ -356,6 +356,7 @@ function SecuritySection() {
   const [showNew, setShowNew] = useState(false);
   const [googleLinked, setGoogleLinked] = useState(false);
   const [googleLinking, setGoogleLinking] = useState(false);
+  const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
   const [changingPw, setChangingPw] = useState(false);
@@ -366,52 +367,36 @@ function SecuritySection() {
   // Check if Google identity is already linked — also re-checks after OAuth redirect
   useEffect(() => {
     const checkGoogleLink = async () => {
-      const { supabase } = await import("@/lib/supabase");
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user?.identities) {
-        setGoogleLinked(user.identities.some((id: any) => id.provider === "google"));
+      const { authClient } = await import("@/lib/auth-client");
+      const { data: accounts } = await authClient.listAccounts();
+      if (accounts) {
+        setGoogleLinked(accounts.some((acc: any) => acc.providerId === "google"));
       }
       setGoogleLinking(false);
     };
     checkGoogleLink();
-
-    // Listen for auth state changes (covers returning from OAuth redirect)
-    let sub: { unsubscribe: () => void } | undefined;
-    (async () => {
-      const { supabase } = await import("@/lib/supabase");
-      const { data } = supabase.auth.onAuthStateChange(() => { checkGoogleLink(); });
-      sub = data.subscription;
-    })();
-    return () => { sub?.unsubscribe(); };
   }, []);
 
-  // Load current session info
+  // Load active sessions from Better Auth
   useEffect(() => {
-    const loadSession = async () => {
+    const loadSessions = async () => {
       try {
-        const { supabase } = await import("@/lib/supabase");
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-          const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
-          const { browser, os } = parseUserAgent(ua);
-          const lastRefresh = session.expires_at
-            ? new Date(session.expires_at * 1000)
-            : new Date();
+        const { authClient } = await import("@/lib/auth-client");
+        const { data: activeSessions } = await authClient.listSessions();
+        if (activeSessions && activeSessions.length > 0) {
+          const { getSession } = await import("@/lib/auth-client");
+          const { data: currentSession } = await getSession();
+          const currentToken = currentSession?.session?.token;
 
-          setSessions([{
-            browser,
-            os,
-            ip: "", // IP is not available from client-side Supabase auth
-            lastActive: "Now",
-            current: true,
-          }]);
+          const mapped: SessionInfo[] = activeSessions.map((s: any) => {
+            const ua = s.userAgent || (typeof navigator !== "undefined" ? navigator.userAgent : "");
+            const { browser, os } = parseUserAgent(ua);
+            const isCurrent = s.token === currentToken;
 
-          // Check for last_sign_in_at from user metadata for additional context
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user?.last_sign_in_at) {
-            const lastSignIn = new Date(user.last_sign_in_at);
+            // Calculate last active from updatedAt or createdAt
+            const lastUpdate = new Date(s.updatedAt || s.createdAt);
             const now = new Date();
-            const diffMs = now.getTime() - lastSignIn.getTime();
+            const diffMs = now.getTime() - lastUpdate.getTime();
             const diffMins = Math.floor(diffMs / 60000);
             const diffHrs = Math.floor(diffMins / 60);
             const diffDays = Math.floor(diffHrs / 24);
@@ -421,14 +406,19 @@ function SecuritySection() {
               else if (diffHrs > 0) lastActiveStr = `${diffHrs}h ago`;
               else lastActiveStr = `${diffMins}m ago`;
             }
-            setSessions([{
+
+            return {
               browser,
               os,
-              ip: "",
-              lastActive: lastActiveStr,
-              current: true,
-            }]);
-          }
+              ip: s.ipAddress || "",
+              lastActive: isCurrent ? "Now" : lastActiveStr,
+              current: isCurrent,
+            };
+          });
+
+          // Sort so current session appears first
+          mapped.sort((a, b) => (a.current ? -1 : b.current ? 1 : 0));
+          setSessions(mapped);
         }
       } catch {
         // Silently fail — sessions will just show empty
@@ -436,14 +426,14 @@ function SecuritySection() {
         setSessionsLoading(false);
       }
     };
-    loadSession();
+    loadSessions();
   }, []);
 
   const handleRevokeOtherSessions = async () => {
     try {
       setRevokingOthers(true);
-      const { supabase } = await import("@/lib/supabase");
-      const { error } = await supabase.auth.signOut({ scope: "others" });
+      const { authClient } = await import("@/lib/auth-client");
+      const { error } = await authClient.revokeOtherSessions();
       if (error) throw error;
       toast.success("All other sessions have been revoked");
     } catch (err: any) {
@@ -456,23 +446,19 @@ function SecuritySection() {
   const handleGoogleLink = async () => {
     try {
       setGoogleLinking(true);
-      const { supabase } = await import("@/lib/supabase");
+      const { authClient } = await import("@/lib/auth-client");
 
       if (googleLinked) {
         // Unlink Google identity
-        const { data: { user } } = await supabase.auth.getUser();
-        const googleIdentity = user?.identities?.find((id: any) => id.provider === "google");
-        if (googleIdentity) {
-          const { error } = await supabase.auth.unlinkIdentity(googleIdentity);
-          if (error) throw error;
-          setGoogleLinked(false);
-          toast.success("Google account unlinked");
-        }
+        const { error } = await authClient.unlinkAccount({ providerId: "google" });
+        if (error) throw error;
+        setGoogleLinked(false);
+        toast.success("Google account unlinked");
       } else {
         // Link Google identity — redirects to Google OAuth
-        const { error } = await supabase.auth.linkIdentity({
+        const { error } = await authClient.linkSocial({
           provider: "google",
-          options: { redirectTo: `${window.location.origin}/settings` },
+          callbackURL: "/settings",
         });
         if (error) throw error;
       }
@@ -484,6 +470,10 @@ function SecuritySection() {
   };
 
   const handlePasswordChange = async () => {
+    if (!currentPw) {
+      toast.error("Current password is required");
+      return;
+    }
     if (!newPw || newPw.length < 8) {
       toast.error("Password must be at least 8 characters");
       return;
@@ -494,11 +484,15 @@ function SecuritySection() {
     }
     try {
       setChangingPw(true);
-      const { supabase } = await import("@/lib/supabase");
-      const { error } = await supabase.auth.updateUser({ password: newPw });
+      const { authClient } = await import("@/lib/auth-client");
+      const { error } = await authClient.changePassword({
+        currentPassword: currentPw,
+        newPassword: newPw,
+        revokeOtherSessions: true,
+      });
       if (error) throw error;
       toast.success("Password updated successfully");
-      setNewPw(""); setConfirmPw("");
+      setCurrentPw(""); setNewPw(""); setConfirmPw("");
     } catch (err: any) {
       toast.error(err?.message || "Failed to update password");
     } finally {
@@ -512,6 +506,12 @@ function SecuritySection() {
       <Card>
         <CardHeader icon={Lock} title="Change Password" />
         <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>Current Password</label>
+            <div className="relative">
+              <input type={showNew ? "text" : "password"} value={currentPw} onChange={e => setCurrentPw(e.target.value)} className={inputBase + " pr-10"} style={inputStyle} placeholder="••••••••" />
+            </div>
+          </div>
           <div>
             <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted-foreground)" }}>New Password</label>
             <div className="relative">
@@ -925,7 +925,7 @@ function EmailSection() {
       return (res.data.data || []) as Array<{ id: string; name: string; html: string; design: any; updatedAt: string }>;
     },
   });
-  const savedTemplateMap = new Map((savedTemplates || []).map(t => [t.name, t]));
+  const savedTemplateMap = new globalThis.Map((savedTemplates || []).map((t: { id: string; name: string; html: string; design: any; updatedAt: string }) => [t.name, t]));
 
   const handleTestEmail = async () => {
     try {
@@ -1086,7 +1086,7 @@ function AboutSection() {
             { label: "Environment",  value: process.env.NODE_ENV || "production" },
             { label: "Database",     value: "PostgreSQL (CockroachDB)" },
             { label: "Search",       value: "Meilisearch" },
-            { label: "Auth",         value: "Supabase" },
+            { label: "Auth",         value: "Better Auth" },
             { label: "Built by",     value: "WDC Solutions" },
           ].map(row => (
             <div key={row.label} className="flex items-center justify-between py-2 border-b last:border-0" style={{ borderColor: "var(--border)" }}>

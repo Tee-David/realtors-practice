@@ -235,23 +235,37 @@ export class CronService {
 
   /**
    * Purge stale data according to retention policy:
-   *   - Properties with status EXPIRED or SOLD older than 90 days
-   *   - Audit logs older than 180 days
-   *   - Scrape logs older than 30 days
+   *   - Properties with status EXPIRED or SOLD older than 90 days → soft delete (set deletedAt)
+   *   - Properties already soft-deleted for 30+ days → hard delete permanently
+   *   - Audit logs older than 180 days → hard delete
+   *   - Scrape logs older than 30 days → hard delete
    */
   private static async purgeStaleData() {
     const now = new Date();
 
-    // 1. Delete EXPIRED / SOLD properties older than 90 days
-    const propertyThreshold = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-    const deletedProperties = await prisma.property.deleteMany({
+    // 1a. Soft-delete EXPIRED / SOLD properties older than 90 days (that haven't been soft-deleted yet)
+    const softDeleteThreshold = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+    const softDeletedProperties = await prisma.property.updateMany({
       where: {
         status: { in: ["EXPIRED", "SOLD"] },
-        updatedAt: { lt: propertyThreshold },
+        updatedAt: { lt: softDeleteThreshold },
+        deletedAt: null,
+      },
+      data: { deletedAt: now },
+    });
+    if (softDeletedProperties.count > 0) {
+      Logger.info(`[PURGE] Soft-deleted ${softDeletedProperties.count} expired/sold properties older than 90 days`);
+    }
+
+    // 1b. Hard-delete properties that have been soft-deleted for 30+ days
+    const hardDeleteThreshold = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const hardDeletedProperties = await prisma.property.deleteMany({
+      where: {
+        deletedAt: { not: null, lt: hardDeleteThreshold },
       },
     });
-    if (deletedProperties.count > 0) {
-      Logger.info(`[PURGE] Deleted ${deletedProperties.count} expired/sold properties older than 90 days`);
+    if (hardDeletedProperties.count > 0) {
+      Logger.info(`[PURGE] Hard-deleted ${hardDeletedProperties.count} properties soft-deleted 30+ days ago`);
     }
 
     // 2. Delete audit logs older than 180 days
@@ -277,12 +291,12 @@ export class CronService {
     }
 
     // Summary
-    const total = deletedProperties.count + deletedAuditLogs.count + deletedScrapeLogs.count;
+    const total = softDeletedProperties.count + hardDeletedProperties.count + deletedAuditLogs.count + deletedScrapeLogs.count;
     if (total === 0) {
       Logger.info("[PURGE] No stale data to purge");
     } else {
       Logger.info(
-        `[PURGE] Total purged: ${total} records (${deletedProperties.count} properties, ${deletedAuditLogs.count} audit logs, ${deletedScrapeLogs.count} scrape logs)`
+        `[PURGE] Total purged: ${total} records (${softDeletedProperties.count} soft-deleted, ${hardDeletedProperties.count} hard-deleted properties, ${deletedAuditLogs.count} audit logs, ${deletedScrapeLogs.count} scrape logs)`
       );
     }
   }

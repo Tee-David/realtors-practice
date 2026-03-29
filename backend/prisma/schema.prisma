@@ -98,7 +98,6 @@ enum NotificationType {
 
 model User {
   id            String    @id @default(cuid())
-  supabaseId    String    @unique
   email         String    @unique
   role          UserRole  @default(VIEWER)
   isActive      Boolean   @default(true)
@@ -137,9 +136,55 @@ model User {
   deletedAt     DateTime?
 
   @@index([email])
-  @@index([supabaseId])
   @@index([role])
   @@index([deletedAt])
+}
+
+// ==================== BETTER AUTH TABLES ====================
+
+model BetterAuthSession {
+  id             String    @id
+  expiresAt      DateTime
+  token          String    @unique
+  ipAddress      String?
+  userAgent      String?
+  userId         String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@map("session")
+  @@index([userId])
+  @@index([token])
+}
+
+model BetterAuthAccount {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@map("account")
+  @@index([userId])
+}
+
+model BetterAuthVerification {
+  id         String    @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@map("verification")
 }
 
 model Invitation {

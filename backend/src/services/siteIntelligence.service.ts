@@ -42,6 +42,23 @@ export class SiteIntelligenceService {
     if (!site) throw new Error("Site not found");
     if (site.deletedAt) throw new Error("Site has been deleted");
 
+    // Check relearn interval — skip if recently learned
+    const siSettings = await SiteIntelligenceService.getSettings();
+    if (
+      site.learnStatus === "LEARNED" &&
+      site.learnedAt &&
+      siSettings.si_relearn_interval_days > 0
+    ) {
+      const daysSinceLearn =
+        (Date.now() - new Date(site.learnedAt).getTime()) / (24 * 60 * 60 * 1000);
+      if (daysSinceLearn < siSettings.si_relearn_interval_days) {
+        throw new Error(
+          `Site was learned ${Math.round(daysSinceLearn)} day(s) ago. ` +
+          `Relearn interval is ${siSettings.si_relearn_interval_days} days. Skipping.`
+        );
+      }
+    }
+
     // Guard against duplicate learn — if already LEARNING, check if the job is stale
     if (site.learnStatus === "LEARNING" && site.learnJobId) {
       const existingJob = await prisma.scrapeJob.findUnique({
@@ -82,10 +99,7 @@ export class SiteIntelligenceService {
       data: { learnStatus: "LEARNING", learnJobId: job.id },
     });
 
-    // Read SI settings for the CSS confidence threshold
-    const siSettings = await SiteIntelligenceService.getSettings();
-
-    // Build learn payload
+    // Build learn payload (siSettings already loaded above for relearn interval check)
     const selectors = (site.selectors || {}) as Record<string, any>;
     const learnPayload = {
       jobId: job.id,

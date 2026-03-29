@@ -150,12 +150,12 @@ function HeroKpi({ value, trend, isLoading }: { value: number; trend: number; is
         </span>
       </div>
 
-      <div>
+      <div className="min-w-0">
         <p className="text-sm font-medium mb-1" style={{ color: "rgba(255,255,255,0.55)" }}>Total Properties</p>
         {isLoading ? (
           <div className="h-10 w-28 rounded-lg animate-pulse" style={{ backgroundColor: "rgba(255,255,255,0.1)" }} />
         ) : (
-          <div className="text-4xl font-black text-white"><AnimatedCounter value={value} compact /></div>
+          <div className="text-3xl sm:text-4xl font-black text-white truncate"><AnimatedCounter value={value} compact /></div>
         )}
         <div className="flex items-center gap-1.5 mt-2">
           {trend >= 0
@@ -179,22 +179,22 @@ function MiniKpi({ label, value, trend, icon: Icon, color, bg, prefix = "", isLo
 }) {
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-      className="rounded-2xl border p-4 flex items-start justify-between"
+      className="rounded-2xl border p-3 sm:p-4 flex items-start justify-between gap-2 overflow-hidden"
       style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--muted-foreground)" }}>{label}</p>
+      <div className="min-w-0 flex-1">
+        <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider mb-1 sm:mb-1.5 truncate" style={{ color: "var(--muted-foreground)" }}>{label}</p>
         {isLoading
           ? <div className="h-7 w-16 rounded animate-pulse" style={{ backgroundColor: "var(--secondary)" }} />
-          : <div className="text-xl font-bold" style={{ color: "var(--foreground)" }}>{typeof value === "number" ? <AnimatedCounter value={value} prefix={prefix} compact /> : `${prefix}${value}`}</div>}
+          : <div className="text-base sm:text-xl font-bold truncate" style={{ color: "var(--foreground)" }}>{typeof value === "number" ? <AnimatedCounter value={value} prefix={prefix} compact /> : `${prefix}${value}`}</div>}
         {trend != null && (
-          <div className="flex items-center gap-0.5 mt-1.5" style={{ color: trend >= 0 ? "#16a34a" : "#dc2626" }}>
+          <div className="flex items-center gap-0.5 mt-1 sm:mt-1.5" style={{ color: trend >= 0 ? "#16a34a" : "#dc2626" }}>
             {trend >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
             <span className="text-[10px] font-bold">{trend > 0 ? "+" : ""}{trend}%</span>
           </div>
         )}
       </div>
-      <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: bg }}>
-        <Icon className="w-5 h-5" style={{ color }} />
+      <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: bg }}>
+        <Icon className="w-4 h-4 sm:w-5 sm:h-5" style={{ color }} />
       </div>
     </motion.div>
   );
@@ -304,17 +304,17 @@ function TrendChart({ data, timeRange, onTimeRange }: { data: { name: string; pr
 
   return (
     <div className="rounded-2xl border p-5 h-full flex flex-col" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
-      <div className="flex items-start justify-between mb-2">
-        <div>
+      <div className="flex flex-col sm:flex-row items-start justify-between gap-2 mb-2">
+        <div className="min-w-0">
           <h3 className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>Properties Over Time</h3>
           <div className="flex items-baseline gap-2 mt-1">
-            <div className="text-2xl font-bold flex items-center" style={{ color: "var(--foreground)" }}><AnimatedCounter value={totalAll} compact /></div>
-            <span className="text-xs px-2 py-0.5 rounded-full font-bold flex items-center" style={{ backgroundColor: "rgba(22,163,74,0.12)", color: "#16a34a" }}>
+            <div className="text-xl sm:text-2xl font-bold flex items-center" style={{ color: "var(--foreground)" }}><AnimatedCounter value={totalAll} compact /></div>
+            <span className="text-xs px-2 py-0.5 rounded-full font-bold flex items-center shrink-0" style={{ backgroundColor: "rgba(22,163,74,0.12)", color: "#16a34a" }}>
               +<AnimatedCounter value={totalNew} compact /> new
             </span>
           </div>
         </div>
-        <div data-tour="time-range" className="flex gap-1 p-0.5 rounded-lg" style={{ backgroundColor: "var(--secondary)" }}>
+        <div data-tour="time-range" className="flex gap-1 p-0.5 rounded-lg shrink-0" style={{ backgroundColor: "var(--secondary)" }}>
           {(["7d", "30d", "90d", "1y"] as TimeRange[]).map(r => (
             <TimeBtn key={r} value={r} active={timeRange === r} onChange={() => onTimeRange(r)} />
           ))}
@@ -402,7 +402,7 @@ function PriceTrendsChart({ data }: { data: { month: string; listingType: string
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
             <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
             <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} tickFormatter={fmtPrice} />
-            <Tooltip {...tooltipStyle} formatter={(value: number) => fmtPrice(value)} />
+            <Tooltip {...tooltipStyle} formatter={(value: any) => fmtPrice(value as number)} />
             <Line type="monotone" dataKey="sale" name="Avg Sale Price" stroke="#2563eb" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
             <Line type="monotone" dataKey="rent" name="Avg Rent Price" stroke="#ea580c" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
           </LineChart>
@@ -694,7 +694,7 @@ export default function AnalyticsPage() {
             {listingTypeDist && listingTypeDist.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={listingTypeDist} dataKey="count" nameKey="listingType" cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={2} label={({ listingType, percent }) => `${listingType} ${(percent * 100).toFixed(0)}%`}>
+                  <Pie data={listingTypeDist} dataKey="count" nameKey="listingType" cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={2} label={(props: any) => `${props.listingType} ${((props.percent ?? 0) * 100).toFixed(0)}%`}>
                     {listingTypeDist.map((_, i) => <Cell key={i} fill={["#0001FC", "#FF6600", "#0a6906", "#9333ea", "#64748b"][i % 5]} />)}
                   </Pie>
                   <Tooltip contentStyle={{ backgroundColor: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} />
@@ -743,7 +743,7 @@ export default function AnalyticsPage() {
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                   <XAxis type="number" tick={{ fontSize: 10 }} stroke="var(--muted-foreground)" tickFormatter={(v) => `₦${(v / 1000).toFixed(0)}k`} />
                   <YAxis type="category" dataKey="area" tick={{ fontSize: 10 }} stroke="var(--muted-foreground)" width={75} />
-                  <Tooltip contentStyle={{ backgroundColor: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} formatter={(v: number) => [`₦${v.toLocaleString()}/sqm`, "Avg Price"]} />
+                  <Tooltip contentStyle={{ backgroundColor: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} formatter={(v: any) => [`₦${(v as number).toLocaleString()}/sqm`, "Avg Price"]} />
                   <Bar dataKey="avgPricePerSqm" fill="#0001FC" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>

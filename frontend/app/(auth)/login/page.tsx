@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { signIn } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -25,32 +25,28 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
 
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      const result = await signIn.email({
+        email,
+        password,
+        callbackURL: "/",
+        rememberMe,
+      });
 
-    if (signInError) {
-      setError(signInError.message);
+      if (result.error) {
+        setError(result.error.message || "Invalid email or password");
+        setLoading(false);
+        return;
+      }
+
+      toast.success("Login successful! Redirecting...");
+      setTimeout(() => {
+        router.push("/");
+      }, 1000);
+    } catch (err: any) {
+      setError(err.message || "Login failed");
       setLoading(false);
-      return;
     }
-
-    // Store remember-me preference
-    if (rememberMe) {
-      localStorage.setItem("rp-remember-me", "true");
-      localStorage.removeItem("rp-no-persist");
-    } else {
-      localStorage.removeItem("rp-remember-me");
-      localStorage.setItem("rp-no-persist", "true");
-      sessionStorage.setItem("rp-session-only", "true");
-    }
-
-    toast.success("Login successful! Redirecting...");
-
-    setTimeout(() => {
-      router.push("/");
-    }, 1000);
   }
 
   return (
@@ -232,14 +228,13 @@ export default function LoginPage() {
             onClick={async () => {
               setGoogleLoading(true);
               setError("");
-              const { error: googleError } = await supabase.auth.signInWithOAuth({
-                provider: "google",
-                options: {
-                  redirectTo: `${window.location.origin}/`,
-                },
-              });
-              if (googleError) {
-                setError(googleError.message);
+              try {
+                await signIn.social({
+                  provider: "google",
+                  callbackURL: "/",
+                });
+              } catch (err: any) {
+                setError(err.message || "Google sign-in failed");
                 setGoogleLoading(false);
               }
             }}

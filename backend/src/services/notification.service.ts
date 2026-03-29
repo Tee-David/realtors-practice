@@ -15,6 +15,45 @@ export class NotificationService {
     message: string;
     data?: Record<string, unknown>;
   }) {
+    // Respect quiet hours
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: data.userId },
+        select: {
+          notifQuietHoursEnabled: true,
+          notifQuietStart: true,
+          notifQuietEnd: true,
+        },
+      });
+
+      if (user?.notifQuietHoursEnabled && user.notifQuietStart != null && user.notifQuietEnd != null) {
+        const now = new Date();
+        const currentHour = now.getHours(); // Server time (Africa/Lagos expected)
+        const start = user.notifQuietStart;
+        const end = user.notifQuietEnd;
+
+        const isQuiet = start <= end
+          ? currentHour >= start && currentHour < end
+          : currentHour >= start || currentHour < end;
+
+        if (isQuiet) {
+          // Still persist the notification but skip the real-time broadcast
+          const notification = await prisma.notification.create({
+            data: {
+              userId: data.userId,
+              type: data.type,
+              title: data.title,
+              message: data.message,
+              data: data.data as any,
+            },
+          });
+          Logger.debug(`[Notification] Created during quiet hours (no broadcast) for user ${data.userId}`);
+          return notification;
+        }
+      }
+    } catch (err: any) {
+      Logger.warn(`[Notification] Failed to check quiet hours: ${err.message}`);
+    }
     const notification = await prisma.notification.create({
       data: {
         userId: data.userId,

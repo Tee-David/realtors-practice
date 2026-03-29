@@ -282,7 +282,7 @@ function AddPropertyModal({
               No properties found
             </p>
           ) : (
-            filtered.map((p) => {
+            filtered.map((p: any) => {
               const image = Array.isArray(p.images) && p.images.length > 0 ? p.images[0] : null;
               return (
                 <button

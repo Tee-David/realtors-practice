@@ -12,6 +12,38 @@ const router = Router();
 router.use(internalAuth);
 
 /**
+ * GET /internal/scrape/recent-urls?siteId=X&hours=24
+ * Returns URLs of properties scraped within the last N hours for a given site.
+ * The Python scraper can pre-load these to skip already-scraped URLs.
+ */
+router.get("/scrape/recent-urls", async (req: Request, res: Response) => {
+  try {
+    const { siteId, hours } = req.query;
+    if (!siteId || typeof siteId !== "string") {
+      return res.status(400).json({ error: "siteId query parameter required" });
+    }
+
+    const hoursNum = Math.min(Math.max(parseInt(String(hours), 10) || 24, 1), 168); // clamp 1-168h (7 days)
+    const since = new Date(Date.now() - hoursNum * 60 * 60 * 1000);
+
+    const properties = await prisma.property.findMany({
+      where: {
+        siteId,
+        deletedAt: null,
+        scrapeTimestamp: { gte: since },
+      },
+      select: { listingUrl: true },
+    });
+
+    const urls = properties.map((p) => p.listingUrl).filter(Boolean);
+    return res.json({ success: true, siteId, hours: hoursNum, count: urls.length, urls });
+  } catch (err: any) {
+    Logger.error(`recent-urls error: ${err.message}`);
+    return res.status(500).json({ error: "Internal error" });
+  }
+});
+
+/**
  * POST /internal/scrape-results
  * Receive final scraped properties from Python scraper.
  */

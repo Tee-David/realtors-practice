@@ -7,22 +7,17 @@ if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL environment variable is required");
 }
 
-if (!process.env.SUPABASE_URL) {
-  throw new Error("SUPABASE_URL environment variable is required");
-}
-
-if (!process.env.SUPABASE_ANON_KEY) {
-  throw new Error("SUPABASE_ANON_KEY environment variable is required");
-}
-
 export const config = {
   env: process.env.NODE_ENV || "development",
   port: parseInt(process.env.PORT || "5000", 10),
   databaseUrl: process.env.DATABASE_URL,
-  supabase: {
-    url: process.env.SUPABASE_URL,
-    anonKey: process.env.SUPABASE_ANON_KEY,
-    serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+  betterAuth: {
+    secret: process.env.BETTER_AUTH_SECRET || "",
+    url: process.env.BETTER_AUTH_URL || "http://localhost:5000",
+  },
+  google: {
+    clientId: process.env.GOOGLE_CLIENT_ID || "",
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
   },
   cors: {
     origin: process.env.CORS_ORIGIN || "http://localhost:3000",

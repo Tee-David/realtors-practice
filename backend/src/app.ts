@@ -155,6 +155,11 @@ if (config.env !== "production") {
   });
 }
 
+// Better Auth handler — handles all /api/auth/* routes for sign-in, sign-up, OAuth, sessions
+import { toNodeHandler } from "better-auth/node";
+import { auth } from "./lib/auth";
+app.all("/api/auth/*", toNodeHandler(auth));
+
 // API routes — unversioned (backwards compatibility)
 app.use("/api", routes);
 

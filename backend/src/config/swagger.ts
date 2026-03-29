@@ -12,7 +12,7 @@ const options: swaggerJsdoc.Options = {
       description:
         "Nigerian property intelligence platform API. Scrapes, validates, enriches, and serves Nigerian real estate listings.\n\n" +
         "## Authentication\n" +
-        "Most endpoints require a Bearer JWT token obtained from Supabase Auth via `/auth/login`.\n" +
+        "Most endpoints require a valid session cookie from Better Auth.\n" +
         "Internal endpoints (scraper callbacks) use the `X-Internal-Key` header.\n\n" +
         "## Rate Limits\n" +
         "- General: 300 req / 15 min (production)\n" +

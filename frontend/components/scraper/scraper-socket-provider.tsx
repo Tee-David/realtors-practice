@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import io from "socket.io-client";
-import { supabase } from "@/lib/supabase";
+// Better Auth uses httpOnly cookies — no token needed for socket
 import { useScraperStore } from "@/stores/scraper-store";
 import { useScrapeJobs, type LiveProgress, type LiveProperty } from "@/hooks/use-scrape-jobs";
 import { useQueryClient } from "@tanstack/react-query";
@@ -101,18 +101,15 @@ export function ScraperSocketProvider() {
     let cancelled = false;
 
     const connect = async () => {
-      const { data } = await supabase.auth.getSession();
-      const token = data.session?.access_token ?? null;
-
       if (cancelled) return;
 
-      const socket = io(`${SOCKET_URL}/scrape`, {
-        auth: { token },
+      const socket = (io as any)(`${SOCKET_URL}/scrape`, {
         path: "/ws",
         autoConnect: true,
         reconnection: true,
         reconnectionDelay: 2000,
         reconnectionAttempts: Infinity,
+        withCredentials: true,
       });
 
       socket.on("connect", () => {

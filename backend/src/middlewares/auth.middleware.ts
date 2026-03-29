@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
-import { supabaseAdmin } from "../utils/supabase";
+import { auth } from "../lib/auth";
+import { fromNodeHeaders } from "better-auth/node";
 import prisma from "../prismaClient";
 
 declare global {
@@ -7,7 +8,6 @@ declare global {
     interface Request {
       user?: {
         id: string;
-        supabaseId: string;
         email: string;
         role: string;
       };
@@ -21,55 +21,48 @@ export async function authenticate(
   next: NextFunction
 ) {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith("Bearer ")) {
+    const session = await auth.api.getSession({
+      headers: fromNodeHeaders(req.headers),
+    });
+
+    if (!session || !session.user) {
       return res.status(401).json({
         success: false,
-        error: "Missing or invalid authorization header",
+        error: "Missing or invalid session",
       });
     }
 
-    const token = authHeader.split(" ")[1];
+    const email = session.user.email;
 
-    const {
-      data: { user: supabaseUser },
-      error,
-    } = await supabaseAdmin.auth.getUser(token);
-
-    if (error || !supabaseUser) {
-      return res.status(401).json({
-        success: false,
-        error: "Invalid or expired token",
-      });
-    }
-
-    // Find or create user in our database
-    const email = supabaseUser.email!;
+    // Force Super Admin role
     const superAdminEmails = (process.env.SUPER_ADMIN_EMAILS || "wedigcreativity@gmail.com")
       .split(",")
       .map((e) => e.trim().toLowerCase());
     const isSuperAdmin = superAdminEmails.includes(email.toLowerCase());
 
+    // Find user in our database by email
     let user = await prisma.user.findUnique({
-      where: { supabaseId: supabaseUser.id },
-      select: { id: true, supabaseId: true, email: true, role: true },
+      where: { email },
+      select: { id: true, email: true, role: true },
     });
 
     if (!user) {
+      // Auto-create user record on first login via Better Auth
       user = await prisma.user.create({
         data: {
-          supabaseId: supabaseUser.id,
           email,
+          firstName: session.user.name?.split(" ")[0] || undefined,
+          lastName: session.user.name?.split(" ").slice(1).join(" ") || undefined,
           role: isSuperAdmin ? "ADMIN" : "VIEWER",
         },
-        select: { id: true, supabaseId: true, email: true, role: true },
+        select: { id: true, email: true, role: true },
       });
     } else if (isSuperAdmin && user.role !== "ADMIN") {
       // Ensure super admin always has ADMIN role
       user = await prisma.user.update({
-        where: { supabaseId: supabaseUser.id },
+        where: { email },
         data: { role: "ADMIN" },
-        select: { id: true, supabaseId: true, email: true, role: true },
+        select: { id: true, email: true, role: true },
       });
     }
 

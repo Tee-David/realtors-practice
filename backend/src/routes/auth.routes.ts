@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import crypto from "crypto";
 import { authenticate } from "../middlewares/auth.middleware";
 import { authorize } from "../middlewares/role.middleware";
-import { supabaseAdmin } from "../utils/supabase";
+import { auth } from "../lib/auth";
 import prisma from "../prismaClient";
 import { sendSuccess, sendError } from "../utils/apiResponse.util";
 import { EmailService } from "../services/email.service";
@@ -81,15 +81,23 @@ router.post(
     try {
       const body = registerSchema.parse(req.body);
 
-      const { data: authData, error: authError } =
-        await supabaseAdmin.auth.admin.createUser({
+      // Check if user already exists
+      const existing = await prisma.user.findUnique({ where: { email: body.email } });
+      if (existing) {
+        return sendError(res, "A user with this email already exists", 400);
+      }
+
+      // Create Better Auth user
+      const authUser = await auth.api.signUpEmail({
+        body: {
           email: body.email,
           password: body.password,
-          email_confirm: true,
-        });
+          name: [body.firstName, body.lastName].filter(Boolean).join(" ") || body.email,
+        },
+      });
 
-      if (authError || !authData.user) {
-        return sendError(res, authError?.message || "Failed to create user", 400);
+      if (!authUser) {
+        return sendError(res, "Failed to create auth user", 400);
       }
 
       // Force Super Admin role
@@ -100,7 +108,6 @@ router.post(
 
       const user = await prisma.user.create({
         data: {
-          supabaseId: authData.user.id,
           email: body.email,
           firstName: body.firstName,
           lastName: body.lastName,
@@ -248,22 +255,22 @@ router.post("/register-with-code", async (req: Request, res: Response) => {
       return sendError(res, "This invitation code was sent to a different email address", 400);
     }
 
-    // Create Supabase user
-    const { data: authData, error: authError } =
-      await supabaseAdmin.auth.admin.createUser({
+    // Create Better Auth user
+    const authUser = await auth.api.signUpEmail({
+      body: {
         email: body.email,
         password: body.password,
-        email_confirm: true,
-      });
+        name: [body.firstName || invitation.firstName, body.lastName || invitation.lastName].filter(Boolean).join(" ") || body.email,
+      },
+    });
 
-    if (authError || !authData.user) {
-      return sendError(res, authError?.message || "Failed to create user", 400);
+    if (!authUser) {
+      return sendError(res, "Failed to create auth user", 400);
     }
 
     // Create Prisma user with the role from the invitation
     const user = await prisma.user.create({
       data: {
-        supabaseId: authData.user.id,
         email: body.email,
         firstName: body.firstName || invitation.firstName,
         lastName: body.lastName || invitation.lastName,

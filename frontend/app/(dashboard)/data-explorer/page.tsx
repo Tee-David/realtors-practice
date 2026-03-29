@@ -12,6 +12,7 @@ import {
   LayoutGrid, LayoutList, Columns, GripVertical, Clock, Trash2, Play, RefreshCcw,
 } from "lucide-react";
 import { AIPlaceholderCard } from "@/components/ai/ai-placeholder";
+import { SearchableSelect, SearchableMultiSelect } from "@/components/ui/searchable-select";
 import ModernLoader from "@/components/ui/modern-loader";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
@@ -899,8 +900,7 @@ function PropertyDetailSlideOver({
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
                 <SideSheetTitle
-                  className="font-display text-base leading-tight line-clamp-2"
-                  style={{ color: "var(--foreground)" }}
+                  className="font-display text-base leading-tight line-clamp-2 [color:var(--foreground)]"
                 >
                   {property.title}
                 </SideSheetTitle>
@@ -1639,7 +1639,18 @@ export default function DataExplorerPage() {
     title: "", listingUrl: "", source: "MANUAL", siteId: "",
     listingType: "SALE" as string, category: "RESIDENTIAL" as string,
     price: "", bedrooms: "", bathrooms: "", description: "", state: "", area: "", locationText: "",
+    imageUrls: [] as string[], currentImageUrl: "",
+    amenities: [] as string[],
   });
+
+  const NIGERIAN_AMENITIES = [
+    "Swimming Pool", "Gym / Fitness Center", "24hr Power Supply", "Borehole",
+    "Security / Gatehouse", "Parking Space", "Garden", "Balcony",
+    "Elevator / Lift", "CCTV", "Children Playground", "Boys Quarters (BQ)",
+    "Air Conditioning", "Ensuite Rooms", "Walk-in Closet", "Smart Home",
+    "Solar Panels", "Water Treatment", "Tennis Court", "Laundry Room",
+    "Generator", "Intercom", "Fiber Optic Internet", "Gated Estate",
+  ];
 
   const { data: sitesData } = useQuery({
     queryKey: ["sites-list"],
@@ -1663,6 +1674,7 @@ export default function DataExplorerPage() {
         title: "", listingUrl: "", source: "MANUAL", siteId: "", listingType: "SALE",
         category: "RESIDENTIAL", price: "", bedrooms: "", bathrooms: "", description: "",
         state: "", area: "", locationText: "",
+        imageUrls: [], currentImageUrl: "", amenities: [],
       });
     },
     onError: (err: any) => {
@@ -1686,6 +1698,8 @@ export default function DataExplorerPage() {
     if (createForm.price) payload.price = parseFloat(createForm.price);
     if (createForm.bedrooms) payload.bedrooms = parseInt(createForm.bedrooms);
     if (createForm.bathrooms) payload.bathrooms = parseInt(createForm.bathrooms);
+    if (createForm.imageUrls.length > 0) payload.images = createForm.imageUrls;
+    if (createForm.amenities.length > 0) payload.features = createForm.amenities;
     createProperty.mutate(payload);
   };
 
@@ -2520,38 +2534,14 @@ export default function DataExplorerPage() {
               {allSites.length === 0 ? (
                 <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>No sites configured.</p>
               ) : (
-                <div
-                  className="rounded-lg border max-h-36 overflow-y-auto"
-                  style={{ borderColor: "var(--border)" }}
-                >
-                  {allSites.map((site) => {
-                    const checked = draftFilters.siteIds.includes(site.id);
-                    return (
-                      <label
-                        key={site.id}
-                        className="flex items-center gap-3 px-3 py-2 cursor-pointer transition-colors text-sm"
-                        style={{ color: "var(--foreground)" }}
-                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--secondary)")}
-                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => {
-                            setDraftFilters((f) => ({
-                              ...f,
-                              siteIds: checked
-                                ? f.siteIds.filter((id) => id !== site.id)
-                                : [...f.siteIds, site.id],
-                            }));
-                          }}
-                          className="rounded accent-[var(--primary)]"
-                        />
-                        {site.name}
-                      </label>
-                    );
-                  })}
-                </div>
+                <SearchableMultiSelect
+                  values={draftFilters.siteIds}
+                  onChange={(v) => setDraftFilters((f) => ({ ...f, siteIds: v }))}
+                  options={allSites.map((site) => ({ value: site.id, label: site.name }))}
+                  placeholder="Select sites..."
+                  searchPlaceholder="Search sites..."
+                  maxHeight={144}
+                />
               )}
             </FilterSection>
 
@@ -2559,17 +2549,13 @@ export default function DataExplorerPage() {
             <FilterSection title="Location">
               <div>
                 <label className="block text-xs mb-1" style={{ color: "var(--muted-foreground)" }}>State</label>
-                <select
+                <SearchableSelect
                   value={draftFilters.state}
-                  onChange={(e) => setDraftFilters((f) => ({ ...f, state: e.target.value, area: "" }))}
-                  className={inputCls}
-                  style={inputStyle}
-                >
-                  <option value="">All States</option>
-                  {NIGERIAN_STATES.map((s) => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
+                  onChange={(v) => setDraftFilters((f) => ({ ...f, state: v, area: "" }))}
+                  options={NIGERIAN_STATES.map((s) => ({ value: s, label: s }))}
+                  placeholder="All States"
+                  searchPlaceholder="Search states..."
+                />
               </div>
               <div className="mt-2">
                 <label className="block text-xs mb-1" style={{ color: "var(--muted-foreground)" }}>
@@ -2783,17 +2769,13 @@ export default function DataExplorerPage() {
               {/* Site */}
               <div>
                 <label className="block text-xs font-medium mb-1" style={{ color: "var(--muted-foreground)" }}>Source Site *</label>
-                <select
+                <SearchableSelect
                   value={createForm.siteId}
-                  onChange={(e) => setCreateForm((f) => ({ ...f, siteId: e.target.value }))}
-                  className={inputCls}
-                  style={inputStyle}
-                >
-                  <option value="">Select a site...</option>
-                  {(sitesData || []).map((site: any) => (
-                    <option key={site.id} value={site.id}>{site.name}</option>
-                  ))}
-                </select>
+                  onChange={(v) => setCreateForm((f) => ({ ...f, siteId: v }))}
+                  options={(sitesData || []).map((site: any) => ({ value: site.id, label: site.name }))}
+                  placeholder="Select a site..."
+                  searchPlaceholder="Search sites..."
+                />
               </div>
               {/* Type + Category */}
               <div className="grid grid-cols-2 gap-3">
@@ -2867,12 +2849,12 @@ export default function DataExplorerPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium mb-1" style={{ color: "var(--muted-foreground)" }}>State</label>
-                  <input
+                  <SearchableSelect
                     value={createForm.state}
-                    onChange={(e) => setCreateForm((f) => ({ ...f, state: e.target.value }))}
+                    onChange={(v) => setCreateForm((f) => ({ ...f, state: v }))}
+                    options={NIGERIAN_STATES.map((s) => ({ value: s, label: s }))}
                     placeholder="e.g. Lagos"
-                    className={inputCls}
-                    style={inputStyle}
+                    searchPlaceholder="Search states..."
                   />
                 </div>
                 <div>
@@ -2897,6 +2879,133 @@ export default function DataExplorerPage() {
                   className={inputCls + " resize-none"}
                   style={inputStyle}
                 />
+              </div>
+
+              {/* ── Image URLs ─────────────────────────────────────────────── */}
+              <div>
+                <label className="block text-xs font-medium mb-1" style={{ color: "var(--muted-foreground)" }}>
+                  Image URLs
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    value={createForm.currentImageUrl}
+                    onChange={(e) => setCreateForm((f) => ({ ...f, currentImageUrl: e.target.value }))}
+                    placeholder="https://example.com/image.jpg"
+                    className={inputCls}
+                    style={inputStyle}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        const url = createForm.currentImageUrl.trim();
+                        if (url && !createForm.imageUrls.includes(url)) {
+                          setCreateForm((f) => ({
+                            ...f,
+                            imageUrls: [...f.imageUrls, url],
+                            currentImageUrl: "",
+                          }));
+                        }
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const url = createForm.currentImageUrl.trim();
+                      if (url && !createForm.imageUrls.includes(url)) {
+                        setCreateForm((f) => ({
+                          ...f,
+                          imageUrls: [...f.imageUrls, url],
+                          currentImageUrl: "",
+                        }));
+                      }
+                    }}
+                    className="px-3 py-2 rounded-lg text-xs font-semibold shrink-0 transition-colors"
+                    style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <p className="text-[10px] mt-1" style={{ color: "var(--muted-foreground)" }}>
+                  Press Enter or click + to add. Add multiple image URLs.
+                </p>
+                {createForm.imageUrls.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {createForm.imageUrls.map((url, i) => (
+                      <div
+                        key={i}
+                        className="group relative w-16 h-16 rounded-lg overflow-hidden border"
+                        style={{ borderColor: "var(--border)" }}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={url}
+                          alt={`Image ${i + 1}`}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = "none";
+                            (e.target as HTMLImageElement).parentElement!.classList.add("bg-red-50");
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setCreateForm((f) => ({
+                            ...f,
+                            imageUrls: f.imageUrls.filter((_, idx) => idx !== i),
+                          }))}
+                          className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          style={{ backgroundColor: "rgba(0,0,0,0.6)", color: "#fff" }}
+                        >
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                        <span
+                          className="absolute bottom-0 left-0 right-0 text-[8px] text-center py-0.5 truncate px-1"
+                          style={{ backgroundColor: "rgba(0,0,0,0.5)", color: "#fff" }}
+                        >
+                          {i + 1}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* ── Amenities / Features ────────────────────────────────────── */}
+              <div>
+                <label className="block text-xs font-medium mb-2" style={{ color: "var(--muted-foreground)" }}>
+                  Amenities / Features
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {NIGERIAN_AMENITIES.map((amenity) => {
+                    const isActive = createForm.amenities.includes(amenity);
+                    return (
+                      <button
+                        key={amenity}
+                        type="button"
+                        onClick={() => {
+                          setCreateForm((f) => ({
+                            ...f,
+                            amenities: isActive
+                              ? f.amenities.filter((a) => a !== amenity)
+                              : [...f.amenities, amenity],
+                          }));
+                        }}
+                        className="px-2.5 py-1 rounded-full text-xs font-medium border transition-colors"
+                        style={{
+                          backgroundColor: isActive ? "var(--primary)" : "transparent",
+                          borderColor: isActive ? "var(--primary)" : "var(--border)",
+                          color: isActive ? "var(--primary-foreground)" : "var(--muted-foreground)",
+                        }}
+                      >
+                        {amenity}
+                      </button>
+                    );
+                  })}
+                </div>
+                {createForm.amenities.length > 0 && (
+                  <p className="text-[10px] mt-1.5" style={{ color: "var(--muted-foreground)" }}>
+                    {createForm.amenities.length} selected
+                  </p>
+                )}
               </div>
             </div>
             {/* Footer */}

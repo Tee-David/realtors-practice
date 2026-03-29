@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { PropertyService } from "../services/property.service";
 import { VersionService } from "../services/version.service";
+import { LLMEnrichmentService } from "../services/llmEnrichment.service";
 import { sendSuccess, sendError, sendPaginated } from "../utils/apiResponse.util";
 import { logAudit, getClientInfo } from "../middlewares/auditLog.middleware";
 
@@ -106,6 +107,63 @@ export class PropertyController {
       return sendSuccess(res, property, "Property enriched");
     } catch (err) {
       return sendError(res, "Failed to enrich property");
+    }
+  }
+
+  /**
+   * POST /properties/:id/llm-enrich - Enrich a single property using LLM extraction
+   */
+  static async llmEnrich(req: Request, res: Response) {
+    try {
+      const result = await LLMEnrichmentService.enrichProperty(req.params.id);
+      if (!result.success && result.error === "Property not found") {
+        return sendError(res, "Property not found", 404);
+      }
+      void logAudit({
+        userId: (req as any).user?.id,
+        action: "LLM_ENRICH_PROPERTY",
+        entity: "Property",
+        entityId: req.params.id,
+        details: { enrichedFields: result.enrichedFields, provider: result.provider },
+        ...getClientInfo(req),
+      });
+      return sendSuccess(res, result, result.success ? "Property enriched via LLM" : "No new data extracted");
+    } catch (err) {
+      return sendError(res, "Failed to LLM-enrich property");
+    }
+  }
+
+  /**
+   * POST /properties/llm-enrich-by-site - Enrich all properties from a site using LLM
+   */
+  static async llmEnrichBySite(req: Request, res: Response) {
+    try {
+      const { siteId } = req.body;
+      if (!siteId) return sendError(res, "siteId is required", 400);
+      const result = await LLMEnrichmentService.enrichBySite(siteId);
+      void logAudit({
+        userId: (req as any).user?.id,
+        action: "LLM_ENRICH_BY_SITE",
+        entity: "Site",
+        entityId: siteId,
+        details: { total: result.total, enriched: result.enriched, failed: result.failed },
+        ...getClientInfo(req),
+      });
+      return sendSuccess(res, result, `Enriched ${result.enriched}/${result.total} properties`);
+    } catch (err) {
+      return sendError(res, "Failed to enrich properties by site");
+    }
+  }
+
+  /**
+   * GET /properties/llm-enrich-count/:siteId - Get count of properties for a site (for confirmation)
+   */
+  static async llmEnrichCount(req: Request, res: Response) {
+    try {
+      const count = await LLMEnrichmentService.getCountBySite(req.params.siteId);
+      return sendSuccess(res, { count }, `${count} properties in this site`);
+    } catch (err) {
+      return sendError(res, "Failed to get count");
     }
   }
 

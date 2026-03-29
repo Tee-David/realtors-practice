@@ -1,11 +1,12 @@
 import rateLimit from "express-rate-limit";
 import { Request, Response, NextFunction } from "express";
-import { supabaseAdmin } from "../utils/supabase";
+import { auth } from "../lib/auth";
+import { fromNodeHeaders } from "better-auth/node";
 import { config } from "../config/env";
 
 /**
  * Lightweight middleware that attempts to extract the authenticated user's ID
- * from the Authorization header without blocking unauthenticated requests.
+ * from the Better Auth session cookie without blocking unauthenticated requests.
  * This populates req._rateLimitUserId for the per-user rate limiter.
  */
 declare global {
@@ -22,15 +23,11 @@ export async function extractUserIdForRateLimit(
   next: NextFunction
 ) {
   try {
-    const authHeader = req.headers.authorization;
-    if (authHeader?.startsWith("Bearer ")) {
-      const token = authHeader.split(" ")[1];
-      const {
-        data: { user },
-      } = await supabaseAdmin.auth.getUser(token);
-      if (user) {
-        req._rateLimitUserId = user.id;
-      }
+    const session = await auth.api.getSession({
+      headers: fromNodeHeaders(req.headers),
+    });
+    if (session?.user) {
+      req._rateLimitUserId = session.user.id;
     }
   } catch {
     // Silently ignore — fall back to IP-based limiting
@@ -40,7 +37,7 @@ export async function extractUserIdForRateLimit(
 
 /**
  * Per-user rate limiter.
- * Uses the authenticated user's Supabase ID as the key, falling back to IP.
+ * Uses the authenticated user's Better Auth ID as the key, falling back to IP.
  * More generous than the global IP-based limiter (200 req / 15 min).
  */
 export const perUserRateLimiter = rateLimit({
@@ -53,7 +50,7 @@ export const perUserRateLimiter = rateLimit({
     // Use authenticated user ID when available, otherwise normalize IP for IPv6 compat
     if (req._rateLimitUserId) return req._rateLimitUserId;
     const ip = req.ip || "anonymous";
-    // Normalize IPv6-mapped IPv4 (::ffff:127.0.0.1 → 127.0.0.1)
+    // Normalize IPv6-mapped IPv4 (::ffff:127.0.0.1 -> 127.0.0.1)
     return ip.startsWith("::ffff:") ? ip.slice(7) : ip;
   },
   skip: (req) =>

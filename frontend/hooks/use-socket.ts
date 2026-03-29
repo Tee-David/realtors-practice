@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import io from "socket.io-client";
-import { supabase } from "@/lib/supabase";
 type SocketInstance = ReturnType<typeof io>;
 
 interface UseSocketOptions {
@@ -22,17 +21,14 @@ export function useSocket({ namespace = "", autoConnect = true }: UseSocketOptio
     let cancelled = false;
 
     const connect = async () => {
-      // Get Supabase JWT for socket auth (same token the API uses)
-      const { data } = await supabase.auth.getSession();
-      const token = data.session?.access_token ?? null;
-
       if (cancelled) return;
 
-      const socket = io(`${SOCKET_URL}${namespace}`, {
-        auth: { token },
+      // Better Auth uses httpOnly cookies — Socket.io sends them via withCredentials
+      const socket = (io as any)(`${SOCKET_URL}${namespace}`, {
         path: "/ws",
         autoConnect: true,
         reconnection: true,
+        withCredentials: true,
       });
 
       socket.on("connect", () => {

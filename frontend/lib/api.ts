@@ -1,5 +1,4 @@
 import axios from "axios";
-import { supabase } from "./supabase";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
@@ -7,35 +6,17 @@ const api = axios.create({
   baseURL: API_URL,
   timeout: 30000,
   headers: { "Content-Type": "application/json" },
+  withCredentials: true, // Better Auth uses httpOnly cookies — sent automatically
 });
 
-// Attach auth token to every request — reads directly from Supabase session
-api.interceptors.request.use(async (config) => {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session?.access_token) {
-    config.headers.Authorization = `Bearer ${session.access_token}`;
-  }
-  return config;
-});
-
-// Handle 401 responses — retry once after refreshing session
+// Handle 401 responses — redirect to login
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    const originalRequest = error.config;
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-      const { data, error: refreshError } = await supabase.auth.refreshSession();
-      if (refreshError || !data.session) {
-        await supabase.auth.signOut();
-        if (typeof window !== "undefined") {
-          window.location.href = "/login";
-        }
-        return Promise.reject(error);
+    if (error.response?.status === 401) {
+      if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+        window.location.href = "/login";
       }
-      // Retry with the new token
-      originalRequest.headers.Authorization = `Bearer ${data.session.access_token}`;
-      return api(originalRequest);
     }
     return Promise.reject(error);
   }

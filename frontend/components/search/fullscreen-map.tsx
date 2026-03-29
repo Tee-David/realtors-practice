@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Map, MapMarker, MarkerContent, MapControls } from "@/components/ui/map";
-import { formatPrice } from "@/lib/utils";
+import { formatPrice, formatPriceShort } from "@/lib/utils";
 import { CLUSTER_CONFIG, getClusterDisplayMode, formatClusterLabel } from "@/lib/cluster-config";
 import type MapLibreGL from "maplibre-gl";
 import type { Property } from "@/types/property";
@@ -10,7 +10,7 @@ import Supercluster from "supercluster";
 
 const LISTING_COLORS: Record<string, string> = {
   SALE: "#0001fc",
-  RENT: "#0a6906",
+  RENT: "#d946ef",     // Magenta/pink for rent
   SHORTLET: "#ff6600",
   LEASE: "#8b5cf6",
 };
@@ -30,6 +30,16 @@ export function FullscreenMap({ properties, hoveredId, setHoveredId, onPropertyC
     const [bounds, setBounds] = useState<[number, number, number, number] | null>(null);
     const [visibleIndices, setVisibleIndices] = useState<Set<number>>(new Set());
     const [isMobile, setIsMobile] = useState(false);
+    const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
+
+    // Build a lookup map for properties by id
+    const propertyMap = useMemo(() => {
+      const m = new globalThis.Map<string, Property>();
+      for (const p of properties) m.set(p.id, p);
+      return m;
+    }, [properties]);
+
+    const selectedProperty = selectedPropertyId ? propertyMap.get(selectedPropertyId) : null;
 
     useEffect(() => {
       const check = () => setIsMobile(window.innerWidth < 768);
@@ -197,6 +207,7 @@ export function FullscreenMap({ properties, hoveredId, setHoveredId, onPropertyC
           const price = props.price as number;
           const listingType = (props.listingType as string) || "SALE";
           const isHighlighted = hoveredId === propId;
+          const isSelected = selectedPropertyId === propId;
           const color = LISTING_COLORS[listingType] || LISTING_COLORS.SALE;
 
           return (
@@ -204,7 +215,10 @@ export function FullscreenMap({ properties, hoveredId, setHoveredId, onPropertyC
               key={propId}
               latitude={lat}
               longitude={lng}
-              onClick={() => onPropertyClick(propId)}
+              onClick={() => {
+                setSelectedPropertyId(isSelected ? null : propId);
+                onPropertyClick(propId);
+              }}
             >
               <MarkerContent>
                 <div
@@ -214,17 +228,17 @@ export function FullscreenMap({ properties, hoveredId, setHoveredId, onPropertyC
                   style={{
                     opacity: isVisible ? 1 : 0,
                     transform: isVisible
-                      ? isHighlighted ? "scale(1.25) translateY(-4px)" : "scale(1)"
+                      ? (isHighlighted || isSelected) ? "scale(1.25) translateY(-4px)" : "scale(1)"
                       : "scale(0.3)",
                     transition: "opacity 0.3s ease-out, transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)",
-                    zIndex: isHighlighted ? 9999 : 1,
+                    zIndex: (isHighlighted || isSelected) ? 9999 : 1,
                     position: "relative",
                   }}
                 >
                   <div
                     style={{
-                      background: isHighlighted ? color : "#ffffff",
-                      color: isHighlighted ? "#ffffff" : "#1a1a1a",
+                      background: (isHighlighted || isSelected) ? color : "#ffffff",
+                      color: (isHighlighted || isSelected) ? "#ffffff" : "#1a1a1a",
                       border: `2px solid ${color}`,
                       padding: isMobile ? "2px 6px" : "4px 10px",
                       borderRadius: "20px",
@@ -233,13 +247,13 @@ export function FullscreenMap({ properties, hoveredId, setHoveredId, onPropertyC
                       whiteSpace: "nowrap",
                       boxShadow: isMobile
                         ? "0 2px 6px -2px rgba(0,0,0,0.2)"
-                        : isHighlighted
+                        : (isHighlighted || isSelected)
                           ? `0 8px 24px -6px ${color}80`
                           : "0 4px 12px -4px rgba(0,0,0,0.3)",
                       fontFamily: "var(--font-display), sans-serif",
                     }}
                   >
-                    {formatPrice(price)}
+                    {formatPriceShort(price, listingType)}
                   </div>
                   <div
                     style={{
@@ -247,7 +261,7 @@ export function FullscreenMap({ properties, hoveredId, setHoveredId, onPropertyC
                       height: 0,
                       borderLeft: `${isMobile ? 4 : 6}px solid transparent`,
                       borderRight: `${isMobile ? 4 : 6}px solid transparent`,
-                      borderTop: `${isMobile ? 4 : 6}px solid ${isHighlighted ? color : "#ffffff"}`,
+                      borderTop: `${isMobile ? 4 : 6}px solid ${(isHighlighted || isSelected) ? color : "#ffffff"}`,
                       marginTop: "-1px",
                     }}
                   />
@@ -256,6 +270,126 @@ export function FullscreenMap({ properties, hoveredId, setHoveredId, onPropertyC
             </MapMarker>
           );
         })}
+
+        {/* ── Popup card for selected property ─────────────────────────────── */}
+        {selectedProperty && (
+          <PropertyPopupCard
+            property={selectedProperty}
+            onClose={() => setSelectedPropertyId(null)}
+            onClick={() => onPropertyClick(selectedProperty.id)}
+          />
+        )}
       </Map>
     );
+}
+
+// ─── Popup card component shown on marker click ──────────────────────────────
+
+function PropertyPopupCard({
+  property,
+  onClose,
+  onClick,
+}: {
+  property: Property;
+  onClose: () => void;
+  onClick: () => void;
+}) {
+  const images: string[] = Array.isArray(property.images) ? property.images : [];
+  const color = LISTING_COLORS[property.listingType] || LISTING_COLORS.SALE;
+  const qualityScore = property.qualityScore;
+  const qColor = qualityScore != null
+    ? (qualityScore >= 80 ? "#16a34a" : qualityScore >= 50 ? "#ca8a04" : "#dc2626")
+    : null;
+  const isRent = property.listingType === "RENT" || property.listingType === "SHORTLET";
+
+  return (
+    <div
+      className="absolute z-[100] bottom-4 left-1/2 -translate-x-1/2 w-[320px] max-w-[calc(100vw-2rem)] rounded-xl border shadow-2xl overflow-hidden"
+      style={{
+        backgroundColor: "var(--card, #ffffff)",
+        borderColor: "var(--border, #e5e5e5)",
+      }}
+    >
+      {/* Close button */}
+      <button
+        onClick={(e) => { e.stopPropagation(); onClose(); }}
+        className="absolute top-2 right-2 z-10 w-6 h-6 rounded-full flex items-center justify-center"
+        style={{ backgroundColor: "rgba(0,0,0,0.5)", color: "#fff" }}
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+      </button>
+
+      <div className="cursor-pointer" onClick={onClick}>
+        {/* Thumbnail */}
+        <div
+          className="w-full h-[140px] relative overflow-hidden"
+          style={{ backgroundColor: "var(--secondary, #f0f0f0)" }}
+        >
+          {images[0] ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={images[0]} alt={property.title} className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="1.5"><path d="M3 21h18M3 7v14M21 7v14M6 11h2M6 15h2M10 11h2M10 15h2M14 11h2M14 15h2M18 11h2M18 15h2M9 7V4h6v3" /></svg>
+            </div>
+          )}
+          {/* Listing type badge */}
+          <div
+            className="absolute top-2 left-2 px-2 py-0.5 rounded-full text-[10px] font-bold"
+            style={{ backgroundColor: color, color: "#fff" }}
+          >
+            {property.listingType}
+          </div>
+          {/* Quality badge */}
+          {qualityScore != null && qColor && (
+            <div
+              className="absolute top-2 right-8 flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold"
+              style={{ backgroundColor: "rgba(0,0,0,0.65)", color: qColor }}
+            >
+              <svg width="10" height="10" viewBox="0 0 24 24" fill={qColor} stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
+              {qualityScore}
+            </div>
+          )}
+        </div>
+
+        {/* Content */}
+        <div className="p-3">
+          <p
+            className="text-sm font-semibold leading-snug line-clamp-2 mb-1"
+            style={{ color: "var(--foreground, #1a1a1a)" }}
+          >
+            {property.title || "Untitled Property"}
+          </p>
+          <p className="text-base font-extrabold mb-2" style={{ color: "var(--accent, #FF6600)" }}>
+            {formatPrice(property.price)}
+            {isRent && (
+              <span className="text-xs font-normal ml-0.5" style={{ color: "var(--muted-foreground, #888)" }}>/mo</span>
+            )}
+          </p>
+
+          {/* Stats */}
+          <div className="flex items-center gap-3 text-xs" style={{ color: "var(--muted-foreground, #666)" }}>
+            {property.bedrooms != null && (
+              <span className="flex items-center gap-1">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 4v16M2 8h18a2 2 0 0 1 2 2v10M2 17h20M6 8v9" /><path d="M6 4h12a2 2 0 0 1 2 2v2H6V4z" /></svg>
+                {property.bedrooms} bed
+              </span>
+            )}
+            {property.bathrooms != null && (
+              <span className="flex items-center gap-1">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 12h16a1 1 0 0 1 1 1v3a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4v-3a1 1 0 0 1 1-1zM6 12V5a2 2 0 0 1 2-2h3v2.25" /><path d="M14 5.75V12" /></svg>
+                {property.bathrooms} bath
+              </span>
+            )}
+            {(property.buildingSizeSqm || property.landSizeSqm) && (
+              <span className="flex items-center gap-1">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" /></svg>
+                {property.buildingSizeSqm || property.landSizeSqm} sqm
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }

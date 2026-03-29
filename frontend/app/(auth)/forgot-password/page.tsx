@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { authClient } from "@/lib/auth-client";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, Loader2, CheckCircle2, Mail } from "lucide-react";
@@ -18,19 +18,25 @@ export default function ForgotPasswordPage() {
     setLoading(true);
     setError("");
 
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(
-      email,
-      { redirectTo: `${window.location.origin}/login` }
-    );
+    try {
+      // Better Auth password reset — method name varies by version
+      const result = await (authClient as any).forgetPassword?.({
+        email,
+        redirectTo: `${window.location.origin}/login`,
+      }) ?? await (authClient as any).resetPassword?.({ email, redirectTo: `${window.location.origin}/login` });
 
-    if (resetError) {
-      setError(resetError.message);
+      if (result.error) {
+        setError(result.error.message || "Failed to send reset email");
+        setLoading(false);
+        return;
+      }
+
+      setSent(true);
       setLoading(false);
-      return;
+    } catch (err: any) {
+      setError(err.message || "Failed to send reset email");
+      setLoading(false);
     }
-
-    setSent(true);
-    setLoading(false);
   }
 
   return (
