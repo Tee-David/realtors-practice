@@ -58,5 +58,5 @@ export const perUserRateLimiter = rateLimit({
     req.path === "/api/health" ||
     req.path.startsWith("/api/internal/") ||
     req.path.startsWith("/internal/"),
-  validate: { xForwardedForHeader: false, ip: false },
+  validate: { xForwardedForHeader: false, ip: false, keyGeneratorIpFallback: false },
 });
