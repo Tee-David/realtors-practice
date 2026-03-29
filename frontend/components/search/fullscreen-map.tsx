@@ -22,9 +22,11 @@ interface FullscreenMapProps {
   onPropertyClick: (id: string) => void;
   markersReady?: boolean;
   onMapReady?: (map: MapLibreGL.Map) => void;
+  /** Detected area name from NL parser — used to geocode and fly to when no coords available */
+  detectedArea?: string | null;
 }
 
-export function FullscreenMap({ properties, hoveredId, setHoveredId, onPropertyClick, markersReady = true, onMapReady }: FullscreenMapProps) {
+export function FullscreenMap({ properties, hoveredId, setHoveredId, onPropertyClick, markersReady = true, onMapReady, detectedArea }: FullscreenMapProps) {
     const mapRef = useRef<MapLibreGL.Map | null>(null);
     const [zoom, setZoom] = useState(10);
     const [bounds, setBounds] = useState<[number, number, number, number] | null>(null);
@@ -72,6 +74,45 @@ export function FullscreenMap({ properties, hoveredId, setHoveredId, onPropertyC
       // Notify parent that map is ready
       onMapReady?.(map);
     }, [handleViewportChange, onMapReady]);
+
+    // ── fitBounds / geocode when properties or detectedArea changes ────────────
+    useEffect(() => {
+      const map = mapRef.current;
+      if (!map) return;
+
+      // Collect coordinates from current results
+      const coords = properties
+        .filter((p) => p.latitude && p.longitude)
+        .map((p) => [p.longitude!, p.latitude!] as [number, number]);
+
+      if (coords.length > 1) {
+        // Multiple results with coords — fitBounds
+        const lngs = coords.map((c) => c[0]);
+        const lats = coords.map((c) => c[1]);
+        const sw: [number, number] = [Math.min(...lngs), Math.min(...lats)];
+        const ne: [number, number] = [Math.max(...lngs), Math.max(...lats)];
+        map.fitBounds([sw, ne], { padding: 50, maxZoom: 15, duration: 1500 });
+      } else if (coords.length === 1) {
+        // Single result with coords — flyTo
+        map.flyTo({ center: coords[0], zoom: 15, duration: 1500, essential: true });
+      } else if (detectedArea) {
+        // No coords but area detected from NL parser — geocode via Nominatim
+        const areaQuery = encodeURIComponent(`${detectedArea} Lagos Nigeria`);
+        fetch(`https://nominatim.openstreetmap.org/search?q=${areaQuery}&format=json&limit=1`)
+          .then((r) => r.json())
+          .then((results: Array<{ lon: string; lat: string }>) => {
+            if (results && results.length > 0) {
+              const lng = parseFloat(results[0].lon);
+              const lat = parseFloat(results[0].lat);
+              if (!isNaN(lng) && !isNaN(lat)) {
+                mapRef.current?.flyTo({ center: [lng, lat], zoom: 13, duration: 1500, essential: true });
+              }
+            }
+          })
+          .catch(() => { /* Nominatim down — ignore */ });
+      }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [properties, detectedArea]);
 
     // Property point type for Supercluster
     type PointProps = { id: string; price: number; listingType: string; title: string };

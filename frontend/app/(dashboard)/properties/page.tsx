@@ -12,6 +12,7 @@ import { PropertyFilterSheet } from "@/components/property/property-filter-sheet
 import { Pagination } from "@/components/property/pagination";
 import TextType from "@/components/ui/TextType";
 import { useProperties } from "@/hooks/useProperties";
+import { useSearch } from "@/hooks/use-search";
 import { MOCK_PROPERTIES } from "@/lib/mock-data";
 import {
   LayoutGrid,
@@ -25,6 +26,7 @@ import {
   Clock,
   RefreshCw,
   Sparkles,
+  Zap,
 } from "lucide-react";
 import { AIInsightPlaceholder } from "@/components/ai/ai-placeholder";
 import {
@@ -79,6 +81,13 @@ export default function PropertiesPage() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [hasToggledMap, setHasToggledMap] = useState(false);
 
+  // Debounced search term — 300ms delay before triggering Meilisearch
+  const [debouncedSearch, setDebouncedSearch] = useState<string>("");
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(filters.search || ""), 300);
+    return () => clearTimeout(timer);
+  }, [filters.search]);
+
   // Initialize for mobile
   useEffect(() => {
     const isMobile = window.innerWidth < 640;
@@ -86,14 +95,42 @@ export default function PropertiesPage() {
       setGridCols(2);
       setShowMap(false);
     }
-    
+
     // Listen for mobile nav filter toggle
     const handleToggleFilters = () => setFilterSheetOpen(true);
     document.addEventListener("toggle-mobile-filters", handleToggleFilters);
     return () => document.removeEventListener("toggle-mobile-filters", handleToggleFilters);
   }, []);
 
-  const { data, isLoading, dataUpdatedAt, isFetching, refetch } = useProperties(filters);
+  // Direct API — used for initial load / browsing without a search term
+  const { data, isLoading: apiLoading, dataUpdatedAt, isFetching, refetch } = useProperties(filters);
+
+  // Meilisearch — used when user types a search query (NL parser runs on backend)
+  const meiliFilters = useMemo(() => {
+    const f: string[] = [];
+    if (filters.category && filters.category.length > 0) {
+      f.push(...filters.category.map((c) => `categoryName = ${c}`));
+    }
+    if (filters.listingType && filters.listingType.length > 0) {
+      f.push(...filters.listingType.map((lt) => `listingType = ${lt}`));
+    }
+    if (filters.minPrice) f.push(`price >= ${filters.minPrice}`);
+    if (filters.maxPrice) f.push(`price <= ${filters.maxPrice}`);
+    if (filters.area && filters.area.length > 0) {
+      f.push(...filters.area.map((a) => `area = ${a}`));
+    }
+    return f;
+  }, [filters.category, filters.listingType, filters.minPrice, filters.maxPrice, filters.area]);
+
+  const { data: searchData, isLoading: searchLoading } = useSearch({
+    q: debouncedSearch,
+    limit: filters.limit || 24,
+    filters: meiliFilters.length > 0 ? meiliFilters : undefined,
+    facets: ["categoryName", "listingType", "bedrooms", "state", "area"],
+  });
+
+  const isSearchActive = !!debouncedSearch;
+  const isLoading = isSearchActive ? searchLoading : apiLoading;
 
   // Re-render every 30s so the "Updated X ago" text stays fresh
   const [, setTick] = useState(0);
@@ -105,11 +142,23 @@ export default function PropertiesPage() {
   const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
   const isStale = dataUpdatedAt > 0 && Date.now() - dataUpdatedAt > STALE_THRESHOLD_MS;
 
+  // When search is active, use Meilisearch hits; otherwise use direct API
+  const searchHits: Property[] = searchData?.hits || [];
   const apiProperties = data?.data || [];
-  const useMock = process.env.NODE_ENV === "development" && apiProperties.length === 0;
-  const properties = useMock ? MOCK_PROPERTIES : apiProperties;
-  const total = data?.meta?.total || (useMock ? MOCK_PROPERTIES.length : 0);
-  const totalPages = data?.meta?.totalPages || 1;
+  const useMock = !isSearchActive && process.env.NODE_ENV === "development" && apiProperties.length === 0;
+  const properties: Property[] = isSearchActive
+    ? searchHits
+    : useMock
+    ? MOCK_PROPERTIES
+    : apiProperties;
+
+  const searchTotal = searchData?.estimatedTotalHits ?? searchData?.nbHits ?? searchHits.length;
+  const total = isSearchActive
+    ? searchTotal
+    : data?.meta?.total || (useMock ? MOCK_PROPERTIES.length : 0);
+  const totalPages = isSearchActive
+    ? Math.ceil(searchTotal / (filters.limit || 24)) || 1
+    : data?.meta?.totalPages || 1;
 
   const selectedProperty = useMemo(
     () => properties.find((p: Property) => p.id === selectedPropertyId) || null,
@@ -199,9 +248,14 @@ export default function PropertiesPage() {
           <div
             data-tour="search-bar"
             className="flex items-center gap-2 px-3 py-2 rounded-xl flex-1 min-w-[180px] relative"
-            style={{ backgroundColor: "var(--card)", border: "1px solid var(--border)" }}
+            style={{
+              backgroundColor: "var(--card)",
+              border: isSearchActive
+                ? "1px solid var(--primary)"
+                : "1px solid var(--border)",
+            }}
           >
-            <Search size={16} className="shrink-0" style={{ color: "var(--muted-foreground)" }} />
+            <Search size={16} className="shrink-0" style={{ color: isSearchActive ? "var(--primary)" : "var(--muted-foreground)" }} />
             <div className="relative flex-1 min-w-0">
               <input
                 ref={searchInputRef}
@@ -228,6 +282,33 @@ export default function PropertiesPage() {
                 </div>
               )}
             </div>
+            {/* "Powered by search" badge — visible when search is active */}
+            {isSearchActive && !searchLoading && (
+              <span
+                className="hidden sm:flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0"
+                style={{
+                  backgroundColor: "rgba(0,1,252,0.08)",
+                  color: "var(--primary)",
+                  border: "1px solid rgba(0,1,252,0.2)",
+                }}
+              >
+                <Zap size={9} />
+                Smart search
+              </span>
+            )}
+            {isSearchActive && searchLoading && (
+              <span
+                className="hidden sm:flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 animate-pulse"
+                style={{
+                  backgroundColor: "rgba(0,1,252,0.08)",
+                  color: "var(--primary)",
+                  border: "1px solid rgba(0,1,252,0.2)",
+                }}
+              >
+                <Zap size={9} />
+                Searching...
+              </span>
+            )}
             {filters.search && (
               <button onClick={() => handleFilterChange({ ...filters, search: undefined, page: 1 })}>
                 <X size={14} style={{ color: "var(--muted-foreground)" }} />

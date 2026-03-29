@@ -84,6 +84,23 @@ enum ChangeSource {
   MANUAL_EDIT
   ENRICHMENT
   SYSTEM
+  GEOCODING
+  PRICE_UPDATE
+}
+
+enum PropertyOrigin {
+  SCRAPED
+  MANUAL
+  IMPORTED
+  API
+}
+
+enum EnrichmentStatus {
+  RAW           // Just scraped, no processing
+  GEOCODED      // Has lat/lng
+  ENRICHED      // LLM enrichment done
+  VERIFIED      // Human verified
+  PUBLISHED     // Ready for public display
 }
 
 enum NotificationType {
@@ -115,6 +132,7 @@ model User {
   notifEmailMatch         Boolean   @default(true)
   notifEmailPriceDrop     Boolean   @default(true)
   notifEmailScrapeComplete Boolean  @default(true)
+  notifEmailNewMatches    Boolean   @default(false)
   notifInAppMatch         Boolean   @default(true)
   notifInAppPriceDrop     Boolean   @default(true)
   notifInAppScrapeComplete Boolean  @default(true)
@@ -348,6 +366,10 @@ model Property {
   isFeatured          Boolean             @default(false)
   isHotDeal           Boolean             @default(false)
 
+  // === LIFECYCLE ===
+  origin              PropertyOrigin      @default(SCRAPED)
+  enrichmentStatus    EnrichmentStatus    @default(RAW)
+
   // === VERSION TRACKING ===
   currentVersion      Int                 @default(1)
 
@@ -379,6 +401,8 @@ model Property {
   @@index([state, area, listingType, price])
   @@index([listingType, category, status])
   @@index([isPremium, isFeatured])
+  @@index([origin])
+  @@index([enrichmentStatus])
 }
 
 model PropertyVersion {
@@ -505,6 +529,8 @@ model SavedSearch {
 
   notifyEmail   Boolean   @default(false)
   notifyInApp   Boolean   @default(true)
+
+  lastNotifiedAt DateTime?
 
   matches       SavedSearchMatch[]
 

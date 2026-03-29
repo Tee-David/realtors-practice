@@ -633,7 +633,9 @@ export class ScrapeService {
         const prop = sanitizeScrapedProperty(rawProp as Record<string, unknown>);
         const result = await PropertyService.create(
           prop as any,
-          "SCRAPER"
+          "SCRAPER",
+          undefined,
+          "SCRAPED"
         );
         if (result.duplicate) {
           dupCount++;

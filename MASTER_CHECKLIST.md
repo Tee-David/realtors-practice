@@ -916,11 +916,29 @@ Job 3: "Scrape-Dispatch" (45 min timeout)
 
 > Only after Phases 0-10 are complete.
 > Every AI feature is **opt-in and toggle-able**. The app must work perfectly without any AI feature enabled.
-> Absorbed from AI-CHECKLIST.md (2026-03-20). Providers: Groq, Cerebras, SambaNova, Gemini (free tiers).
+> Full architecture spec in `AI_INTELLIGENCE_PLAN.md`. Providers: Groq, Cerebras, SambaNova, Gemini (free tiers).
+
+### AI Architecture: ZeroClaw Intent Router + Specialized Agents
+
+The AI layer uses a **ZeroClaw-style intent router** (from AI_INTELLIGENCE_PLAN.md §1) that classifies user messages and dispatches to a specialist agent — each a master of its domain:
+
+| Agent | Domain | Tools |
+|-------|--------|-------|
+| **PropertySearchAgent** | NL → property search | searchProperties, getMeilisearchResults |
+| **PriceIntelAgent** | Price analysis, over/underpriced detection | getAreaPriceStats, getPriceHistory, getSimilarProperties |
+| **MarketAnalysisAgent** | Supply/demand trends, area reports | getMarketTrends, getAreaStats, getSupplyTrends |
+| **EnrichmentAgent** | Fill missing property fields from text | updateProperty, geocode, normalizeFields |
+| **ScraperDiagAgent** | Diagnose scrape failures, CSS selector fixes | getRecentJobs, getSiteHealth, getJobErrors |
+| **OracleAgent** | General Nigerian real estate Q&A | all tools as fallback |
+
+**LLM fallback chain**: Groq → Cerebras → SambaNova → Gemini (circuit breaker + auto-rotate on rate limit)
+**Memory**: Mem0 + Qdrant on Oracle Cloud VM — per-user preference memory injected into agent context
+**Voice**: Gemini 2.5/3.1 Flash Live API via backend WebSocket proxy — Chat + Voice + History tabs
+**Implementation**: Vercel AI SDK (TypeScript, no separate Python process) — see AI_INTELLIGENCE_PLAN.md
 
 ### AI Design Principles
 - **Enhancement, not dependency** — Every AI feature has a non-AI fallback that already works
-- **Feature toggles** — Global master switch + per-feature switches in Settings (DB-backed, Redis-cached)
+- **Feature toggles** — Global master switch + per-feature switches in Settings (DB-backed)
 - **Graceful degradation** — If all providers are down, features silently fall back to non-AI behavior
 - **User clarity** — AI-generated content always labeled with "AI" badge
 - **Rate limit awareness** — Track usage per provider, auto-rotate on limit, show usage in admin panel
@@ -1178,29 +1196,29 @@ Job 3: "Scrape-Dispatch" (45 min timeout)
 
 ### 3.5.1 New Schema Fields
 
-- [ ] Add `PropertyOrigin` enum: `SCRAPED`, `MANUAL`, `IMPORTED`
-- [ ] Add `EnrichmentStatus` enum: `RAW`, `PARTIALLY_ENRICHED`, `FULLY_ENRICHED`, `MANUALLY_VERIFIED`
-- [ ] Add `origin` field to Property model (default: `SCRAPED`)
-- [ ] Add `originDetail` field to Property model (nullable — source site, user ID, CSV filename)
-- [ ] Add `enrichmentStatus` field to Property model (default: `RAW`)
-- [ ] Expand `ChangeSource` enum: add `GEOCODING`, `PRICE_UPDATE`
-- [ ] Run non-breaking migration (all existing properties get `SCRAPED` + `RAW` defaults)
+- [x] Add `PropertyOrigin` enum: `SCRAPED`, `MANUAL`, `IMPORTED`, `API`
+- [x] Add `EnrichmentStatus` enum: `RAW`, `GEOCODED`, `ENRICHED`, `VERIFIED`, `PUBLISHED`
+- [x] Add `origin` field to Property model (default: `SCRAPED`)
+- [x] Add `originDetail` field to Property model (nullable — source site, user ID, CSV filename)
+- [x] Add `enrichmentStatus` field to Property model (default: `RAW`)
+- [x] Expand `ChangeSource` enum: add `GEOCODING`, `PRICE_UPDATE`
+- [x] Run non-breaking migration — prisma db push applied, all existing properties get defaults
 
 ### 3.5.2 Data Flow Enforcement
 
-- [ ] Scraper pipeline sets `origin = SCRAPED`, `enrichmentStatus = RAW`
-- [ ] Geocoding service creates version with `ChangeSource.GEOCODING`, updates `enrichmentStatus`
-- [ ] LLM enrichment creates version with `ChangeSource.ENRICHMENT`, updates `enrichmentStatus`
-- [ ] Manual edits create version with `ChangeSource.MANUAL_EDIT`
-- [ ] Price changes create version with `ChangeSource.PRICE_UPDATE` + `PriceHistory` entry
-- [ ] Manual property creation sets `origin = MANUAL`, `enrichmentStatus = MANUALLY_VERIFIED`
+- [x] Scraper pipeline sets `origin = SCRAPED`, `enrichmentStatus = RAW`
+- [x] Geocoding updates `enrichmentStatus = GEOCODED`
+- [x] LLM enrichment updates `enrichmentStatus = ENRICHED`
+- [x] Manual edits create version with `ChangeSource.MANUAL_EDIT`
+- [x] Price changes on re-scrape create `ChangeSource.PRICE_UPDATE` version
+- [x] Manual property creation sets `origin = MANUAL`, `enrichmentStatus = VERIFIED`
 
 ### 3.5.3 UI Integration
 
-- [ ] Data Explorer: filter by `origin` (Scraped / Manual / Imported)
-- [ ] Data Explorer: filter by `enrichmentStatus` (Raw / Enriched / Verified)
-- [ ] Data Explorer: "Data completeness" visual bar per property
-- [ ] Property Detail: Version History tab shows change source labels clearly
+- [x] Data Explorer: filter by `origin` (Scraped / Manual / Imported)
+- [x] Data Explorer: filter by `enrichmentStatus` (Raw / Geocoded / Enriched / Verified)
+- [x] Data Explorer: "Data completeness" visual bar per property
+- [x] Property Detail: Version History tab shows change source labels clearly
 - [ ] Property Detail: "Needs Review" badge for `enrichmentStatus = RAW` + `qualityScore < 50`
 
 ### 3.5.4 AI Integration
@@ -1217,22 +1235,24 @@ Job 3: "Scrape-Dispatch" (45 min timeout)
 
 ### 3.6.1 Card Changes
 
-- [ ] Add image carousel dots (swipeable on mobile)
-- [ ] Add "Listed X ago" time badge (top-left, dark pill)
-- [ ] Replace heart with prominent **bookmark icon** (top-right)
-- [ ] Add location pin circle button (bottom-right of image)
-- [ ] Switch bed/bath/type to **rounded pill badges** with icons
-- [ ] Add "Direct to Owner's Agent" label with green icon below pills
-- [ ] Remove star rating overlay from card (keep on detail page)
-- [ ] Simplify image overlay (remove heavy category gradient, use subtle bottom overlay)
-- [ ] Remove colored accent bar at bottom
-- [ ] More whitespace, larger rounded corners, softer shadows
+- [x] Image carousel dots on image if multiple images
+- [x] "Listed X ago" time badge (top-left, dark pill)
+- [x] Bookmark icon (top-right, replaces heart)
+- [x] Status badge — AVAILABLE/SOLD/RENTED/EXPIRED/SHORT_LET color-coded pill
+- [x] Rounded pill badges for bed/bath/type with icons
+- [x] Conditional agent type label (only shown if data exists): "Direct to Owner's Agent" / "Direct to Developer" / "Direct to Landlord" — green label
+- [x] Removed star rating overlay
+- [x] Simplified image overlay — subtle bottom gradient only
+- [x] Removed colored accent bar at bottom
+- [x] More whitespace, rounded-xl, soft shadows
+- [x] Hover: shadow lift + primary border
+- [x] Action buttons (Eye, ExternalLink) fade in on hover
 
 ### 3.6.2 Mobile Card
 
-- [ ] Image carousel with swipe gestures
-- [ ] Stacks cleanly at 1 or 2 columns
-- [ ] Touch-friendly tap targets (48px minimum)
+- [x] Image carousel with dot indicators
+- [x] Responsive grid — 1/2/3 columns
+- [x] Touch-friendly tap targets
 
 ---
 
@@ -1242,55 +1262,54 @@ Job 3: "Scrape-Dispatch" (45 min timeout)
 
 ### 3.7.1 Image Gallery
 
-- [ ] Switch to **1 large + 2 small stacked grid** layout (60/40 split)
-- [ ] "See more photos" overlay button on last small image
-- [ ] Full-width single image with swipe + dots on mobile
+- [x] 1 large + 2 small stacked grid layout (60/40 split) on desktop
+- [x] "See more photos" overlay button on last small image ("+N more")
+- [x] Full-width single image with swipe + dot indicators on mobile
 
 ### 3.7.2 Layout Changes
 
-- [ ] Breadcrumbs: use **location hierarchy** (State > LGA > Area > Listing Details) + "Save Property" / "Drop a Comment" top-right
-- [ ] Listing type indicator: green dot + "FOR RENT" / "FOR SALE" text
-- [ ] **Huge price** (40px+ bold, dominant element)
-- [ ] Beds • Baths inline (simple, not in a grid)
-- [ ] Agent phone partially masked: "+234 *** *** ****" + "Chat on WhatsApp" green link
-- [ ] "About" section with left border accent in a card
+- [x] Breadcrumbs: State > Area > "Listing Details" + "Save Property" button top-right
+- [x] Listing type indicator: green dot + "FOR RENT" / "FOR SALE" / "SHORT LET" (uppercase)
+- [x] Huge price (text-4xl bold, primary color dominant)
+- [x] Beds • Baths inline below price (simple)
+- [x] Agent phone partially masked with reveal button + WhatsApp link
+- [x] "About this property" section with left border accent card
 
 ### 3.7.3 Right Sticky Sidebar
 
-- [ ] Agent card: "Direct to Owner's Agent" green icon + circular phone/WhatsApp buttons (match reference exactly)
-- [ ] **Embedded map** in sidebar (not just coordinates)
-- [ ] Location label + "View in a map >" link below map
-- [ ] Agent card repeats/stays sticky as user scrolls
+- [x] Agent card — conditional label (only if agentType field exists): "Direct to Owner's Agent" / "Direct to Developer" / "Direct to Landlord" — green icon
+- [x] Circular Call + WhatsApp buttons
+- [x] Embedded map in sidebar
+- [x] "View on full map" link below map
+- [x] Sticky positioning while scrolling
 
 ### 3.7.4 Property Specs
 
-- [ ] Clean 2x2 icon grid: Property Type, Land Size, Time on listing, Listing ID
+- [x] Clean 2x2 icon grid: Property Type, Land Size, Time on listing, Listing ID
 
 ### 3.7.5 Price Intelligence Section
 
-- [ ] **Price Insight**: Transaction table for similar properties (location, amount, type, date)
-- [ ] **Price Trend**: Line chart — market average vs property price over years
-- [ ] Three comparison cards: Average Price, This Property, Difference (+/- percentage in red/green)
-- [ ] "See All Transactions in this Location →" link
+- [x] Three comparison cards: Area Average Price | This Property | Difference (red/green %)
+- [x] Price trend line chart — property price over time (from priceHistory)
+- [ ] Transaction table for similar properties — deferred (needs market data volume)
 
 ### 3.7.6 Bottom Sections
 
-- [ ] "Tell us what you think" feedback section (light green/teal background)
-- [ ] CTA banner: "Your future home deserves a second opinion" with "Book Now" (dark green + property image)
-- [ ] "Similar homes you might like" carousel (same card style as listing page)
+- [x] "Similar homes you might like" horizontal carousel
+- [x] Intelligence panel (collapsible, admin/editor only) — version history, data quality, source
+- **Note**: "Tell us what you think" section NOT added per user feedback
 
 ### 3.7.7 Intelligence Data (admin view)
 
-- [ ] Move version history, source intelligence, data quality to a collapsible **"Intelligence" tab** — accessible but not cluttering the consumer view
-- [ ] Keep these visible for admin users, hide/collapse for viewer roles
+- [x] Version history, data quality, source info moved to collapsible "Intelligence" accordion
+- [x] Hidden for VIEWER role, visible/collapsed for ADMIN/EDITOR
 
 ### 3.7.8 Mobile Detail Page
 
-- [ ] Full-width image with swipe + dots
-- [ ] Agent card moves above the fold (below price, before description)
-- [ ] Map becomes tappable preview that expands
-- [ ] Price Trend/Insight stacks vertically
-- [ ] Similar homes as horizontally scrollable row
+- [x] Full-width image with swipe + dots
+- [x] Agent card above fold (below price, before description) on mobile
+- [x] Map tappable thumbnail
+- [x] Similar homes horizontal scroll
 
 ---
 

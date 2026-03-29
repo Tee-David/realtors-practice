@@ -68,6 +68,20 @@ router.get("/stats", PropertyController.getStats);
 
 /**
  * @swagger
+ * /properties/duplicates:
+ *   get:
+ *     summary: Find fuzzy duplicate property clusters
+ *     tags: [Properties]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Array of duplicate clusters
+ */
+router.get("/duplicates", PropertyController.getDuplicates);
+
+/**
+ * @swagger
  * /properties/stats/most-viewed:
  *   get:
  *     summary: Get the most viewed properties
@@ -321,6 +335,22 @@ router.post("/llm-enrich-by-site", authorize("ADMIN", "EDITOR"), PropertyControl
 
 /**
  * @swagger
+ * /properties/backfill-geocode:
+ *   post:
+ *     summary: Batch geocode all properties with missing lat/lng coordinates (Admin only)
+ *     tags: [Properties]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Geocoding backfill summary with processed/succeeded/failed/skipped counts
+ *       403:
+ *         description: Admin role required
+ */
+router.post("/backfill-geocode", authorize("ADMIN"), PropertyController.backfillGeocode);
+
+/**
+ * @swagger
  * /properties/bulk-action:
  *   post:
  *     summary: Perform a bulk action on multiple properties
@@ -348,6 +378,34 @@ router.post("/llm-enrich-by-site", authorize("ADMIN", "EDITOR"), PropertyControl
  *         description: Admin role required
  */
 router.post("/bulk-action", authorize("ADMIN"), validate(bulkActionSchema), PropertyController.bulkAction);
+
+/**
+ * @swagger
+ * /properties/find-duplicates:
+ *   post:
+ *     summary: Find fuzzy duplicate clusters (POST with optional propertyIds filter)
+ *     tags: [Properties]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Duplicate clusters found
+ */
+router.post("/find-duplicates", authorize("ADMIN", "EDITOR"), PropertyController.findDuplicates);
+
+/**
+ * @swagger
+ * /properties/merge:
+ *   post:
+ *     summary: Merge duplicate properties — keeps one, soft-deletes others
+ *     tags: [Properties]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Merge completed
+ */
+router.post("/merge", authorize("ADMIN", "EDITOR"), PropertyController.mergeProperties);
 
 /**
  * @swagger

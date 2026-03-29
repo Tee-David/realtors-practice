@@ -113,17 +113,22 @@ export class EmailService {
     to: string,
     savedSearchName: string,
     matchCount: number,
-    matchPreview: Array<{ title: string; price: number | null; area: string | null }>
+    matchPreview: Array<{ title: string; price: number | null; area: string | null; link?: string }>
   ) {
     if (!resend && !smtpTransporter) return;
 
     const matchList = matchPreview
       .map(
         (m) =>
-          `<li style="margin-bottom: 8px;">
-            <strong>${m.title}</strong><br/>
-            ${m.price ? `₦${new Intl.NumberFormat().format(m.price)}` : "Price on request"}
-            ${m.area ? ` · ${m.area}` : ""}
+          `<li style="margin-bottom: 10px;">
+            ${m.link
+              ? `<a href="${m.link}" style="color: #0001FC; font-weight: 600; text-decoration: none;">${m.title}</a>`
+              : `<strong>${m.title}</strong>`
+            }<br/>
+            <span style="color: #6b7280; font-size: 13px;">
+              ${m.price ? `₦${new Intl.NumberFormat().format(m.price)}` : "Price on request"}
+              ${m.area ? ` &middot; ${m.area}` : ""}
+            </span>
           </li>`
       )
       .join("");

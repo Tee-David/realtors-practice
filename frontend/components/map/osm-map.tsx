@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useCallback, useState } from "react";
+import { useEffect, useMemo, useCallback, useState, useRef } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -271,11 +271,16 @@ function ClusteredMarkers({
 
 function FitBounds({ properties }: { properties: Property[] }) {
   const map = useMap();
+  // Only fitBounds once on initial load — don't re-fit when filters change
+  const hasFitRef = useRef(false);
+
   useEffect(() => {
+    if (hasFitRef.current) return; // Already fitted once
     const coords = properties
       .filter((p) => p.latitude && p.longitude)
       .map((p) => [p.latitude!, p.longitude!] as [number, number]);
     if (coords.length > 0) {
+      hasFitRef.current = true;
       map.fitBounds(coords, { padding: [40, 40], maxZoom: 14 });
     }
   }, [properties, map]);

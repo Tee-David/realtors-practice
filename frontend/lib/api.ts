@@ -61,6 +61,22 @@ export const properties = {
   llmEnrichCount: (siteId: string) => api.get(`/properties/llm-enrich-count/${siteId}`),
   bulkAction: (data: { ids: string[]; action: string }) => api.post("/properties/bulk-action", data),
   stats: () => api.get("/properties/stats"),
+  getDuplicates: (params?: Record<string, unknown>) => api.get("/properties/duplicates", { params }),
+  duplicates: () => api.get("/properties/duplicates"),
+  findDuplicates: (data: { propertyIds?: string[] }) => api.post("/properties/find-duplicates", data),
+  mergeProperties: (data: { keepId: string; mergeIds: string[]; overrides?: Record<string, unknown> }) =>
+    api.post("/properties/merge", {
+      keepId: data.keepId,
+      deleteIds: data.mergeIds,
+      fieldOverrides: data.overrides,
+    }),
+  merge: (data: { keepId: string; mergeIds: string[]; overrides?: Record<string, unknown> }) =>
+    api.post("/properties/merge", {
+      keepId: data.keepId,
+      deleteIds: data.mergeIds,
+      fieldOverrides: data.overrides,
+    }),
+  backfillGeocode: () => api.post("/properties/backfill-geocode", {}, { timeout: 0 }),
 };
 
 export const sites = {

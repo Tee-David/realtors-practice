@@ -10,7 +10,14 @@ import {
   ChevronRight, MapPin, BedDouble, Bath, Maximize2, Building2, Star, Link,
   Calendar, Loader2, Check, User, Phone, Layers,
   LayoutGrid, LayoutList, Columns, GripVertical, Clock, Trash2, Play, RefreshCcw,
+  GitMerge, HelpCircle, Undo2, BookMarked,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { AIPlaceholderCard } from "@/components/ai/ai-placeholder";
 import { SearchableSelect, SearchableMultiSelect } from "@/components/ui/searchable-select";
 import ModernLoader from "@/components/ui/modern-loader";
@@ -48,6 +55,11 @@ interface AdvancedFilters {
   maxBedrooms: string;
   minBathrooms: string;
   maxBathrooms: string;
+  origins: string[];
+  enrichmentStatuses: string[];
+  verificationStatus: string[];
+  stale: boolean;
+  qualityMin: number | null;
 }
 
 const DEFAULT_FILTERS: AdvancedFilters = {
@@ -68,7 +80,45 @@ const DEFAULT_FILTERS: AdvancedFilters = {
   maxBedrooms: "",
   minBathrooms: "",
   maxBathrooms: "",
+  origins: [],
+  enrichmentStatuses: [],
+  verificationStatus: [],
+  stale: false,
+  qualityMin: null,
 };
+
+// ─── Filter Preset types ──────────────────────────────────────────────────────
+
+interface FilterPreset {
+  id: string;
+  name: string;
+  filters: Partial<AdvancedFilters>;
+}
+
+const BUILTIN_PRESETS: FilterPreset[] = [
+  { id: "builtin-quality", name: "High Quality", filters: { qualityMin: 70 } },
+  { id: "builtin-noimages", name: "No Images", filters: { hasImages: "no" } },
+  { id: "builtin-nocoords", name: "No Coordinates", filters: { hasCoordinates: "no" } },
+  { id: "builtin-stale", name: "Stale (30+ days)", filters: { stale: true } },
+  { id: "builtin-unverified", name: "Unverified", filters: { verificationStatus: ["UNVERIFIED"] } },
+];
+
+const LS_PRESETS_KEY = "de-filter-presets";
+
+function loadPresets(): FilterPreset[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const stored = localStorage.getItem(LS_PRESETS_KEY);
+    if (stored) return JSON.parse(stored) as FilterPreset[];
+  } catch {}
+  return [];
+}
+
+function savePresets(presets: FilterPreset[]) {
+  try {
+    localStorage.setItem(LS_PRESETS_KEY, JSON.stringify(presets));
+  } catch {}
+}
 
 // ─── Column definitions ──────────────────────────────────────────────────────
 
@@ -107,6 +157,8 @@ const ALL_COLUMNS: ColumnDef[] = [
   { key: "listingUrl", label: "Source URL", sortable: false, defaultVisible: false },
   { key: "completeness", label: "Completeness", sortable: false, defaultVisible: false },
   { key: "staleIndicator", label: "Stale", sortable: false, defaultVisible: false },
+  { key: "origin", label: "Origin", sortable: false, defaultVisible: false },
+  { key: "enrichmentStatus", label: "Enrichment", sortable: false, defaultVisible: false },
 ];
 
 // ─── Staleness helper ─────────────────────────────────────────────────────────
@@ -327,6 +379,379 @@ function KanbanColumn({ status, items, onInspect, onDrop }: { status: string; it
   );
 }
 
+// ─── Keyboard Shortcuts Help Modal ───────────────────────────────────────────
+
+const KEYBOARD_SHORTCUTS = [
+  { keys: "↑ / ↓", description: "Navigate rows" },
+  { keys: "Enter", description: "Open property detail" },
+  { keys: "Space", description: "Toggle row selection" },
+  { keys: "Ctrl+A", description: "Select all visible rows" },
+  { keys: "Shift+Click", description: "Range select checkboxes" },
+  { keys: "Delete", description: "Delete selected properties" },
+  { keys: "Ctrl+Z", description: "Undo last inline edit" },
+  { keys: "Ctrl+S", description: "Save current inline edit" },
+  { keys: "Escape", description: "Close panel / cancel edit" },
+  { keys: "?", description: "Show / hide this help" },
+];
+
+function KeyboardShortcutsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent
+        className="max-w-md"
+        style={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }}
+      >
+        <DialogHeader>
+          <DialogTitle style={{ color: "var(--foreground)" }}>Keyboard Shortcuts</DialogTitle>
+        </DialogHeader>
+        <div className="mt-2">
+          <table className="w-full">
+            <tbody>
+              {KEYBOARD_SHORTCUTS.map((s) => (
+                <tr key={s.keys} className="border-b last:border-0" style={{ borderColor: "var(--border)" }}>
+                  <td className="py-2.5 pr-4 w-36">
+                    <kbd
+                      className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-semibold border"
+                      style={{ backgroundColor: "var(--secondary)", borderColor: "var(--border)", color: "var(--foreground)" }}
+                    >
+                      {s.keys}
+                    </kbd>
+                  </td>
+                  <td className="py-2.5 text-sm" style={{ color: "var(--muted-foreground)" }}>
+                    {s.description}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Duplicate Cluster Card ───────────────────────────────────────────────────
+
+interface DuplicateCluster {
+  ids: string[];
+  similarity: number;
+  properties: {
+    id: string;
+    title: string;
+    price: number | null;
+    area: string | null;
+    state: string | null;
+    description: string | null;
+    images: string[];
+    createdAt: string | Date;
+    updatedAt: string | Date;
+    source: string;
+    listingUrl: string | null;
+    qualityScore?: number | null;
+  }[];
+}
+
+function pickBestValue(field: string, props: DuplicateCluster["properties"]): string | number | null {
+  if (field === "description") {
+    const best = props.map((p) => p.description || "").sort((a, b) => b.length - a.length)[0];
+    return best || null;
+  }
+  if (field === "price") {
+    const withPrice = props.filter((p) => p.price != null).sort((a, b) =>
+      new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    );
+    return withPrice[0]?.price ?? null;
+  }
+  if (field === "title") {
+    return props.map((p) => p.title).sort((a, b) => b.length - a.length)[0] || null;
+  }
+  return null;
+}
+
+function DuplicateClusterCard({
+  cluster,
+  onKeepBest,
+  onMerge,
+  onDismiss,
+}: {
+  cluster: DuplicateCluster;
+  onKeepBest: (cluster: DuplicateCluster) => void;
+  onMerge: (cluster: DuplicateCluster) => void;
+  onDismiss: (cluster: DuplicateCluster) => void;
+}) {
+  const simPct = Math.round(cluster.similarity * 100);
+  const simColor = simPct >= 90 ? "#dc2626" : simPct >= 75 ? "#ca8a04" : "#6b7280";
+
+  return (
+    <div
+      className="rounded-xl border overflow-hidden"
+      style={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }}
+    >
+      {/* Header */}
+      <div
+        className="flex items-center justify-between px-4 py-3 border-b"
+        style={{ borderColor: "var(--border)", backgroundColor: "var(--secondary)" }}
+      >
+        <div className="flex items-center gap-2">
+          <GitMerge className="w-4 h-4" style={{ color: "var(--primary)" }} />
+          <span className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+            {cluster.properties.length} duplicate properties
+          </span>
+          <span
+            className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+            style={{ backgroundColor: simColor + "22", color: simColor }}
+          >
+            {simPct}% similar
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onKeepBest(cluster)}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors hover:opacity-80"
+            style={{ borderColor: "#16a34a", color: "#16a34a", backgroundColor: "rgba(34,197,94,0.08)" }}
+            title="Keep the property with the highest quality score, soft-delete others"
+          >
+            Keep Best
+          </button>
+          <button
+            onClick={() => onMerge(cluster)}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors hover:opacity-80"
+            style={{ borderColor: "var(--primary)", color: "var(--primary)", backgroundColor: "rgba(0,1,252,0.07)" }}
+          >
+            Merge
+          </button>
+          <button
+            onClick={() => onDismiss(cluster)}
+            className="px-2 py-1.5 rounded-lg text-xs font-medium border transition-colors hover:opacity-80"
+            style={{ borderColor: "var(--border)", color: "var(--muted-foreground)" }}
+            title="Not a duplicate"
+          >
+            Not a Dup
+          </button>
+        </div>
+      </div>
+
+      {/* Properties side-by-side */}
+      <div className="overflow-x-auto">
+        <div className="flex gap-0 min-w-0" style={{ minWidth: cluster.properties.length * 220 }}>
+          {cluster.properties.map((prop, i) => (
+            <div
+              key={prop.id}
+              className="flex-1 p-3 border-r last:border-r-0 min-w-[200px]"
+              style={{ borderColor: "var(--border)" }}
+            >
+              <p
+                className="text-xs font-semibold leading-tight line-clamp-2 mb-1"
+                style={{ color: "var(--foreground)" }}
+              >
+                {prop.title}
+              </p>
+              {prop.price != null && (
+                <p className="text-sm font-bold mb-1" style={{ color: "var(--accent, #FF6600)" }}>
+                  ₦{new Intl.NumberFormat().format(prop.price)}
+                </p>
+              )}
+              {(prop.area || prop.state) && (
+                <p className="text-[10px] mb-1 truncate" style={{ color: "var(--muted-foreground)" }}>
+                  {[prop.area, prop.state].filter(Boolean).join(", ")}
+                </p>
+              )}
+              <p className="text-[10px]" style={{ color: "var(--muted-foreground)" }}>
+                {new Date(prop.createdAt).toLocaleDateString()}
+              </p>
+              {prop.qualityScore != null && (
+                <span
+                  className="text-[10px] font-bold"
+                  style={{ color: prop.qualityScore >= 80 ? "#16a34a" : prop.qualityScore >= 50 ? "#ca8a04" : "#dc2626" }}
+                >
+                  Q: {prop.qualityScore}
+                </span>
+              )}
+              <p className="text-[10px] mt-0.5 truncate" style={{ color: "var(--muted-foreground)" }}>
+                #{i + 1} · {prop.source}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Merge Dialog ─────────────────────────────────────────────────────────────
+
+function MergeDialog({
+  cluster,
+  open,
+  onClose,
+  onConfirm,
+}: {
+  cluster: DuplicateCluster | null;
+  open: boolean;
+  onClose: () => void;
+  onConfirm: (keepId: string, mergeIds: string[], overrides: Record<string, unknown>) => void;
+}) {
+  const [keepId, setKeepId] = useState<string>("");
+  const [overrides, setOverrides] = useState<Record<string, unknown>>({});
+
+  useEffect(() => {
+    if (cluster) {
+      // Default to first property
+      setKeepId(cluster.properties[0]?.id || "");
+      setOverrides({});
+    }
+  }, [cluster]);
+
+  if (!cluster) return null;
+
+  const mergeIds = cluster.ids.filter((id) => id !== keepId);
+
+  const MERGE_FIELDS: { key: keyof DuplicateCluster["properties"][0]; label: string }[] = [
+    { key: "title", label: "Title" },
+    { key: "price", label: "Price" },
+    { key: "description", label: "Description" },
+    { key: "area", label: "Area" },
+  ];
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent
+        className="max-w-2xl max-h-[85vh] overflow-y-auto"
+        style={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }}
+      >
+        <DialogHeader>
+          <DialogTitle style={{ color: "var(--foreground)" }}>Merge Duplicate Properties</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-5 mt-2">
+          {/* Keep which property */}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--muted-foreground)" }}>
+              Select property to keep
+            </p>
+            <div className="space-y-2">
+              {cluster.properties.map((prop) => (
+                <label
+                  key={prop.id}
+                  className="flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors"
+                  style={{
+                    borderColor: keepId === prop.id ? "var(--primary)" : "var(--border)",
+                    backgroundColor: keepId === prop.id ? "rgba(0,1,252,0.04)" : "transparent",
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="keep-property"
+                    value={prop.id}
+                    checked={keepId === prop.id}
+                    onChange={() => setKeepId(prop.id)}
+                    className="mt-0.5"
+                    style={{ accentColor: "var(--primary)" }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate" style={{ color: "var(--foreground)" }}>{prop.title}</p>
+                    <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+                      {prop.price != null && (
+                        <span className="text-xs font-semibold" style={{ color: "var(--accent, #FF6600)" }}>
+                          ₦{new Intl.NumberFormat().format(prop.price)}
+                        </span>
+                      )}
+                      {prop.area && <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>{prop.area}</span>}
+                      {prop.qualityScore != null && (
+                        <span className="text-xs font-bold" style={{ color: prop.qualityScore >= 80 ? "#16a34a" : prop.qualityScore >= 50 ? "#ca8a04" : "#dc2626" }}>
+                          Q: {prop.qualityScore}
+                        </span>
+                      )}
+                      <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                        {new Date(prop.createdAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Field overrides */}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--muted-foreground)" }}>
+              Field overrides (click to set a specific value)
+            </p>
+            <div className="space-y-3">
+              {MERGE_FIELDS.map(({ key, label }) => {
+                const values = cluster.properties
+                  .map((p) => ({ id: p.id, value: p[key] }))
+                  .filter((v) => v.value != null && v.value !== "");
+                const autoVal = pickBestValue(key as string, cluster.properties);
+                const selectedVal = overrides[key as string] ?? autoVal;
+
+                if (values.length === 0) return null;
+
+                return (
+                  <div key={key as string}>
+                    <p className="text-xs font-medium mb-1" style={{ color: "var(--foreground)" }}>{label}</p>
+                    <div className="flex flex-wrap gap-2">
+                      {values.map((v, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => setOverrides((prev) => ({ ...prev, [key]: v.value }))}
+                          className="px-2.5 py-1.5 rounded-lg text-xs border transition-colors text-left max-w-[200px]"
+                          style={{
+                            borderColor: selectedVal === v.value ? "var(--primary)" : "var(--border)",
+                            backgroundColor: selectedVal === v.value ? "rgba(0,1,252,0.07)" : "transparent",
+                            color: selectedVal === v.value ? "var(--primary)" : "var(--foreground)",
+                          }}
+                          title={String(v.value)}
+                        >
+                          <span className="truncate block">
+                            {key === "price" && typeof v.value === "number"
+                              ? `₦${new Intl.NumberFormat().format(v.value)}`
+                              : typeof v.value === "string" && v.value.length > 50
+                              ? v.value.slice(0, 50) + "…"
+                              : String(v.value)}
+                          </span>
+                          {selectedVal === v.value && (
+                            <span className="text-[10px] font-semibold mt-0.5 block">Selected</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {mergeIds.length > 0 && (
+            <p className="text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: "rgba(239,68,68,0.07)", color: "#dc2626" }}>
+              This will soft-delete {mergeIds.length} {mergeIds.length === 1 ? "property" : "properties"} and merge their best data into the kept property.
+            </p>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-3 mt-5 pt-4 border-t" style={{ borderColor: "var(--border)" }}>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg text-sm font-medium border"
+            style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => keepId && onConfirm(keepId, mergeIds, overrides)}
+            disabled={!keepId || mergeIds.length === 0}
+            className="px-5 py-2 rounded-lg text-sm font-semibold transition-all hover:opacity-90 disabled:opacity-50"
+            style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
+          >
+            Confirm Merge
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 const LS_COLUMNS_KEY = "data-explorer-columns";
 
 function loadColumnVisibility(): Record<string, boolean> {
@@ -389,6 +814,11 @@ function countActiveFilters(f: AdvancedFilters): number {
   if (f.maxBedrooms) count++;
   if (f.minBathrooms) count++;
   if (f.maxBathrooms) count++;
+  if (f.origins.length > 0) count++;
+  if (f.enrichmentStatuses.length > 0) count++;
+  if (f.verificationStatus.length > 0) count++;
+  if (f.stale) count++;
+  if (f.qualityMin !== null) count++;
   return count;
 }
 
@@ -411,6 +841,10 @@ function buildApiParams(f: AdvancedFilters): Record<string, unknown> {
   if (f.maxBedrooms) params.maxBedrooms = parseInt(f.maxBedrooms);
   if (f.minBathrooms) params.minBathrooms = parseInt(f.minBathrooms);
   if (f.maxBathrooms) params.maxBathrooms = parseInt(f.maxBathrooms);
+  if (f.origins.length === 1) params.origin = f.origins[0];
+  if (f.enrichmentStatuses.length === 1) params.enrichmentStatus = f.enrichmentStatuses[0];
+  if (f.verificationStatus.length === 1) params.verificationStatus = f.verificationStatus[0];
+  if (f.qualityMin !== null) params.minQualityScore = f.qualityMin;
   return params;
 }
 
@@ -436,6 +870,11 @@ function getActiveChips(f: AdvancedFilters, sites: { id: string; name: string }[
   if (f.maxBedrooms) chips.push({ key: "maxBedrooms", label: `Max Beds: ${f.maxBedrooms}` });
   if (f.minBathrooms) chips.push({ key: "minBathrooms", label: `Min Baths: ${f.minBathrooms}` });
   if (f.maxBathrooms) chips.push({ key: "maxBathrooms", label: `Max Baths: ${f.maxBathrooms}` });
+  if (f.origins.length > 0) chips.push({ key: "origins", label: `Origin: ${f.origins.join(", ")}` });
+  if (f.enrichmentStatuses.length > 0) chips.push({ key: "enrichmentStatuses", label: `Enrichment: ${f.enrichmentStatuses.join(", ")}` });
+  if (f.verificationStatus.length > 0) chips.push({ key: "verificationStatus", label: `Verification: ${f.verificationStatus.join(", ")}` });
+  if (f.stale) chips.push({ key: "stale", label: "Stale Only" });
+  if (f.qualityMin !== null) chips.push({ key: "qualityMin", label: `Quality ≥ ${f.qualityMin}` });
   return chips;
 }
 
@@ -459,6 +898,11 @@ function removeFilter(f: AdvancedFilters, key: string): AdvancedFilters {
     case "maxBedrooms": updated.maxBedrooms = ""; break;
     case "minBathrooms": updated.minBathrooms = ""; break;
     case "maxBathrooms": updated.maxBathrooms = ""; break;
+    case "origins": updated.origins = []; break;
+    case "enrichmentStatuses": updated.enrichmentStatuses = []; break;
+    case "verificationStatus": updated.verificationStatus = []; break;
+    case "stale": updated.stale = false; break;
+    case "qualityMin": updated.qualityMin = null; break;
   }
   return updated;
 }
@@ -694,9 +1138,50 @@ function CellValue({ col, item }: { col: string; item: any }) {
           <Clock className="w-3 h-3" />Stale
         </span>
       ) : <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>Fresh</span>;
+    case "origin":
+      return <OriginBadge origin={item.origin} />;
+    case "enrichmentStatus":
+      return <EnrichmentBadge status={item.enrichmentStatus} />;
     default:
       return <span>—</span>;
   }
+}
+
+function OriginBadge({ origin }: { origin: string }) {
+  const colors: Record<string, { bg: string; text: string }> = {
+    SCRAPED: { bg: "rgba(59,130,246,0.15)", text: "#2563eb" },
+    MANUAL:  { bg: "rgba(34,197,94,0.15)",  text: "#16a34a" },
+    IMPORTED:{ bg: "rgba(245,158,11,0.15)", text: "#d97706" },
+    API:     { bg: "rgba(168,85,247,0.15)", text: "#7c3aed" },
+  };
+  const c = colors[origin] || { bg: "rgba(107,114,128,0.15)", text: "#6b7280" };
+  return (
+    <span
+      className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold"
+      style={{ backgroundColor: c.bg, color: c.text }}
+    >
+      {origin || "—"}
+    </span>
+  );
+}
+
+function EnrichmentBadge({ status }: { status: string }) {
+  const colors: Record<string, { bg: string; text: string }> = {
+    RAW:      { bg: "rgba(107,114,128,0.15)", text: "#6b7280" },
+    GEOCODED: { bg: "rgba(14,165,233,0.15)",  text: "#0284c7" },
+    ENRICHED: { bg: "rgba(168,85,247,0.15)",  text: "#7c3aed" },
+    VERIFIED: { bg: "rgba(34,197,94,0.15)",   text: "#16a34a" },
+    PUBLISHED:{ bg: "rgba(6,182,212,0.15)",   text: "#0891b2" },
+  };
+  const c = colors[status] || { bg: "rgba(107,114,128,0.15)", text: "#6b7280" };
+  return (
+    <span
+      className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold"
+      style={{ backgroundColor: c.bg, color: c.text }}
+    >
+      {status || "—"}
+    </span>
+  );
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -735,15 +1220,18 @@ function EditableCell({
   children,
   onSave,
   saveState,
+  onEditingChange,
 }: {
   item: any;
   col: EditableCol;
   children: React.ReactNode;
-  onSave: (id: string, col: EditableCol, value: string) => void;
+  onSave: (id: string, col: EditableCol, value: string, oldValue?: string) => void;
   saveState?: CellSaveState | null;
+  onEditingChange?: (commit: (() => void) | null) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState("");
+  const [oldValue, setOldValue] = useState("");
   const inputRef = useRef<HTMLInputElement | HTMLSelectElement>(null);
 
   const startEdit = () => {
@@ -753,6 +1241,7 @@ function EditableCell({
       col === "area" ? (item.area || "") :
       (item.verificationStatus || "UNVERIFIED");
     setValue(raw);
+    setOldValue(raw);
     setEditing(true);
   };
 
@@ -765,13 +1254,28 @@ function EditableCell({
     }
   }, [editing]);
 
-  const commit = () => {
+  const commit = useCallback(() => {
     if (!editing) return;
     setEditing(false);
-    onSave(item.id, col, value);
-  };
+    onEditingChange?.(null);
+    onSave(item.id, col, value, oldValue);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing, value, oldValue, item.id, col, onSave]);
 
-  const cancel = () => setEditing(false);
+  // Expose commit to parent via callback when editing starts
+  useEffect(() => {
+    if (editing) {
+      onEditingChange?.(commit);
+    } else {
+      onEditingChange?.(null);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing, commit]);
+
+  const cancel = () => {
+    setEditing(false);
+    onEditingChange?.(null);
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") { e.preventDefault(); commit(); }
@@ -1333,6 +1837,26 @@ export default function DataExplorerPage() {
   // ── Keyboard navigation: focused row index in current page
   const [focusedRowIndex, setFocusedRowIndex] = useState<number | null>(null);
 
+  // ── Range selection: last-checked checkbox index
+  const lastCheckedRowIndexRef = useRef<number | null>(null);
+
+  // ── Undo last inline edit
+  const lastEditRef = useRef<{ id: string; field: EditableCol; oldValue: string; newValue: string } | null>(null);
+
+  // ── Keyboard shortcuts help modal
+  const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+
+  // ── Duplicate detection
+  const [showDuplicates, setShowDuplicates] = useState(false);
+  const [duplicateClusters, setDuplicateClusters] = useState<DuplicateCluster[]>([]);
+  const [duplicatesLoading, setDuplicatesLoading] = useState(false);
+  const [dismissedClusters, setDismissedClusters] = useState<Set<string>>(new Set());
+  const [mergeDialogCluster, setMergeDialogCluster] = useState<DuplicateCluster | null>(null);
+  const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
+
+  // ── Active inline edit cell ref (for Ctrl+S)
+  const activeEditCommitRef = useRef<(() => void) | null>(null);
+
   // ── Inline cell editing save state
   const [cellSave, setCellSave] = useState<CellSaveState | null>(null);
 
@@ -1341,6 +1865,13 @@ export default function DataExplorerPage() {
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilters>(DEFAULT_FILTERS);
   // Draft state used inside the panel — only committed on Apply
   const [draftFilters, setDraftFilters] = useState<AdvancedFilters>(DEFAULT_FILTERS);
+
+  // ── Filter Presets (declared before helpers that reference setActivePresetId)
+  const [userPresets, setUserPresets] = useState<FilterPreset[]>(() => loadPresets());
+  const [presetsDropdownOpen, setPresetsDropdownOpen] = useState(false);
+  const presetsDropdownRef = useRef<HTMLDivElement>(null);
+  const [presetNameInput, setPresetNameInput] = useState("");
+  const [activePresetId, setActivePresetId] = useState<string | null>(null);
 
   const openFilterPanel = () => {
     setDraftFilters(advancedFilters);
@@ -1354,7 +1885,50 @@ export default function DataExplorerPage() {
   const clearAllFilters = () => {
     setAdvancedFilters(DEFAULT_FILTERS);
     setDraftFilters(DEFAULT_FILTERS);
+    setActivePresetId(null);
     setPage(1);
+  };
+
+  // Close presets dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (presetsDropdownRef.current && !presetsDropdownRef.current.contains(e.target as Node)) {
+        setPresetsDropdownOpen(false);
+      }
+    };
+    if (presetsDropdownOpen) document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [presetsDropdownOpen]);
+
+  const applyPreset = (preset: FilterPreset) => {
+    const merged = { ...DEFAULT_FILTERS, ...preset.filters };
+    setAdvancedFilters(merged);
+    setDraftFilters(merged);
+    setActivePresetId(preset.id);
+    setPage(1);
+    setPresetsDropdownOpen(false);
+  };
+
+  const saveCurrentAsPreset = () => {
+    const name = presetNameInput.trim();
+    if (!name) return;
+    const preset: FilterPreset = {
+      id: Date.now().toString(),
+      name,
+      filters: { ...advancedFilters },
+    };
+    const updated = [...userPresets, preset];
+    setUserPresets(updated);
+    savePresets(updated);
+    setPresetNameInput("");
+    toast.success(`Preset "${name}" saved`);
+  };
+
+  const deletePreset = (id: string) => {
+    const updated = userPresets.filter((p) => p.id !== id);
+    setUserPresets(updated);
+    savePresets(updated);
+    if (activePresetId === id) setActivePresetId(null);
   };
 
   const activeFilterCount = countActiveFilters(advancedFilters);
@@ -1427,7 +2001,7 @@ export default function DataExplorerPage() {
 
   // Apply client-side stale filter
   const rawItems: any[] = data?.data || [];
-  const filteredItems = showStaleOnly ? rawItems.filter(isStale) : rawItems;
+  const filteredItems = (showStaleOnly || advancedFilters.stale) ? rawItems.filter(isStale) : rawItems;
   const staleCount = rawItems.filter(isStale).length;
   // items alias used throughout existing code
   const items = filteredItems;
@@ -1538,12 +2112,28 @@ export default function DataExplorerPage() {
     } catch { toast.error("Failed to update status"); }
   }, [queryClient]);
 
-  const toggleSelect = (id: string) => {
+  const toggleSelect = (id: string, rowIndex?: number) => {
+    if (rowIndex !== undefined) lastCheckedRowIndexRef.current = rowIndex;
     setSelectedIds((prev) => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
+  };
+
+  // Range select: shift+click selects all rows between lastChecked and current index
+  const rangeSelect = (toIndex: number) => {
+    const from = lastCheckedRowIndexRef.current;
+    if (from === null) return;
+    const lo = Math.min(from, toIndex);
+    const hi = Math.max(from, toIndex);
+    const rangeIds = items.slice(lo, hi + 1).map((i: any) => i.id);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      rangeIds.forEach((id: string) => next.add(id));
+      return next;
+    });
+    lastCheckedRowIndexRef.current = toIndex;
   };
 
   const toggleSelectAll = () => {
@@ -1596,9 +2186,64 @@ export default function DataExplorerPage() {
     const handleKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
       const isInput = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+      const isMac = typeof navigator !== "undefined" && navigator.platform.toUpperCase().includes("MAC");
+      const ctrlOrCmd = isMac ? e.metaKey : e.ctrlKey;
+
+      // ? — toggle shortcuts help (only when not in an input)
+      if (e.key === "?" && !isInput) {
+        e.preventDefault();
+        setShowShortcutsHelp((v) => !v);
+        return;
+      }
 
       if (e.key === "Escape") {
+        if (showShortcutsHelp) { setShowShortcutsHelp(false); return; }
         if (slideOverOpen) { closeSlideOver(); return; }
+        return;
+      }
+
+      // Ctrl+A — select all visible rows
+      if (ctrlOrCmd && e.key === "a" && !isInput) {
+        e.preventDefault();
+        setSelectedIds(new Set(items.map((i: any) => i.id)));
+        return;
+      }
+
+      // Ctrl+Z — undo last inline edit
+      if (ctrlOrCmd && e.key === "z" && !isInput) {
+        e.preventDefault();
+        const last = lastEditRef.current;
+        if (last) {
+          const payload: Record<string, unknown> = { changeSource: "MANUAL_EDIT" };
+          if (last.field === "title") payload.title = last.oldValue;
+          else if (last.field === "price") payload.price = last.oldValue ? parseFloat(last.oldValue) : null;
+          else if (last.field === "area") payload.area = last.oldValue;
+          else if (last.field === "verificationStatus") payload.verificationStatus = last.oldValue;
+          propertiesApi.update(last.id, payload).then(() => {
+            queryClient.invalidateQueries({ queryKey: ["data-explorer"] });
+            toast.success(`Undid edit to ${last.field}`);
+          }).catch(() => toast.error("Undo failed"));
+          lastEditRef.current = null;
+        } else {
+          toast.info("Nothing to undo");
+        }
+        return;
+      }
+
+      // Ctrl+S — save currently focused inline edit
+      if (ctrlOrCmd && e.key === "s") {
+        e.preventDefault();
+        if (activeEditCommitRef.current) {
+          activeEditCommitRef.current();
+        }
+        return;
+      }
+
+      // Delete — show delete confirmation for selected rows
+      if (e.key === "Delete" && !isInput && selectedIds.size > 0) {
+        e.preventDefault();
+        setShowDeleteConfirm(true);
+        return;
       }
 
       if (slideOverOpen && !isInput) {
@@ -1632,15 +2277,20 @@ export default function DataExplorerPage() {
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slideOverOpen, focusedRowIndex, items, navigateSlideOver, openSlideOver, closeSlideOver]);
+  }, [slideOverOpen, focusedRowIndex, items, navigateSlideOver, openSlideOver, closeSlideOver, selectedIds, showShortcutsHelp, queryClient]);
 
   // ── Inline cell save
-  const handleCellSave = async (id: string, col: EditableCol, value: string) => {
+  const handleCellSave = async (id: string, col: EditableCol, value: string, oldValue?: string) => {
     const payload: Record<string, unknown> = { changeSource: "MANUAL_EDIT" };
     if (col === "title") payload.title = value;
     else if (col === "price") payload.price = value ? parseFloat(value) : null;
     else if (col === "area") payload.area = value;
     else if (col === "verificationStatus") payload.verificationStatus = value;
+
+    // Store for undo
+    if (oldValue !== undefined && oldValue !== value) {
+      lastEditRef.current = { id, field: col, oldValue, newValue: value };
+    }
 
     setCellSave({ id, col, status: "saving" });
     try {
@@ -1765,6 +2415,49 @@ export default function DataExplorerPage() {
     createProperty.mutate(payload);
   };
 
+  // ── Find Duplicates
+  const handleFindDuplicates = useCallback(async () => {
+    setDuplicatesLoading(true);
+    setShowDuplicates(true);
+    setDismissedClusters(new Set());
+    try {
+      const res = await propertiesApi.getDuplicates();
+      setDuplicateClusters(res.data?.data?.clusters || []);
+    } catch {
+      toast.error("Failed to find duplicates");
+    } finally {
+      setDuplicatesLoading(false);
+    }
+  }, []);
+
+  const handleKeepBest = useCallback(async (cluster: DuplicateCluster) => {
+    // Keep the property with the highest qualityScore (or first if no scores)
+    const sorted = [...cluster.properties].sort((a, b) => (b.qualityScore ?? 0) - (a.qualityScore ?? 0));
+    const keepId = sorted[0].id;
+    const mergeIds = cluster.ids.filter((id) => id !== keepId);
+    try {
+      await propertiesApi.mergeProperties({ keepId, mergeIds, overrides: {} });
+      queryClient.invalidateQueries({ queryKey: ["data-explorer"] });
+      toast.success("Kept best property, others soft-deleted");
+      setDuplicateClusters((prev) => prev.filter((c) => c.ids[0] !== cluster.ids[0]));
+    } catch {
+      toast.error("Failed to keep best");
+    }
+  }, [queryClient]);
+
+  const handleMergeConfirm = useCallback(async (keepId: string, mergeIds: string[], overrides: Record<string, unknown>) => {
+    try {
+      await propertiesApi.mergeProperties({ keepId, mergeIds, overrides });
+      queryClient.invalidateQueries({ queryKey: ["data-explorer"] });
+      toast.success("Properties merged successfully");
+      setMergeDialogOpen(false);
+      setMergeDialogCluster(null);
+      setDuplicateClusters((prev) => prev.filter((c) => !c.ids.includes(keepId) || c.ids.length <= 1));
+    } catch {
+      toast.error("Failed to merge properties");
+    }
+  }, [queryClient]);
+
   // Active chips for display
   const activeChips = getActiveChips(advancedFilters, allSites);
 
@@ -1883,6 +2576,83 @@ export default function DataExplorerPage() {
           )}
         </button>
 
+        {/* Presets Button */}
+        <div className="relative" ref={presetsDropdownRef}>
+          <button
+            onClick={() => setPresetsDropdownOpen(!presetsDropdownOpen)}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-lg border text-sm font-medium transition-all hover:border-[var(--primary)]"
+            style={{
+              borderColor: activePresetId ? "var(--primary)" : "var(--border)",
+              color: activePresetId ? "var(--primary)" : "var(--foreground)",
+              backgroundColor: activePresetId ? "rgba(0,1,252,0.06)" : "var(--background)",
+            }}
+          >
+            <BookMarked className="w-4 h-4" />
+            <span className="hidden sm:inline">Presets</span>
+            <ChevronDown className="w-3.5 h-3.5" style={{ color: "var(--muted-foreground)" }} />
+          </button>
+
+          {presetsDropdownOpen && (
+            <div
+              className="absolute left-0 top-full mt-1 z-50 min-w-[260px] rounded-xl border shadow-xl overflow-hidden"
+              style={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }}
+            >
+              <div className="px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>
+                <p className="text-xs font-semibold" style={{ color: "var(--foreground)" }}>Built-in Presets</p>
+              </div>
+              <div className="py-1">
+                {BUILTIN_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    onClick={() => applyPreset(preset)}
+                    className="w-full text-left px-4 py-2.5 text-xs font-medium flex items-center justify-between transition-colors"
+                    style={{ color: activePresetId === preset.id ? "var(--primary)" : "var(--foreground)" }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--secondary)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                  >
+                    <span>{preset.name}</span>
+                    {activePresetId === preset.id && <Check className="w-3.5 h-3.5 shrink-0" style={{ color: "var(--primary)" }} />}
+                  </button>
+                ))}
+              </div>
+
+              {userPresets.length > 0 && (
+                <>
+                  <div className="px-4 py-2 border-t border-b" style={{ borderColor: "var(--border)" }}>
+                    <p className="text-xs font-semibold" style={{ color: "var(--foreground)" }}>My Presets</p>
+                  </div>
+                  <div className="py-1">
+                    {userPresets.map((preset) => (
+                      <div
+                        key={preset.id}
+                        className="flex items-center gap-1 px-4 py-2 transition-colors"
+                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--secondary)")}
+                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                      >
+                        <button
+                          onClick={() => applyPreset(preset)}
+                          className="flex-1 text-left text-xs font-medium"
+                          style={{ color: activePresetId === preset.id ? "var(--primary)" : "var(--foreground)" }}
+                        >
+                          {preset.name}
+                          {activePresetId === preset.id && <Check className="w-3 h-3 inline ml-1.5" style={{ color: "var(--primary)" }} />}
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); deletePreset(preset.id); }}
+                          className="p-1 rounded hover:bg-red-50 transition-colors shrink-0"
+                          title="Delete preset"
+                        >
+                          <Trash2 className="w-3 h-3" style={{ color: "#dc2626" }} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Columns Button */}
         <div className="relative" ref={colPickerRef}>
           <button
@@ -1943,6 +2713,36 @@ export default function DataExplorerPage() {
             </div>
           )}
         </div>
+
+        {/* Find Duplicates Button */}
+        <button
+          onClick={handleFindDuplicates}
+          disabled={duplicatesLoading}
+          className="flex items-center gap-2 px-3.5 py-2 rounded-lg border text-sm font-medium transition-all hover:border-[var(--primary)] disabled:opacity-60"
+          style={{
+            borderColor: showDuplicates ? "var(--primary)" : "var(--border)",
+            color: showDuplicates ? "var(--primary)" : "var(--foreground)",
+            backgroundColor: showDuplicates ? "rgba(0,1,252,0.06)" : "var(--background)",
+          }}
+          title="Find duplicate properties"
+        >
+          {duplicatesLoading ? (
+            <Loader2 className="w-4 h-4 animate-spin" style={{ color: "var(--primary)" }} />
+          ) : (
+            <GitMerge className="w-4 h-4" />
+          )}
+          <span className="hidden sm:inline">Find Duplicates</span>
+        </button>
+
+        {/* Help / Keyboard Shortcuts */}
+        <button
+          onClick={() => setShowShortcutsHelp(true)}
+          className="p-2 rounded-lg border transition-all hover:border-[var(--primary)]"
+          style={{ borderColor: "var(--border)", color: "var(--muted-foreground)", backgroundColor: "var(--background)" }}
+          title="Keyboard shortcuts (?)"
+        >
+          <HelpCircle className="w-4 h-4" />
+        </button>
 
         {/* View mode switcher */}
         <div className="flex items-center gap-0.5 p-1 rounded-lg border" style={{ borderColor: "var(--border)", backgroundColor: "var(--secondary)" }}>
@@ -2119,6 +2919,30 @@ export default function DataExplorerPage() {
         </div>
       </div>
 
+      {/* Active preset chip */}
+      {activePresetId && [...BUILTIN_PRESETS, ...userPresets].find((p) => p.id === activePresetId) && (
+        <div className="flex flex-wrap items-center gap-2 mb-2">
+          <span
+            className="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full text-xs font-semibold border"
+            style={{
+              borderColor: "var(--primary)",
+              backgroundColor: "rgba(0,1,252,0.1)",
+              color: "var(--primary)",
+            }}
+          >
+            <BookMarked className="w-3 h-3" />
+            Preset: {[...BUILTIN_PRESETS, ...userPresets].find((p) => p.id === activePresetId)!.name}
+            <button
+              onClick={clearAllFilters}
+              className="ml-0.5 rounded-full p-0.5 hover:bg-[rgba(0,1,252,0.2)] transition-colors"
+              title="Clear preset and all filters"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </span>
+        </div>
+      )}
+
       {/* Active filter chips */}
       {activeChips.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 mb-3">
@@ -2203,7 +3027,7 @@ export default function DataExplorerPage() {
       {/* ── TABLE VIEW ── */}
       {viewMode === "table" && items.length > 0 && (
         <p className="text-[10px] mb-2" style={{ color: "var(--muted-foreground)" }}>
-          Tip: ↑↓ keys navigate rows · Enter opens detail · Space toggles checkbox · Double-click a cell to edit
+          Tip: ↑↓ navigate · Enter opens detail · Space toggles · Ctrl+A selects all · Shift+Click range · Delete removes · Ctrl+Z undo · ? for help
         </p>
       )}
 
@@ -2323,9 +3147,16 @@ export default function DataExplorerPage() {
                         <input
                           type="checkbox"
                           checked={isSelected}
-                          onChange={() => toggleSelect(item.id)}
+                          onChange={() => {}}
                           className="rounded"
-                          onClick={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (e.shiftKey && lastCheckedRowIndexRef.current !== null) {
+                              rangeSelect(rowIdx);
+                            } else {
+                              toggleSelect(item.id, rowIdx);
+                            }
+                          }}
                         />
                       </td>
                       {visibleColumns.map((col) => {
@@ -2352,7 +3183,7 @@ export default function DataExplorerPage() {
                           return (
                             <td key={col.key} className="px-3 py-3 text-sm">
                               {editableCols.has(col.key) ? (
-                                <EditableCell item={item} col={col.key as EditableCol} onSave={handleCellSave} saveState={cellSave}>
+                                <EditableCell item={item} col={col.key as EditableCol} onSave={handleCellSave} saveState={cellSave} onEditingChange={(commit) => { activeEditCommitRef.current = commit; }}>
                                   <div className="flex items-center gap-1.5">
                                     {stale && <span className="shrink-0 w-2 h-2 rounded-full" style={{ backgroundColor: "#f59e0b" }} title="Stale — not re-scraped in 30+ days" />}
                                     <CellValue col={col.key} item={item} />
@@ -2375,6 +3206,7 @@ export default function DataExplorerPage() {
                                 col={col.key as EditableCol}
                                 onSave={handleCellSave}
                                 saveState={cellSave}
+                                onEditingChange={(commit) => { activeEditCommitRef.current = commit; }}
                               >
                                 <CellValue col={col.key} item={item} />
                               </EditableCell>
@@ -2450,23 +3282,78 @@ export default function DataExplorerPage() {
         </div>
       )}
 
+      {/* Duplicate Clusters Panel */}
+      {showDuplicates && (
+        <div className="mt-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <GitMerge className="w-5 h-5" style={{ color: "var(--primary)" }} />
+              <h2 className="text-base font-bold" style={{ color: "var(--foreground)" }}>Duplicate Clusters</h2>
+              {!duplicatesLoading && (
+                <span
+                  className="text-xs font-semibold px-2 py-0.5 rounded-full"
+                  style={{ backgroundColor: "rgba(0,1,252,0.1)", color: "var(--primary)" }}
+                >
+                  {duplicateClusters.filter((c) => !dismissedClusters.has(c.ids.join(","))).length} clusters
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => setShowDuplicates(false)}
+              className="p-1.5 rounded-lg hover:bg-[var(--secondary)] transition-colors"
+            >
+              <X className="w-4 h-4" style={{ color: "var(--muted-foreground)" }} />
+            </button>
+          </div>
+
+          {duplicatesLoading ? (
+            <div className="flex items-center justify-center py-12 gap-3" style={{ color: "var(--muted-foreground)" }}>
+              <Loader2 className="w-5 h-5 animate-spin" style={{ color: "var(--primary)" }} />
+              <span className="text-sm">Scanning for duplicates…</span>
+            </div>
+          ) : duplicateClusters.filter((c) => !dismissedClusters.has(c.ids.join(","))).length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 gap-2">
+              <CheckCircle className="w-10 h-10" style={{ color: "#16a34a", opacity: 0.5 }} />
+              <p className="text-sm font-medium" style={{ color: "var(--foreground)" }}>No duplicates found</p>
+              <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>All your properties look unique.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {duplicateClusters
+                .filter((c) => !dismissedClusters.has(c.ids.join(",")))
+                .map((cluster) => (
+                  <DuplicateClusterCard
+                    key={cluster.ids.join(",")}
+                    cluster={cluster}
+                    onKeepBest={handleKeepBest}
+                    onMerge={(c) => { setMergeDialogCluster(c); setMergeDialogOpen(true); }}
+                    onDismiss={(c) => setDismissedClusters((prev) => new Set([...prev, c.ids.join(",")]))}
+                  />
+                ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* AI Data Quality */}
-      <div className="grid sm:grid-cols-2 gap-3 mt-4">
-        <AIPlaceholderCard
-          icon={Sparkles}
-          title="AI Auto-Tagging"
-          description="Automatically classify, tag, and enrich raw listings with standardized categories and features."
-          features={["Auto-categorize", "Feature extraction", "Normalization"]}
-          compact
-        />
-        <AIPlaceholderCard
-          icon={Bot}
-          title="Duplicate Detection"
-          description="AI finds the same property listed across multiple sources with different titles and prices."
-          features={["Cross-source matching", "Best deal flag", "Merge suggestions"]}
-          compact
-        />
-      </div>
+      {!showDuplicates && (
+        <div className="grid sm:grid-cols-2 gap-3 mt-4">
+          <AIPlaceholderCard
+            icon={Sparkles}
+            title="AI Auto-Tagging"
+            description="Automatically classify, tag, and enrich raw listings with standardized categories and features."
+            features={["Auto-categorize", "Feature extraction", "Normalization"]}
+            compact
+          />
+          <AIPlaceholderCard
+            icon={Bot}
+            title="Duplicate Detection"
+            description="AI finds the same property listed across multiple sources with different titles and prices."
+            features={["Cross-source matching", "Best deal flag", "Merge suggestions"]}
+            compact
+          />
+        </div>
+      )}
 
       {/* ─── Property Detail Slide-Over ─────────────────────────────────────────── */}
       <PropertyDetailSlideOver
@@ -2576,6 +3463,17 @@ export default function DataExplorerPage() {
           }}
         />
       )}
+
+      {/* ─── Keyboard Shortcuts Help Modal ──────────────────────────────────────── */}
+      <KeyboardShortcutsModal open={showShortcutsHelp} onClose={() => setShowShortcutsHelp(false)} />
+
+      {/* ─── Merge Dialog ────────────────────────────────────────────────────────── */}
+      <MergeDialog
+        cluster={mergeDialogCluster}
+        open={mergeDialogOpen}
+        onClose={() => { setMergeDialogOpen(false); setMergeDialogCluster(null); }}
+        onConfirm={handleMergeConfirm}
+      />
 
       {/* ─── Advanced Filter Side Panel ────────────────────────────────────────── */}
       <SideSheet open={filterPanelOpen} onOpenChange={setFilterPanelOpen} side="right" width="420px">
@@ -2841,6 +3739,102 @@ export default function DataExplorerPage() {
                 </div>
               </div>
             </FilterSection>
+
+            {/* Origin */}
+            <FilterSection title="Origin">
+              <ChipMultiSelect
+                options={["SCRAPED", "MANUAL", "IMPORTED", "API"]}
+                selected={draftFilters.origins}
+                onChange={(v) => setDraftFilters((f) => ({ ...f, origins: v }))}
+              />
+            </FilterSection>
+
+            {/* Enrichment Status */}
+            <FilterSection title="Enrichment Status">
+              <ChipMultiSelect
+                options={["RAW", "GEOCODED", "ENRICHED", "VERIFIED", "PUBLISHED"]}
+                selected={draftFilters.enrichmentStatuses}
+                onChange={(v) => setDraftFilters((f) => ({ ...f, enrichmentStatuses: v }))}
+              />
+            </FilterSection>
+
+            {/* Verification Status */}
+            <FilterSection title="Verification Status">
+              <ChipMultiSelect
+                options={["UNVERIFIED", "VERIFIED", "FLAGGED", "REJECTED"]}
+                selected={draftFilters.verificationStatus}
+                onChange={(v) => setDraftFilters((f) => ({ ...f, verificationStatus: v }))}
+              />
+            </FilterSection>
+
+            {/* Stale */}
+            <FilterSection title="Staleness">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={draftFilters.stale}
+                  onChange={(e) => setDraftFilters((f) => ({ ...f, stale: e.target.checked }))}
+                  className="rounded accent-[var(--primary)]"
+                />
+                <span className="text-sm" style={{ color: "var(--foreground)" }}>Show only stale (30+ days old)</span>
+              </label>
+            </FilterSection>
+
+            {/* Min Quality (quick) */}
+            <FilterSection title="Min Quality Score">
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={draftFilters.qualityMin ?? ""}
+                onChange={(e) => setDraftFilters((f) => ({ ...f, qualityMin: e.target.value ? parseInt(e.target.value) : null }))}
+                placeholder="e.g. 70"
+                className={inputCls}
+                style={inputStyle}
+              />
+            </FilterSection>
+
+            {/* Save as Preset */}
+            <div className="pt-2 border-t" style={{ borderColor: "var(--border)" }}>
+              <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--muted-foreground)" }}>
+                Save as Preset
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={presetNameInput}
+                  onChange={(e) => setPresetNameInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); saveCurrentAsPreset(); } }}
+                  placeholder="Name this preset..."
+                  className={inputCls + " flex-1"}
+                  style={inputStyle}
+                />
+                <button
+                  onClick={saveCurrentAsPreset}
+                  disabled={!presetNameInput.trim()}
+                  className="px-3 py-2 rounded-lg text-xs font-semibold border transition-colors disabled:opacity-50"
+                  style={{ borderColor: "var(--primary)", color: "var(--primary)", backgroundColor: "rgba(0,1,252,0.07)" }}
+                >
+                  Save
+                </button>
+              </div>
+              {userPresets.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {userPresets.map((p) => (
+                    <div key={p.id} className="flex items-center justify-between text-xs px-1">
+                      <span style={{ color: "var(--foreground)" }}>{p.name}</span>
+                      <button
+                        onClick={() => deletePreset(p.id)}
+                        className="p-0.5 rounded hover:bg-red-50"
+                        title="Delete preset"
+                      >
+                        <Trash2 className="w-3 h-3" style={{ color: "#dc2626" }} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Sticky footer with Apply / Reset */}

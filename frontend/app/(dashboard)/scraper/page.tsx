@@ -53,6 +53,7 @@ import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { ScrapeLogsSection } from "@/components/scraper/scrape-logs-section";
 import { AIPlaceholderCard } from "@/components/ai/ai-placeholder";
 import { useSettingsByCategory, useUpdateSettings } from "@/hooks/use-system-settings";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import Link from "next/link";
 
 // ─── Config Types ────────────────────────────────────────────────────────────
@@ -228,6 +229,11 @@ export default function ScraperPage() {
   // ── Live terminal log filters
   const [terminalLogFilter, setTerminalLogFilter] = useState<string>("all");
 
+  // ── Error tab tracking
+  const [activeTab, setActiveTab] = useState<string>("terminal");
+  const [errorCount, setErrorCount] = useState<number>(0);
+  const prevLogCountRef = useRef<number>(0);
+
   // ── Detect active job (for UI display only — state sync is in ScraperSocketProvider)
   const activeJob = useMemo(
     () => jobs?.find(j => j.status === "RUNNING" || j.status === "PENDING"),
@@ -270,6 +276,27 @@ export default function ScraperPage() {
   }, [pageState, jobStartTime]);
 
   // Logs are displayed newest-first, no auto-scroll needed
+
+  // ── Track error logs: increment errorCount, auto-switch to Errors tab on first error during active scrape
+  useEffect(() => {
+    const currentCount = logs.length;
+    if (currentCount > prevLogCountRef.current) {
+      const newLogs = logs.slice(prevLogCountRef.current);
+      const newErrors = newLogs.filter(l => l.level === "error" || l.level === "fatal");
+      if (newErrors.length > 0) {
+        setErrorCount(prev => {
+          const wasZero = prev === 0;
+          const next = prev + newErrors.length;
+          // Auto-switch to errors tab on first error during an active scrape
+          if (wasZero && pageState === "running") {
+            setActiveTab("errors");
+          }
+          return next;
+        });
+      }
+      prevLogCountRef.current = currentCount;
+    }
+  }, [logs, pageState]);
 
   // ── Site helpers
   // ── Fetch estimate when selected sites change
@@ -365,6 +392,10 @@ export default function ScraperPage() {
   const dispatchJob = useCallback((cfg: ScrapeConfig) => {
     // Reset live state in the global store
     storeResetLiveState();
+    // Reset error tracking for new scrape session
+    setErrorCount(0);
+    setActiveTab("terminal");
+    prevLogCountRef.current = 0;
 
     // Pre-populate pipeline sites for multi-site tracking
     if (cfg.scrapeMode === "PASSIVE_BULK") {
@@ -1483,199 +1514,261 @@ export default function ScraperPage() {
         {/* ── RIGHT COLUMN ─────────────────────────────────────────────── */}
         <div className="lg:col-span-8 flex flex-col">
 
-          {/* Live Terminal */}
+          {/* Tabbed right panel: Terminal / Incoming / Errors */}
           <Card data-tour="scraper-terminal" className="bg-white dark:bg-[#0A0A0B] border border-border dark:border-white/10 shadow-xl relative overflow-hidden flex flex-col rounded-2xl h-full">
-            {/* Terminal header */}
-            <CardHeader className="pb-2 border-b border-border dark:border-white/10 bg-slate-50/80 dark:bg-[#0A0A0B]/80 backdrop-blur-xl z-10 flex-shrink-0">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-xs font-mono font-medium flex items-center gap-2 text-slate-500 dark:text-zinc-400">
-                  <Terminal className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">root@scraper:~$ tail -f /var/log/scraper.log</span>
-                  <span className="sm:hidden">scraper.log</span>
-                  {pageState === "running" && (
-                    <span className="ml-1 animate-pulse font-bold text-green-400">&gt;&gt;_</span>
-                  )}
-                </CardTitle>
-                <div className="flex items-center gap-2">
-                  {/* Log level filter pills */}
-                  <div className="flex items-center gap-0.5 mr-2">
-                    {[
-                      { key: "all", label: "All" },
-                      { key: "error", label: "ERR", color: "text-red-400" },
-                      { key: "warn", label: "WRN", color: "text-yellow-400" },
-                      { key: "info", label: "INF", color: "text-blue-400" },
-                    ].map(f => (
-                      <button
-                        key={f.key}
-                        onClick={() => setTerminalLogFilter(f.key)}
-                        className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider transition-colors ${
-                          terminalLogFilter === f.key
-                            ? "bg-white/10 dark:bg-white/10 text-foreground"
-                            : `${f.color || "text-zinc-500"} opacity-50 hover:opacity-100`
-                        }`}
-                      >
-                        {f.label}
-                      </button>
-                    ))}
-                  </div>
-                  {logs.length > 0 && (
-                    <button
-                      onClick={() => useScraperStore.setState({ logs: [] })}
-                      className="text-[9px] font-mono text-zinc-500 hover:text-zinc-300 transition-colors mr-2"
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full">
+              {/* Tab bar header */}
+              <CardHeader className="pb-0 border-b border-border dark:border-white/10 bg-slate-50/80 dark:bg-[#0A0A0B]/80 backdrop-blur-xl z-10 flex-shrink-0">
+                <div className="flex items-center justify-between mb-2">
+                  <TabsList className="h-8 bg-transparent p-0 gap-0">
+                    {/* Terminal tab */}
+                    <TabsTrigger
+                      value="terminal"
+                      className="h-8 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground text-muted-foreground px-3 text-xs font-mono font-medium gap-1.5"
                     >
-                      clear
-                    </button>
-                  )}
-                  <div className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
-                  <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/60" />
-                  <div className="w-2.5 h-2.5 rounded-full bg-green-500/60" />
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="p-4 flex-1 overflow-y-auto font-mono text-xs bg-white dark:bg-[#0A0A0B] text-slate-700 dark:text-zinc-300 relative z-0">
-              {logs.length === 0 ? (
-                <div className="h-full min-h-[200px] flex flex-col items-center justify-center text-slate-400 dark:text-zinc-700">
-                  <Terminal className="w-8 h-8 mb-3 opacity-20" />
-                  <p className="italic text-sm">Awaiting stdout stream...</p>
-                </div>
-              ) : (
-                <div className="space-y-1 pb-4">
-                  {[...logs].filter(log => terminalLogFilter === "all" || log.level.toLowerCase() === terminalLogFilter).reverse().map(log => (
-                    <div key={log.id} className="flex items-start gap-2 sm:gap-3 break-words hover:bg-black/[0.02] dark:hover:bg-white/[0.02] px-1 rounded">
-                      <span className="text-zinc-400 dark:text-zinc-600 shrink-0 select-none hidden sm:inline text-[10px] pt-0.5 tabular-nums">
-                        {new Date(log.timestamp).toLocaleTimeString([], {
-                          hour12: false,
-                          hour: "2-digit",
-                          minute: "2-digit",
-                          second: "2-digit",
-                        })}
-                      </span>
-                      <span
-                        className={`shrink-0 w-10 text-[10px] font-bold tracking-wider uppercase pt-0.5 ${
-                          log.level === "error"
-                            ? "text-red-400"
-                            : log.level === "warn"
-                            ? "text-yellow-400"
-                            : log.level === "success"
-                            ? "text-green-400"
-                            : "text-blue-400"
-                        }`}
-                      >
-                        {log.level}
-                      </span>
-                      <span
-                        className={`flex-1 break-all leading-relaxed ${
-                          log.level === "error"
-                            ? "text-red-300 dark:text-red-400"
-                            : log.level === "warn"
-                            ? "text-yellow-200 dark:text-yellow-300"
-                            : "text-slate-700 dark:text-zinc-300"
-                        }`}
-                      >
-                        {log.message}
-                      </span>
+                      <Terminal className="w-3 h-3" />
+                      Terminal
+                      {pageState === "running" && (
+                        <span className="ml-0.5 animate-pulse font-bold text-green-400 text-[10px]">&gt;_</span>
+                      )}
+                    </TabsTrigger>
+                    {/* Incoming tab */}
+                    <TabsTrigger
+                      value="incoming"
+                      className="h-8 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground text-muted-foreground px-3 text-xs font-mono font-medium gap-1.5"
+                    >
+                      <Home className="w-3 h-3" />
+                      Incoming
+                      {liveProperties.length > 0 && (
+                        <span className="ml-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-primary/10 tabular-nums" style={{ color: "var(--primary)" }}>
+                          {liveProperties.length}
+                        </span>
+                      )}
+                    </TabsTrigger>
+                    {/* Errors tab */}
+                    <TabsTrigger
+                      value="errors"
+                      className="h-8 rounded-none border-b-2 border-transparent data-[state=active]:border-red-500 data-[state=active]:bg-transparent data-[state=active]:text-foreground text-muted-foreground px-3 text-xs font-mono font-medium gap-1.5"
+                    >
+                      <AlertCircle className="w-3 h-3" />
+                      Errors
+                      {errorCount > 0 && (
+                        <span className="ml-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-red-500/10 text-red-500 tabular-nums">
+                          {errorCount}
+                        </span>
+                      )}
+                    </TabsTrigger>
+                  </TabsList>
+
+                  {/* Terminal controls (macOS dots + log filter) — shown on terminal tab implicitly always visible */}
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-0.5 mr-1">
+                      {[
+                        { key: "all", label: "All" },
+                        { key: "error", label: "ERR", color: "text-red-400" },
+                        { key: "warn", label: "WRN", color: "text-yellow-400" },
+                        { key: "info", label: "INF", color: "text-blue-400" },
+                      ].map(f => (
+                        <button
+                          key={f.key}
+                          onClick={() => setTerminalLogFilter(f.key)}
+                          className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider transition-colors ${
+                            terminalLogFilter === f.key
+                              ? "bg-white/10 dark:bg-white/10 text-foreground"
+                              : `${f.color || "text-zinc-500"} opacity-50 hover:opacity-100`
+                          }`}
+                        >
+                          {f.label}
+                        </button>
+                      ))}
                     </div>
-                  ))}
-                  {/* logsEndRef removed — newest logs are at the top now */}
+                    {logs.length > 0 && (
+                      <button
+                        onClick={() => useScraperStore.setState({ logs: [] })}
+                        className="text-[9px] font-mono text-zinc-500 hover:text-zinc-300 transition-colors mr-2"
+                      >
+                        clear
+                      </button>
+                    )}
+                    <div className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
+                    <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/60" />
+                    <div className="w-2.5 h-2.5 rounded-full bg-green-500/60" />
+                  </div>
                 </div>
-              )}
-            </CardContent>
-            <div className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-white dark:from-[#0A0A0B] to-transparent pointer-events-none z-10" />
+              </CardHeader>
+
+              {/* Terminal tab content */}
+              <TabsContent value="terminal" className="flex-1 overflow-hidden flex flex-col m-0">
+                <div className="p-4 flex-1 overflow-y-auto font-mono text-xs bg-white dark:bg-[#0A0A0B] text-slate-700 dark:text-zinc-300 relative min-h-[300px]">
+                  {logs.length === 0 ? (
+                    <div className="h-full min-h-[200px] flex flex-col items-center justify-center text-slate-400 dark:text-zinc-700">
+                      <Terminal className="w-8 h-8 mb-3 opacity-20" />
+                      <p className="italic text-sm">Awaiting stdout stream...</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1 pb-4">
+                      {[...logs]
+                        .filter(log => terminalLogFilter === "all" || log.level.toLowerCase() === terminalLogFilter)
+                        .reverse()
+                        .map(log => (
+                          <div key={log.id} className="flex items-start gap-2 sm:gap-3 break-words hover:bg-black/[0.02] dark:hover:bg-white/[0.02] px-1 rounded">
+                            <span className="text-zinc-400 dark:text-zinc-600 shrink-0 select-none hidden sm:inline text-[10px] pt-0.5 tabular-nums">
+                              {new Date(log.timestamp).toLocaleTimeString([], {
+                                hour12: false,
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                second: "2-digit",
+                              })}
+                            </span>
+                            <span
+                              className={`shrink-0 w-10 text-[10px] font-bold tracking-wider uppercase pt-0.5 ${
+                                log.level === "error"
+                                  ? "text-red-400"
+                                  : log.level === "warn"
+                                  ? "text-yellow-400"
+                                  : log.level === "success"
+                                  ? "text-green-400"
+                                  : "text-blue-400"
+                              }`}
+                            >
+                              {log.level}
+                            </span>
+                            <span
+                              className={`flex-1 break-all leading-relaxed ${
+                                log.level === "error"
+                                  ? "text-red-300 dark:text-red-400"
+                                  : log.level === "warn"
+                                  ? "text-yellow-200 dark:text-yellow-300"
+                                  : "text-slate-700 dark:text-zinc-300"
+                              }`}
+                            >
+                              {log.message}
+                            </span>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                  <div className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-white dark:from-[#0A0A0B] to-transparent pointer-events-none" />
+                </div>
+              </TabsContent>
+
+              {/* Incoming Properties tab content */}
+              <TabsContent value="incoming" className="flex-1 overflow-hidden flex flex-col m-0">
+                <div className="flex-1 overflow-hidden bg-white dark:bg-[#0A0A0B] min-h-[300px]">
+                  {liveProperties.length === 0 ? (
+                    <div className="h-full min-h-[200px] flex flex-col items-center justify-center text-muted-foreground py-10">
+                      <Home className="w-8 h-8 mb-2 opacity-20" />
+                      <p className="text-xs italic">
+                        {pageState === "running"
+                          ? "Properties will appear here as they are discovered..."
+                          : "Start a scrape to see incoming properties here."}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-border/40 max-h-[480px] overflow-y-auto">
+                      {liveProperties.map((prop, idx) => (
+                        <div
+                          key={`${prop.timestamp}-${idx}`}
+                          className="flex items-center gap-3 p-3 hover:bg-secondary/20 transition-colors animate-in fade-in slide-in-from-top-1 duration-300"
+                        >
+                          {prop.image ? (
+                            <img
+                              src={prop.image}
+                              alt=""
+                              className="w-12 h-12 rounded-lg object-cover shrink-0 bg-secondary border border-border"
+                              onError={e => {
+                                (e.target as HTMLImageElement).style.display = "none";
+                              }}
+                            />
+                          ) : (
+                            <div className="w-12 h-12 rounded-lg bg-secondary flex items-center justify-center shrink-0 border border-border">
+                              <Home className="w-5 h-5 text-muted-foreground/30" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">
+                              {prop.title || "Untitled Listing"}
+                            </p>
+                            <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                              {prop.price !== undefined && prop.price > 0 && (
+                                <span className="text-xs font-bold" style={{ color: "var(--accent)" }}>
+                                  {formatPrice(prop.price)}
+                                </span>
+                              )}
+                              {prop.location && (
+                                <span className="text-xs text-muted-foreground truncate">{prop.location}</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted-foreground">
+                              {prop.bedrooms !== undefined && (
+                                <span>{prop.bedrooms} bed</span>
+                              )}
+                              {prop.bathrooms !== undefined && (
+                                <span>{prop.bathrooms} bath</span>
+                              )}
+                              {prop.source && (
+                                <span className="ml-auto truncate">{prop.source}</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {pageState === "complete" && liveProperties.length > 0 && (
+                    <div className="p-3 border-t border-border/40 bg-secondary/10">
+                      <Link
+                        href="/properties"
+                        className="flex items-center justify-center gap-1.5 text-xs font-semibold hover:underline"
+                        style={{ color: "var(--primary)" }}
+                      >
+                        View All in Properties <ChevronRight className="w-3.5 h-3.5" />
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
+
+              {/* Errors tab content */}
+              <TabsContent value="errors" className="flex-1 overflow-hidden flex flex-col m-0">
+                <div className="p-4 flex-1 overflow-y-auto font-mono text-xs bg-white dark:bg-[#0A0A0B] min-h-[300px]">
+                  {logs.filter(l => l.level === "error" || l.level === "fatal").length === 0 ? (
+                    <div className="h-full min-h-[200px] flex flex-col items-center justify-center text-slate-400 dark:text-zinc-700">
+                      <AlertCircle className="w-8 h-8 mb-3 opacity-20" />
+                      <p className="italic text-sm">No errors recorded in this session.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1 pb-4">
+                      {[...logs]
+                        .filter(l => l.level === "error" || l.level === "fatal")
+                        .reverse()
+                        .map(log => (
+                          <div key={log.id} className="flex items-start gap-2 sm:gap-3 break-words hover:bg-red-500/[0.03] px-1 py-0.5 rounded border-l-2 border-red-400/50 ml-1">
+                            <span className="text-zinc-400 dark:text-zinc-600 shrink-0 select-none hidden sm:inline text-[10px] pt-0.5 tabular-nums">
+                              {new Date(log.timestamp).toLocaleTimeString([], {
+                                hour12: false,
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                second: "2-digit",
+                              })}
+                            </span>
+                            <span className="shrink-0 w-10 text-[10px] font-bold tracking-wider uppercase pt-0.5 text-red-400">
+                              {log.level}
+                            </span>
+                            <span className="flex-1 break-all leading-relaxed text-red-300 dark:text-red-400">
+                              {log.message}
+                            </span>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
+            </Tabs>
           </Card>
 
         </div>
       </div>
-
-      {/* ── Incoming Properties Feed (full-width, before logs) ─────────── */}
-      {(pageState === "running" || pageState === "complete") && (
-        <Card data-tour="scraper-feed" className="border shadow-sm overflow-hidden">
-          <CardHeader className="pb-3 border-b border-border/50">
-            <CardTitle className="text-sm font-semibold flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <Home className="w-4 h-4 text-muted-foreground" />
-                Incoming Properties
-                {liveProperties.length > 0 && (
-                  <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-primary/10 tabular-nums" style={{ color: "var(--primary)" }}>
-                    {liveProperties.length}
-                  </span>
-                )}
-              </span>
-              {pageState === "running" && (
-                <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                  Live
-                </span>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            {liveProperties.length === 0 ? (
-              <div className="py-10 flex flex-col items-center justify-center text-muted-foreground">
-                <Home className="w-8 h-8 mb-2 opacity-20" />
-                <p className="text-xs italic">Properties will appear here as they are discovered...</p>
-              </div>
-            ) : (
-              <div className="divide-y divide-border/40 max-h-80 overflow-y-auto">
-                {liveProperties.map((prop, idx) => (
-                  <div key={`${prop.timestamp}-${idx}`} className="flex items-center gap-3 p-3 hover:bg-secondary/20 transition-colors animate-in fade-in slide-in-from-top-1 duration-300">
-                    {prop.image ? (
-                      <img
-                        src={prop.image}
-                        alt=""
-                        className="w-12 h-12 rounded-lg object-cover shrink-0 bg-secondary border border-border"
-                        onError={e => {
-                          (e.target as HTMLImageElement).style.display = "none";
-                        }}
-                      />
-                    ) : (
-                      <div className="w-12 h-12 rounded-lg bg-secondary flex items-center justify-center shrink-0 border border-border">
-                        <Home className="w-5 h-5 text-muted-foreground/30" />
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">
-                        {prop.title || "Untitled Listing"}
-                      </p>
-                      <div className="flex flex-wrap items-center gap-2 mt-0.5">
-                        {prop.price !== undefined && prop.price > 0 && (
-                          <span className="text-xs font-bold" style={{ color: "var(--accent)" }}>
-                            {formatPrice(prop.price)}
-                          </span>
-                        )}
-                        {prop.location && (
-                          <span className="text-xs text-muted-foreground truncate">{prop.location}</span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted-foreground">
-                        {prop.bedrooms !== undefined && (
-                          <span>{prop.bedrooms} bed</span>
-                        )}
-                        {prop.bathrooms !== undefined && (
-                          <span>{prop.bathrooms} bath</span>
-                        )}
-                        {prop.source && (
-                          <span className="ml-auto truncate">{prop.source}</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            {pageState === "complete" && liveProperties.length > 0 && (
-              <div className="p-3 border-t border-border/40 bg-secondary/10">
-                <Link
-                  href="/properties"
-                  className="flex items-center justify-center gap-1.5 text-xs font-semibold hover:underline"
-                  style={{ color: "var(--primary)" }}
-                >
-                  View All in Properties <ChevronRight className="w-3.5 h-3.5" />
-                </Link>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
 
       {/* ── ScrapeLogsSection ───────────────────────────────────────────── */}
       <div ref={logsSectionRef}>

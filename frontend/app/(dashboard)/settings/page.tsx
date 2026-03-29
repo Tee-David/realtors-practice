@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { auth, users as usersApi, ai, emailTemplates as emailTemplatesApi } from "@/lib/api";
+import { auth, users as usersApi, ai, emailTemplates as emailTemplatesApi, properties as propertiesApi } from "@/lib/api";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { usePersistedState } from "@/hooks/use-persisted-state";
@@ -13,6 +13,7 @@ import {
   ToggleLeft, ToggleRight, Map, Monitor, Server, RefreshCw,
   Trash2, Plus, Check, X, Link, ExternalLink, Shield, Terminal,
   AlertTriangle, Chrome, Smartphone, ChevronDown, Sparkles, Brain,
+  MapPin,
 } from "lucide-react";
 import { EmailTemplateBuilder } from "@/components/dashboard/email-template-builder";
 import { AIProviderStatus } from "@/components/ai/ai-provider-status";
@@ -800,6 +801,8 @@ function DisplaySection() {
     googleApiKey, setGoogleApiKey,
   } = useMapProvider();
   const [perPage, setPerPage] = usePersistedState("display-per-page", "20");
+  const [geocodeRunning, setGeocodeRunning] = useState(false);
+  const [geocodeResult, setGeocodeResult] = useState<{ processed: number; succeeded: number; failed: number; skipped: number } | null>(null);
   const [defaultSort, setDefaultSort] = usePersistedState("display-default-sort", "createdAt");
   const [defaultType, setDefaultType] = usePersistedState("display-default-type", "");
   const [voiceAuto, setVoiceAuto] = usePersistedState("display-voice-auto", false);
@@ -899,6 +902,56 @@ function DisplaySection() {
         <p className="text-xs font-medium mt-4" style={{ color: "var(--muted-foreground)" }}>
           Display preferences are saved automatically.
         </p>
+      </Card>
+
+      {/* Geocoding Backfill */}
+      <Card>
+        <CardHeader icon={MapPin} title="Geocoding Backfill" />
+        <p className="text-sm mb-4" style={{ color: "var(--muted-foreground)" }}>
+          Fill in missing coordinates (latitude/longitude) for all existing properties. Uses OpenStreetMap/Nominatim with rate limiting.
+        </p>
+        {geocodeResult && (
+          <div className="mb-4 p-3 rounded-xl border text-sm" style={{ borderColor: "var(--border)", backgroundColor: "rgba(0,1,252,0.04)" }}>
+            <p className="font-semibold mb-1" style={{ color: "var(--foreground)" }}>
+              Geocoded {geocodeResult.succeeded} of {geocodeResult.processed} properties successfully
+            </p>
+            <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+              {geocodeResult.failed} failed &bull; {geocodeResult.skipped} skipped (no location text)
+            </p>
+          </div>
+        )}
+        <button
+          onClick={async () => {
+            try {
+              setGeocodeRunning(true);
+              setGeocodeResult(null);
+              toast.info("Geocoding backfill started. This may take a few minutes...");
+              const res = await propertiesApi.backfillGeocode();
+              const data = res.data?.data;
+              setGeocodeResult(data);
+              toast.success(`Geocoded ${data.succeeded} of ${data.processed} properties`);
+            } catch (err: any) {
+              toast.error(err?.response?.data?.error || "Geocoding backfill failed");
+            } finally {
+              setGeocodeRunning(false);
+            }
+          }}
+          disabled={geocodeRunning}
+          className="px-5 py-2 rounded-xl text-sm font-semibold transition-colors hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
+          style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
+        >
+          {geocodeRunning ? (
+            <>
+              <RefreshCw className="w-4 h-4 animate-spin" />
+              Processing...
+            </>
+          ) : (
+            <>
+              <MapPin className="w-4 h-4" />
+              Backfill Coordinates
+            </>
+          )}
+        </button>
       </Card>
     </div>
   );

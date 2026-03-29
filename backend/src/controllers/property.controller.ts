@@ -2,8 +2,13 @@ import { Request, Response } from "express";
 import { PropertyService } from "../services/property.service";
 import { VersionService } from "../services/version.service";
 import { LLMEnrichmentService } from "../services/llmEnrichment.service";
+import { DedupService } from "../services/dedup.service";
+import { GeocodingService } from "../services/geocoding.service";
+import { MeiliService } from "../services/meili.service";
 import { sendSuccess, sendError, sendPaginated } from "../utils/apiResponse.util";
 import { logAudit, getClientInfo } from "../middlewares/auditLog.middleware";
+import { Logger } from "../utils/logger.util";
+import prisma from "../prismaClient";
 
 export class PropertyController {
   static async list(req: Request, res: Response) {
@@ -27,7 +32,7 @@ export class PropertyController {
 
   static async create(req: Request, res: Response) {
     try {
-      const result = await PropertyService.create(req.body, "MANUAL_EDIT", req.user?.id);
+      const result = await PropertyService.create(req.body, "MANUAL_EDIT", req.user?.id, "MANUAL");
       if (result.duplicate) {
         return sendError(res, "Duplicate property", 409, `Existing property: ${result.existingId}`);
       }
@@ -216,6 +221,154 @@ export class PropertyController {
       return sendSuccess(res, properties, `${properties.length} most viewed properties`);
     } catch (err) {
       return sendError(res, "Failed to fetch most viewed properties");
+    }
+  }
+
+  /**
+   * POST /properties/backfill-geocode — batch geocode all properties with null lat/lng
+   * Admin only. Returns { processed, succeeded, failed, skipped }.
+   */
+  static async backfillGeocode(req: Request, res: Response) {
+    try {
+      const batchSize = 50;
+      let cursor: string | undefined = undefined;
+      let totalProcessed = 0;
+      let succeeded = 0;
+      let failed = 0;
+      let skipped = 0;
+
+      Logger.info("[PropertyController] Geocoding backfill requested by admin");
+
+      while (true) {
+        const properties: {
+          id: string;
+          area: string | null;
+          locationText: string | null;
+          estateName: string | null;
+          state: string | null;
+        }[] = await prisma.property.findMany({
+          take: batchSize,
+          skip: cursor ? 1 : 0,
+          cursor: cursor ? { id: cursor } : undefined,
+          where: {
+            deletedAt: null,
+            latitude: null,
+            longitude: null,
+          },
+          orderBy: { id: "asc" },
+          select: { id: true, area: true, locationText: true, estateName: true, state: true },
+        });
+
+        if (properties.length === 0) break;
+
+        for (const prop of properties) {
+          const query = prop.area || prop.locationText || prop.estateName;
+          if (!query) {
+            skipped++;
+            continue;
+          }
+
+          try {
+            const geo = await GeocodingService.geocode(query);
+            if (geo) {
+              await prisma.property.update({
+                where: { id: prop.id },
+                data: { latitude: geo.lat, longitude: geo.lng },
+              });
+              // Fire-and-forget Meili update
+              MeiliService.upsertProperty(prop.id).catch(() => {});
+              succeeded++;
+            } else {
+              skipped++;
+            }
+          } catch (err: any) {
+            Logger.debug(`[Geocode backfill] Skip ${prop.id}: ${err.message}`);
+            failed++;
+          }
+        }
+
+        totalProcessed += properties.length;
+        cursor = properties[properties.length - 1].id;
+
+        // 1-second delay between batches (Nominatim rate limit)
+        if (properties.length === batchSize) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+
+      Logger.info(`[Geocode backfill] Complete: ${totalProcessed} processed, ${succeeded} succeeded, ${failed} failed, ${skipped} skipped`);
+
+      return sendSuccess(res, {
+        processed: totalProcessed,
+        succeeded,
+        failed,
+        skipped,
+      }, `Geocoded ${succeeded} of ${totalProcessed} properties`);
+    } catch (err: any) {
+      Logger.error(`[Geocode backfill] Error: ${err.message}`);
+      return sendError(res, "Geocoding backfill failed");
+    }
+  }
+
+  /**
+   * GET /properties/duplicates — find fuzzy duplicate clusters (no body required)
+   * Limit to 50 clusters max.
+   */
+  static async getDuplicates(req: Request, res: Response) {
+    try {
+      const clusters = await DedupService.findFuzzyMatchesById();
+      const limited = clusters.slice(0, 50);
+      return sendSuccess(res, { clusters: limited, total: limited.length }, `Found ${limited.length} duplicate cluster(s)`);
+    } catch (err) {
+      return sendError(res, "Failed to find duplicates");
+    }
+  }
+
+  /**
+   * POST /properties/find-duplicates — find fuzzy duplicate clusters
+   * Body: { propertyIds?: string[] }
+   */
+  static async findDuplicates(req: Request, res: Response) {
+    try {
+      const { propertyIds } = req.body as { propertyIds?: string[] };
+      const clusters = await DedupService.findFuzzyMatchesById(propertyIds);
+      return sendSuccess(res, { clusters, total: clusters.length }, `Found ${clusters.length} duplicate cluster(s)`);
+    } catch (err) {
+      return sendError(res, "Failed to find duplicates");
+    }
+  }
+
+  /**
+   * POST /properties/merge — merge duplicates
+   * Body: { keepId: string, deleteIds: string[], fieldOverrides?: Record<string, unknown> }
+   */
+  static async mergeProperties(req: Request, res: Response) {
+    try {
+      const { keepId, deleteIds, fieldOverrides } = req.body as {
+        keepId: string;
+        deleteIds: string[];
+        fieldOverrides?: Record<string, unknown>;
+      };
+      if (!keepId || !Array.isArray(deleteIds) || deleteIds.length === 0) {
+        return sendError(res, "keepId and deleteIds[] are required", 400);
+      }
+      const result = await DedupService.mergeProperties({
+        keepId,
+        deleteIds,
+        fieldOverrides,
+        mergedBy: (req as any).user?.id,
+      });
+      void logAudit({
+        userId: (req as any).user?.id,
+        action: "MERGE_DUPLICATES",
+        entity: "Property",
+        entityId: keepId,
+        details: { deletedIds: deleteIds, fieldOverrides },
+        ...getClientInfo(req),
+      });
+      return sendSuccess(res, result, `Merged: kept ${keepId}, deleted ${result.deleted}`);
+    } catch (err) {
+      return sendError(res, "Failed to merge properties");
     }
   }
 }

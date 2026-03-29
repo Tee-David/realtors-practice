@@ -173,12 +173,20 @@ export class CronService {
           newSinceCheck: { gt: 0 },
         },
         include: {
-          user: { select: { id: true, email: true } },
+          user: {
+            select: {
+              id: true,
+              email: true,
+              notifEmailMatch: true,
+              notifEmailNewMatches: true,
+              notifInAppMatch: true,
+            },
+          },
           matches: {
             where: { seen: false },
             include: {
               property: {
-                select: { title: true, price: true, area: true },
+                select: { id: true, title: true, price: true, area: true, listingUrl: true },
               },
             },
             take: 5,
@@ -188,8 +196,8 @@ export class CronService {
       });
 
       for (const search of searchesWithNewMatches) {
-        // In-app notification
-        if (search.notifyInApp) {
+        // In-app notification — gated by both per-search setting AND user preference
+        if (search.notifyInApp && search.user.notifInAppMatch) {
           await NotificationService.create({
             userId: search.user.id,
             type: "NEW_MATCH",
@@ -202,12 +210,16 @@ export class CronService {
           });
         }
 
-        // Email notification
-        if (search.notifyEmail) {
+        // Email notification — gated by per-search setting AND both user preferences
+        // Also requires the user has an email address and hasn't been notified too recently
+        const emailEnabled = search.notifyEmail && search.user.notifEmailMatch && search.user.notifEmailNewMatches;
+        if (emailEnabled && search.user.email && search.newSinceCheck > 0) {
+          const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
           const matchPreview = search.matches.map((m) => ({
             title: m.property.title,
             price: m.property.price,
             area: m.property.area,
+            link: `${frontendUrl}/properties/${m.property.id}`,
           }));
 
           await EmailService.sendNewMatchEmail(
@@ -218,10 +230,14 @@ export class CronService {
           );
         }
 
-        // Reset newSinceCheck counter
+        // Reset newSinceCheck counter, update lastCheckedAt, and set lastNotifiedAt
         await prisma.savedSearch.update({
           where: { id: search.id },
-          data: { newSinceCheck: 0 },
+          data: {
+            newSinceCheck: 0,
+            lastCheckedAt: new Date(),
+            lastNotifiedAt: new Date(),
+          },
         });
       }
 

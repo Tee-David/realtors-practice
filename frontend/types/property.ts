@@ -79,6 +79,7 @@ export interface Property {
   contactInfo?: string;
   agencyName?: string;
   agencyLogo?: string;
+  agentType?: "OWNERS_AGENT" | "DEVELOPER" | "LANDLORD";
   agentVerified: boolean;
   // Metadata
   qualityScore?: number;

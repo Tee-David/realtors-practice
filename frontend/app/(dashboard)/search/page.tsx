@@ -19,7 +19,7 @@ import { BottomSheet, BottomSheetContent, BottomSheetClose } from "@/components/
 import { DraggableBottomSheet } from "@/components/ui/draggable-bottom-sheet";
 import { PropertyDetailPanel } from "@/components/property/property-detail-panel";
 import { useSearch } from "@/hooks/use-search";
-import { MapPin, Sparkles, X, Brain, Zap, Info } from "lucide-react";
+import { MapPin, Sparkles, X, Brain, Zap, Info, Loader2 } from "lucide-react";
 import { AIInsightPlaceholder } from "@/components/ai/ai-placeholder";
 import type { Property, PropertyCategory } from "@/types/property";
 
@@ -98,6 +98,7 @@ function NLInterpretedBanner({
 
 export default function SearchPage() {
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<PropertyCategory | "ALL">("ALL");
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -112,6 +113,12 @@ export default function SearchPage() {
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [hasDismissedSplash, setHasDismissedSplash] = useState(false);
+
+  // Debounce query 300ms for as-you-type live results
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(query), 300);
+    return () => clearTimeout(timer);
+  }, [query]);
 
   const { setMap, flyToQuery, resetFlyState } = useFlyTo();
 
@@ -145,7 +152,7 @@ export default function SearchPage() {
   }, []);
 
   const { data: searchData, isLoading } = useSearch({
-    q: query,
+    q: debouncedQuery,
     limit,
     sort: [sort],
     filters: activeFilters.length > 0 ? activeFilters : undefined,
@@ -165,6 +172,7 @@ export default function SearchPage() {
 
   const handleSearch = useCallback((q: string, cat?: PropertyCategory | "ALL") => {
     setQuery(q);
+    // debouncedQuery will update via useEffect — live as-you-type search
     setHasSearched(true);
     if (isMobile) {
       setMobileSheetOpen(true);
@@ -228,6 +236,7 @@ export default function SearchPage() {
           setHoveredId={setHoveredId}
           onPropertyClick={handlePropertyClick}
           markersReady={markersReady}
+          detectedArea={parsedInfo?.area ?? null}
         />
 
         {/* Top Search Bar Overlay */}
@@ -249,10 +258,15 @@ export default function SearchPage() {
                      <div className="p-4 border-b shrink-0 flex items-center justify-between gap-3">
                        <div className="flex items-center gap-3 min-w-0">
                          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                           <Sparkles size={18} className="text-primary" />
+                           {isLoading && debouncedQuery
+                             ? <Loader2 size={18} className="text-primary animate-spin" />
+                             : <Sparkles size={18} className="text-primary" />
+                           }
                          </div>
                          <div className="min-w-0">
-                           <h2 className="font-bold text-lg leading-tight truncate">{totalHits} results</h2>
+                           <h2 className="font-bold text-lg leading-tight truncate">
+                             {isLoading && debouncedQuery ? "Searching..." : `${totalHits} results`}
+                           </h2>
                            <p className="text-xs text-muted-foreground truncate">
                              {parsedInfo ? `Showing ${parsedInfo.bedrooms ? `${parsedInfo.bedrooms} bed ` : ""}${parsedInfo.propertyType || 'properties'}` : query}
                            </p>
@@ -300,10 +314,15 @@ export default function SearchPage() {
                  <div className="flex flex-col h-full overflow-hidden">
                    <div className="p-4 border-b shrink-0 bg-background/95 backdrop-blur-xl flex items-center gap-3">
                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                       <Sparkles size={18} className="text-primary" />
+                       {isLoading && debouncedQuery
+                         ? <Loader2 size={18} className="text-primary animate-spin" />
+                         : <Sparkles size={18} className="text-primary" />
+                       }
                      </div>
                      <div className="min-w-0">
-                       <h2 className="font-bold text-lg leading-tight truncate">{totalHits} results</h2>
+                       <h2 className="font-bold text-lg leading-tight truncate">
+                         {isLoading && debouncedQuery ? "Searching..." : `${totalHits} results`}
+                       </h2>
                        <p className="text-xs text-muted-foreground truncate">
                          {parsedInfo ? `Showing ${parsedInfo.bedrooms ? `${parsedInfo.bedrooms} bed ` : ""}${parsedInfo.propertyType || 'properties'}` : query}
                        </p>

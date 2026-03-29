@@ -1,48 +1,83 @@
 "use client";
 
-import { Star, MapPin, BedDouble, Bath, Maximize2, Heart, ExternalLink, Tag } from "lucide-react";
-import { formatPrice } from "@/lib/utils";
-import type { Property, PropertyCategory, ListingType } from "@/types/property";
+import React, { useState } from "react";
+import type { LucideIcon } from "lucide-react";
+import {
+  MapPin, BedDouble, Bath, ExternalLink,
+  Bookmark, Building2, ChevronLeft, ChevronRight,
+  Eye, Home, Users, Store, User,
+} from "lucide-react";
+import { formatPrice, formatPriceShort } from "@/lib/utils";
+import type { Property, ListingType, PropertyStatus } from "@/types/property";
 
-const CATEGORY_GRADIENTS: Record<PropertyCategory, string> = {
-  RESIDENTIAL: "from-blue-900/70 via-blue-800/30 to-transparent",
-  LAND: "from-emerald-900/70 via-emerald-800/30 to-transparent",
-  SHORTLET: "from-orange-900/70 via-orange-800/30 to-transparent",
-  COMMERCIAL: "from-violet-900/70 via-violet-800/30 to-transparent",
-  INDUSTRIAL: "from-slate-900/70 via-slate-800/30 to-transparent",
-};
-
-const CATEGORY_ACCENT: Record<PropertyCategory, string> = {
-  RESIDENTIAL: "#3b82f6",
-  LAND: "#10b981",
-  SHORTLET: "#f97316",
-  COMMERCIAL: "#8b5cf6",
-  INDUSTRIAL: "#64748b",
-};
+/* ------------------------------------------------------------------ */
+/*  Constants                                                           */
+/* ------------------------------------------------------------------ */
 
 const LISTING_LABELS: Record<ListingType, string> = {
   SALE: "For Sale",
   RENT: "For Rent",
-  LEASE: "Lease",
+  LEASE: "For Lease",
   SHORTLET: "Shortlet",
 };
 
-function StarRating({ score }: { score: number }) {
-  const stars = Math.round(score / 20);
+const LISTING_DOT_COLORS: Record<ListingType, string> = {
+  SALE: "var(--primary)",
+  RENT: "#16a34a",
+  LEASE: "#f59e0b",
+  SHORTLET: "var(--accent)",
+};
+
+const STATUS_BADGE: Record<PropertyStatus, { bg: string; color: string; label: string }> = {
+  AVAILABLE:   { bg: "#16a34a",  color: "#fff",     label: "Available" },
+  SOLD:        { bg: "#dc2626",  color: "#fff",     label: "Sold" },
+  RENTED:      { bg: "#2563eb",  color: "#fff",     label: "Rented" },
+  UNDER_OFFER: { bg: "#d97706",  color: "#fff",     label: "Under Offer" },
+  WITHDRAWN:   { bg: "#6b7280",  color: "#fff",     label: "Withdrawn" },
+  EXPIRED:     { bg: "#9ca3af",  color: "#1a1a1a",  label: "Expired" },
+};
+
+/** Returns "X days ago" or "Today" or "X months ago" */
+function daysAgoLabel(dateStr?: string): string | null {
+  if (!dateStr) return null;
+  const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
+  if (diff === 0) return "Today";
+  if (diff === 1) return "1 day ago";
+  if (diff < 30) return `${diff} days ago`;
+  const months = Math.floor(diff / 30);
+  return months === 1 ? "1 month ago" : `${months} months ago`;
+}
+
+/* ------------------------------------------------------------------ */
+/*  AgentType label helper                                              */
+/* ------------------------------------------------------------------ */
+
+type AgentType = "OWNERS_AGENT" | "DEVELOPER" | "LANDLORD";
+
+const AGENT_TYPE_LABELS: Record<AgentType, { label: string; Icon: LucideIcon }> = {
+  OWNERS_AGENT: { label: "Direct to Owner's Agent", Icon: Users },
+  DEVELOPER:    { label: "Direct to Developer",      Icon: Store },
+  LANDLORD:     { label: "Direct to Landlord",       Icon: User },
+};
+
+function AgentTypeLabel({ agentType }: { agentType?: AgentType | null }) {
+  if (!agentType) return null;
+  const config = AGENT_TYPE_LABELS[agentType];
+  if (!config) return null;
+  const { label, Icon } = config;
   return (
-    <div className="flex items-center gap-0.5">
-      {Array.from({ length: 5 }, (_, i) => (
-        <Star
-          key={i}
-          size={11}
-          fill={i < stars ? "#facc15" : "transparent"}
-          stroke={i < stars ? "#facc15" : "rgba(255,255,255,0.4)"}
-          strokeWidth={1.5}
-        />
-      ))}
+    <div className="flex items-center gap-1 mt-1.5">
+      <Icon size={11} style={{ color: "#16a34a" }} />
+      <span className="text-[11px] font-semibold" style={{ color: "#16a34a" }}>
+        {label}
+      </span>
     </div>
   );
 }
+
+/* ------------------------------------------------------------------ */
+/*  Props                                                               */
+/* ------------------------------------------------------------------ */
 
 interface PropertyCardProps {
   property: Property;
@@ -52,21 +87,52 @@ interface PropertyCardProps {
   onClick?: (id: string) => void;
 }
 
-export function PropertyCard({ property, isActive, onFavorite, onHover, onClick }: PropertyCardProps) {
+/* ------------------------------------------------------------------ */
+/*  PropertyCard                                                        */
+/* ------------------------------------------------------------------ */
+
+export function PropertyCard({
+  property,
+  isActive,
+  onFavorite,
+  onHover,
+  onClick,
+}: PropertyCardProps) {
   const {
-    id, title, category, listingType, price, rentFrequency,
-    bedrooms, bathrooms, area, state, locationText,
-    images, qualityScore, isPremium, isHotDeal, promoTags = [],
+    id, title, listingType, price, rentFrequency,
+    bedrooms, bathrooms, state, locationText, area,
+    images, qualityScore, createdAt, scrapeTimestamp,
+    propertyType, status, listingUrl,
   } = property;
+  const agentType = property.agentType;
 
-  const imageUrl = Array.isArray(images) && images.length > 0
-    ? images[0]
-    : "/placeholder-property.jpg";
+  const allImages = Array.isArray(images) && images.length > 0 ? images : [];
+  const imageCount = allImages.length;
 
-  const imageCount = Array.isArray(images) ? images.length : 0;
+  const [currentImg, setCurrentImg] = useState(0);
+  const [bookmarked, setBookmarked] = useState(false);
+
+  const imageUrl = imageCount > 0 ? allImages[currentImg] : null;
   const location = locationText || [area, state].filter(Boolean).join(", ") || "Lagos, Nigeria";
-  const gradient = CATEGORY_GRADIENTS[category] || CATEGORY_GRADIENTS.RESIDENTIAL;
-  const accentColor = CATEGORY_ACCENT[category] || CATEGORY_ACCENT.RESIDENTIAL;
+  const listingDotColor = LISTING_DOT_COLORS[listingType] ?? "var(--primary)";
+  const listedAgo = daysAgoLabel(scrapeTimestamp || createdAt);
+  const statusBadge = STATUS_BADGE[status] ?? STATUS_BADGE.AVAILABLE;
+
+  const qualityColor =
+    qualityScore == null ? "#9ca3af"
+    : qualityScore >= 70 ? "#16a34a"
+    : qualityScore >= 40 ? "#f59e0b"
+    : "#dc2626";
+
+  const prevImg = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCurrentImg(i => (i - 1 + imageCount) % imageCount);
+  };
+
+  const nextImg = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCurrentImg(i => (i + 1) % imageCount);
+  };
 
   return (
     <div
@@ -76,187 +142,281 @@ export function PropertyCard({ property, isActive, onFavorite, onHover, onClick 
       onMouseLeave={() => onHover?.(null)}
     >
       <div
-        className="relative rounded-2xl overflow-hidden transition-all duration-300 group-hover:-translate-y-1 flex flex-col h-full"
+        className="relative flex flex-col h-full rounded-xl overflow-hidden transition-all duration-200 group-hover:-translate-y-0.5"
         style={{
           backgroundColor: "var(--card)",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.04)",
-          border: isActive ? "2px solid var(--primary)" : "none",
+          boxShadow: isActive
+            ? "0 0 0 2px var(--primary), 0 8px 24px rgba(0,0,1,0.14)"
+            : "0 1px 3px rgba(0,0,0,0.06), 0 2px 12px rgba(0,0,0,0.04)",
+          border: isActive
+            ? "2px solid var(--primary)"
+            : "1px solid var(--border)",
+        }}
+        onMouseEnter={(e) => {
+          if (!isActive) {
+            (e.currentTarget as HTMLDivElement).style.borderColor = "var(--primary)";
+            (e.currentTarget as HTMLDivElement).style.boxShadow =
+              "0 4px 8px rgba(0,0,0,0.06), 0 16px 32px rgba(0,1,252,0.10)";
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!isActive) {
+            (e.currentTarget as HTMLDivElement).style.borderColor = "var(--border)";
+            (e.currentTarget as HTMLDivElement).style.boxShadow =
+              "0 1px 3px rgba(0,0,0,0.06), 0 2px 12px rgba(0,0,0,0.04)";
+          }
         }}
       >
-        {/* Image Section */}
-        <div className="relative aspect-[4/3] w-full shrink-0 overflow-hidden">
-          {/* Property Image */}
-          <img
-            src={imageUrl}
-            alt={title}
-            className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-            loading="lazy"
-          />
+        {/* ─── Image Section ─── */}
+        <div className="relative aspect-video w-full shrink-0 overflow-hidden"
+          style={{ backgroundColor: "var(--secondary)" }}>
 
-          {/* Category gradient overlay */}
-          <div className={`absolute inset-0 bg-gradient-to-t ${gradient}`} />
-
-          {/* Top row: Quality stars (left) + Listing badge (right) */}
-          <div className="absolute top-0 left-0 right-0 p-2 sm:p-3 flex items-start justify-between">
-            {/* Star rating pill */}
-            {qualityScore != null && (
-              <div
-                className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full backdrop-blur-md"
-                style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
-              >
-                <StarRating score={qualityScore} />
-              </div>
-            )}
-
-            {/* Listing type badge */}
+          {/* Main image or placeholder */}
+          {imageUrl ? (
+            <img
+              src={imageUrl}
+              alt={title}
+              className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+              loading="lazy"
+            />
+          ) : (
             <div
-              className="px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold tracking-wide uppercase"
+              className="absolute inset-0 flex flex-col items-center justify-center gap-2"
               style={{
-                backgroundColor: accentColor,
-                color: "#fff",
-                letterSpacing: "0.04em",
+                background: "linear-gradient(135deg, var(--secondary) 0%, color-mix(in srgb, var(--secondary) 70%, var(--border)) 100%)",
               }}
             >
-              {LISTING_LABELS[listingType]}
-            </div>
-          </div>
-
-          {/* Promo tags row */}
-          {(isPremium || isHotDeal || (promoTags && promoTags.length > 0)) && (
-            <div className="absolute top-12 left-3 flex flex-wrap gap-1.5">
-              {isPremium && (
-                <span
-                  className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"
-                  style={{ backgroundColor: "#facc15", color: "#1a1a1a" }}
-                >
-                  Premium
-                </span>
-              )}
-              {isHotDeal && (
-                <span
-                  className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"
-                  style={{ backgroundColor: "#ef4444", color: "#fff" }}
-                >
-                  Hot Deal
-                </span>
-              )}
-              {(promoTags || []).slice(0, 2).map((tag) => (
-                <span
-                  key={tag}
-                  className="flex items-center gap-0.5 px-2 py-0.5 rounded text-[10px] font-medium backdrop-blur-md"
-                  style={{ backgroundColor: "rgba(255,255,255,0.2)", color: "#fff" }}
-                >
-                  <Tag size={8} />
-                  {tag}
-                </span>
-              ))}
+              <Building2 size={36} style={{ color: "var(--muted-foreground)" }} strokeWidth={1.5} />
+              <span className="text-[11px] font-medium" style={{ color: "var(--muted-foreground)" }}>No photo</span>
             </div>
           )}
 
-          {/* Bottom: location overlay + image count */}
-          <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-3 flex items-end justify-between">
-            <div className="flex items-center gap-1 sm:gap-1.5 text-white/90 text-[10px] sm:text-xs font-medium max-w-[70%]">
-              <MapPin size={11} className="shrink-0 sm:w-[13px] sm:h-[13px]" />
-              <span className="truncate">{location}</span>
-            </div>
-            {imageCount > 1 && (
-              <div
-                className="flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded text-[9px] sm:text-[10px] font-medium backdrop-blur-md"
-                style={{ backgroundColor: "rgba(0,0,0,0.45)", color: "#fff" }}
+          {/* Subtle bottom scrim for image overlay elements */}
+          {imageUrl && (
+            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none" />
+          )}
+
+          {/* ── Top-left stacked: "Listed X ago" pill + Status badge ── */}
+          <div className="absolute top-2.5 left-2.5 flex flex-col gap-1.5">
+            {listedAgo && (
+              <span
+                className="px-2 py-0.5 rounded-full text-[10px] font-semibold text-white"
+                style={{ backgroundColor: "rgba(0,0,0,0.52)", backdropFilter: "blur(6px)" }}
               >
-                {imageCount} photos
-              </div>
+                Listed {listedAgo}
+              </span>
             )}
+            <span
+              className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide"
+              style={{ backgroundColor: statusBadge.bg, color: statusBadge.color }}
+            >
+              {statusBadge.label}
+            </span>
           </div>
 
-          {/* Favorite button */}
-          {onFavorite && (
-            <button
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onFavorite(id);
-              }}
-              className="absolute top-3 right-14 p-1.5 rounded-full backdrop-blur-md transition-colors hover:bg-white/30"
-              style={{ backgroundColor: "rgba(0,0,0,0.3)" }}
-            >
-              <Heart size={14} className="text-white" />
-            </button>
+          {/* ── Top-right: Bookmark button ── */}
+          <button
+            onClick={(e) => { e.stopPropagation(); setBookmarked(b => !b); onFavorite?.(id); }}
+            className="absolute top-2.5 right-2.5 w-8 h-8 rounded-full flex items-center justify-center transition-all"
+            style={{
+              backgroundColor: bookmarked ? "var(--primary)" : "rgba(0,0,0,0.46)",
+              backdropFilter: "blur(6px)",
+            }}
+            aria-label={bookmarked ? "Remove bookmark" : "Bookmark property"}
+            title={bookmarked ? "Saved" : "Save"}
+          >
+            <Bookmark
+              size={13}
+              style={{ color: "#fff" }}
+              fill={bookmarked ? "#fff" : "none"}
+              strokeWidth={bookmarked ? 2 : 1.75}
+            />
+          </button>
+
+          {/* ── Listing-type badge — bottom-left ── */}
+          <div
+            className="absolute bottom-2.5 left-2.5 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide text-white"
+            style={{ backgroundColor: listingDotColor }}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-white/80 shrink-0" />
+            {LISTING_LABELS[listingType]}
+          </div>
+
+          {/* ── Bottom-right of image: map pin circle button ── */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              // Optionally: navigate to map centered on property
+            }}
+            className="absolute bottom-2.5 right-2.5 w-7 h-7 rounded-full flex items-center justify-center transition-opacity opacity-0 group-hover:opacity-100"
+            style={{ backgroundColor: "rgba(0,0,0,0.52)", backdropFilter: "blur(6px)" }}
+            aria-label="View on map"
+            title="View on map"
+          >
+            <MapPin size={12} style={{ color: "#fff" }} />
+          </button>
+
+          {/* ── Carousel arrows (show on hover when multiple images) ── */}
+          {imageCount > 1 && (
+            <>
+              <button
+                onClick={prevImg}
+                className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-md"
+                style={{ backgroundColor: "rgba(255,255,255,0.90)" }}
+                aria-label="Previous image"
+              >
+                <ChevronLeft size={16} style={{ color: "var(--foreground)" }} />
+              </button>
+              <button
+                onClick={nextImg}
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-md"
+                style={{ backgroundColor: "rgba(255,255,255,0.90)" }}
+                aria-label="Next image"
+              >
+                <ChevronRight size={16} style={{ color: "var(--foreground)" }} />
+              </button>
+            </>
+          )}
+
+          {/* ── Carousel dots (bottom-center, when multiple images) ── */}
+          {imageCount > 1 && (
+            <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 flex items-center gap-1 pointer-events-none">
+              {allImages.slice(0, 5).map((_, i) => (
+                <span
+                  key={i}
+                  className="rounded-full transition-all duration-200"
+                  style={{
+                    width: i === currentImg ? "14px" : "5px",
+                    height: "5px",
+                    backgroundColor: i === currentImg ? "#fff" : "rgba(255,255,255,0.50)",
+                  }}
+                />
+              ))}
+              {imageCount > 5 && (
+                <span className="text-white/55 text-[9px] ml-0.5">+{imageCount - 5}</span>
+              )}
+            </div>
           )}
         </div>
 
-        {/* Content Section */}
-        <div className="p-2.5 sm:p-4 flex-1 flex flex-col">
-          {/* Top content that should push the footer down */}
-          <div className="flex-1 space-y-1.5 sm:space-y-2.5 flex flex-col">
-            {/* Title */}
-            <h3
-              className="font-display font-semibold text-xs sm:text-sm leading-snug line-clamp-2 transition-colors group-hover:text-[var(--primary)]"
-              style={{ color: "var(--foreground)" }}
-            >
-              {title}
-            </h3>
+        {/* ─── Card Body ─── */}
+        <div className="p-4 flex-1 flex flex-col gap-2">
 
-            {/* Price */}
-            <div className="flex items-baseline flex-wrap gap-x-1 sm:gap-x-1.5 gap-y-0.5 mt-auto pb-0.5 sm:pb-1">
-              <span
-                className="font-display font-bold text-sm sm:text-lg"
-                style={{ color: "var(--accent)" }}
-              >
+          {/* Price — dominant, primary color */}
+          <div className="flex items-baseline gap-1.5 flex-wrap">
+            <span
+              className="font-display font-black text-xl tracking-tight"
+              style={{ color: "var(--primary)" }}
+            >
+              {formatPriceShort(price, listingType)}
+            </span>
+            {price != null && (
+              <span className="text-[11px] font-medium" style={{ color: "var(--muted-foreground)" }}>
                 {formatPrice(price)}
               </span>
-              {rentFrequency && (
-                <span
-                  className="text-[9px] sm:text-xs font-medium"
-                  style={{ color: "var(--muted-foreground)" }}
-                >
-                  /{rentFrequency}
-                </span>
-              )}
-            </div>
+            )}
+            {rentFrequency && (
+              <span className="text-[11px] font-medium" style={{ color: "var(--muted-foreground)" }}>
+                /{rentFrequency}
+              </span>
+            )}
           </div>
 
-          {/* Divider */}
-          <div className="mt-2 sm:mt-3 mb-1.5 sm:mb-2 border-t border-dashed" style={{ borderColor: "var(--border)" }} />
+          {/* Title — 2-line clamp */}
+          <h3
+            className="font-display font-semibold text-sm leading-snug line-clamp-2 transition-colors group-hover:text-[var(--primary)]"
+            style={{ color: "var(--foreground)" }}
+          >
+            {title}
+          </h3>
 
-          {/* Details footer */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5 sm:gap-3 text-[9px] sm:text-xs" style={{ color: "var(--muted-foreground)" }}>
-              {bedrooms != null && (
-                <span className="flex items-center gap-0.5 sm:gap-1">
-                  <BedDouble size={12} strokeWidth={1.5} className="shrink-0 sm:w-[14px] sm:h-[14px]" />
-                  <span className="font-medium" style={{ color: "var(--foreground)" }}>{bedrooms}</span>
-                </span>
-              )}
-              {bathrooms != null && (
-                <span className="flex items-center gap-0.5 sm:gap-1">
-                  <Bath size={12} strokeWidth={1.5} className="shrink-0 sm:w-[14px] sm:h-[14px]" />
-                  <span className="font-medium" style={{ color: "var(--foreground)" }}>{bathrooms}</span>
-                </span>
-              )}
-              {(property.landSizeSqm || property.buildingSizeSqm) && (
-                <span className="flex items-center gap-0.5 sm:gap-1">
-                  <Maximize2 size={11} strokeWidth={1.5} className="shrink-0 sm:w-[13px] sm:h-[13px]" />
-                  <span className="font-medium" style={{ color: "var(--foreground)" }}>
-                    {Math.round(property.landSizeSqm || property.buildingSizeSqm || 0)}
-                  </span>
-                </span>
-              )}
-            </div>
+          {/* Location row */}
+          <div className="flex items-center gap-1 text-[11px]" style={{ color: "var(--muted-foreground)" }}>
+            <MapPin size={11} className="shrink-0" />
+            <span className="truncate">{location}</span>
+          </div>
 
-            <ExternalLink
-              size={12}
-              className="opacity-0 group-hover:opacity-60 transition-opacity shrink-0 sm:w-[14px] sm:h-[14px]"
-              style={{ color: "var(--muted-foreground)" }}
-            />
+          {/* Stats row: beds / baths / type pills */}
+          <div className="flex flex-wrap gap-1.5">
+            {bedrooms != null && (
+              <span
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold"
+                style={{ backgroundColor: "var(--secondary)", color: "var(--foreground)" }}
+              >
+                <BedDouble size={11} strokeWidth={2} />
+                {bedrooms} {bedrooms === 1 ? "Bed" : "Beds"}
+              </span>
+            )}
+            {bathrooms != null && (
+              <span
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold"
+                style={{ backgroundColor: "var(--secondary)", color: "var(--foreground)" }}
+              >
+                <Bath size={11} strokeWidth={2} />
+                {bathrooms} {bathrooms === 1 ? "Bath" : "Baths"}
+              </span>
+            )}
+            {propertyType && !bedrooms && !bathrooms && (
+              <span
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold"
+                style={{ backgroundColor: "var(--secondary)", color: "var(--foreground)" }}
+              >
+                <Home size={11} strokeWidth={2} />
+                {propertyType}
+              </span>
+            )}
+          </div>
+
+          {/* Agent type label — only if agentType field exists and matches */}
+          <AgentTypeLabel agentType={agentType} />
+
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* Hover action row */}
+          <div
+            className="flex items-center gap-1 pt-2 mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+            style={{ borderTop: "1px solid var(--border)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={(e) => { e.stopPropagation(); onClick?.(id); }}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors hover:bg-[var(--secondary)]"
+              style={{ color: "var(--primary)" }}
+              title="View details"
+            >
+              <Eye size={12} />
+              View
+            </button>
+            {listingUrl && (
+              <a
+                href={listingUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors hover:bg-[var(--secondary)]"
+                style={{ color: "var(--muted-foreground)" }}
+                title="Open source listing"
+              >
+                <ExternalLink size={12} />
+                Source
+              </a>
+            )}
           </div>
         </div>
 
-        {/* Category accent bar at bottom */}
-        <div
-          className="h-[3px] w-full transition-all duration-300 group-hover:h-[4px]"
-          style={{ backgroundColor: accentColor }}
-        />
+        {/* ─── Quality bar — thin line at very bottom ─── */}
+        {qualityScore != null && (
+          <div className="h-[3px] w-full" style={{ backgroundColor: "var(--secondary)" }}>
+            <div
+              className="h-full transition-all duration-500"
+              style={{
+                width: `${qualityScore}%`,
+                backgroundColor: qualityColor,
+              }}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

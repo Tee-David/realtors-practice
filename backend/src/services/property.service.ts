@@ -1,5 +1,5 @@
 import prisma from "../prismaClient";
-import { ChangeSource, Prisma } from "@prisma/client";
+import { ChangeSource, Prisma, PropertyOrigin } from "@prisma/client";
 import { ListPropertiesInput, CreatePropertyInput, UpdatePropertyInput } from "../validators/property.validators";
 import { VersionService } from "./version.service";
 import { QualityService } from "./quality.service";
@@ -16,6 +16,7 @@ export class PropertyService {
       minPrice, maxPrice, minBedrooms, maxBedrooms, minBathrooms,
       state, area, lga, siteId, propertyType, furnishing,
       search, isPremium, isFeatured, minQualityScore,
+      origin, enrichmentStatus,
     } = filters;
 
     const where: Prisma.PropertyWhereInput = { deletedAt: null };
@@ -55,6 +56,9 @@ export class PropertyService {
       where.qualityScore = { gte: minQualityScore };
     }
 
+    if (origin) where.origin = origin;
+    if (enrichmentStatus) where.enrichmentStatus = enrichmentStatus;
+
     if (search) {
       where.OR = [
         { title: { contains: search, mode: "insensitive" } },
@@ -93,7 +97,12 @@ export class PropertyService {
     return property;
   }
 
-  static async create(data: CreatePropertyInput, changeSource: ChangeSource = "MANUAL_EDIT", changedBy?: string) {
+  static async create(
+    data: CreatePropertyInput,
+    changeSource: ChangeSource = "MANUAL_EDIT",
+    changedBy?: string,
+    origin: PropertyOrigin = "MANUAL",
+  ) {
     const hash = DedupService.generateHash({
       title: data.title,
       listingUrl: data.listingUrl,
@@ -103,7 +112,66 @@ export class PropertyService {
     // Check for exact duplicate
     const existing = await DedupService.findExisting(hash);
     if (existing) {
-      return { property: null, duplicate: true, existingId: existing.id };
+      // ── Re-scrape detection: check if data has changed ──────────────
+      if (origin === "SCRAPED") {
+        const TRACKED_FIELDS = ["price", "status", "title", "bedrooms", "bathrooms"] as const;
+        type TrackedField = typeof TRACKED_FIELDS[number];
+        const changedFields: string[] = [];
+        const previousData: Record<string, unknown> = {};
+        const newData: Record<string, unknown> = {};
+
+        for (const field of TRACKED_FIELDS) {
+          const oldVal = (existing as Record<string, unknown>)[field];
+          const newVal = (data as Record<string, unknown>)[field];
+          if (newVal !== undefined && oldVal !== newVal) {
+            changedFields.push(field);
+            previousData[field] = oldVal;
+            newData[field] = newVal;
+          }
+        }
+
+        if (changedFields.length > 0) {
+          // Build update payload with changed values only
+          const updatePayload: Record<string, unknown> = {};
+          for (const field of changedFields as TrackedField[]) {
+            updatePayload[field] = (data as Record<string, unknown>)[field];
+          }
+
+          // Create a version recording the change
+          await VersionService.createVersion({
+            propertyId: existing.id,
+            previousData: previousData as Record<string, unknown>,
+            newData: newData as Record<string, unknown>,
+            changeSource: "SCRAPER",
+            changedBy,
+          });
+
+          // Update the property with new values
+          await prisma.property.update({
+            where: { id: existing.id },
+            data: updatePayload,
+          });
+
+          // Recompute price history if price changed
+          if (changedFields.includes("price") && data.price) {
+            await prisma.priceHistory.create({
+              data: {
+                propertyId: existing.id,
+                price: data.price,
+                source: "SCRAPER",
+              },
+            });
+          }
+
+          // Sync to Meilisearch
+          MeiliService.upsertProperty(existing.id);
+
+          Logger.info(`Re-scrape detected changes for ${existing.id}: [${changedFields.join(", ")}]`);
+          return { property: null, duplicate: true, existingId: existing.id, updated: true, changedFields };
+        }
+      }
+
+      return { property: null, duplicate: true, existingId: existing.id, updated: false };
     }
 
     // Compute quality score
@@ -114,6 +182,7 @@ export class PropertyService {
         ...data,
         hash,
         qualityScore,
+        origin,
         scrapeTimestamp: data.scrapeTimestamp ? new Date(data.scrapeTimestamp) : undefined,
       },
       include: {
@@ -143,7 +212,11 @@ export class PropertyService {
           if (geo) {
             await prisma.property.update({
               where: { id: property.id },
-              data: { latitude: geo.lat, longitude: geo.lng },
+              data: {
+                latitude: geo.lat,
+                longitude: geo.lng,
+                enrichmentStatus: "GEOCODED",
+              },
             });
             // Re-sync to Meilisearch with coordinates
             MeiliService.upsertProperty(property.id);
@@ -153,9 +226,15 @@ export class PropertyService {
           Logger.warn(`Geocode failed for property ${property.id}: ${err.message}`);
         });
       }
+    } else if (data.latitude && data.longitude) {
+      // Already has coordinates — mark as GEOCODED immediately
+      await prisma.property.update({
+        where: { id: property.id },
+        data: { enrichmentStatus: "GEOCODED" },
+      });
     }
 
-    Logger.info(`Property created: ${property.id} (quality: ${qualityScore})`);
+    Logger.info(`Property created: ${property.id} (quality: ${qualityScore}, origin: ${origin})`);
     return { property, duplicate: false };
   }
 
@@ -305,7 +384,7 @@ export class PropertyService {
   }
 
   static async enrich(id: string, enrichmentData: Record<string, unknown>) {
-    return this.update(id, enrichmentData as UpdatePropertyInput, "ENRICHMENT");
+    return this.update(id, { ...enrichmentData, enrichmentStatus: "ENRICHED" } as UpdatePropertyInput, "ENRICHMENT");
   }
 
   /**

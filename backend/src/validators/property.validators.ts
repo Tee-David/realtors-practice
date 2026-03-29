@@ -31,6 +31,8 @@ export const listPropertiesSchema = z.object({
   isPremium: z.coerce.boolean().optional(),
   isFeatured: z.coerce.boolean().optional(),
   minQualityScore: z.coerce.number().min(0).max(100).optional(),
+  origin: z.enum(["SCRAPED", "MANUAL", "IMPORTED", "API"]).optional(),
+  enrichmentStatus: z.enum(["RAW", "GEOCODED", "ENRICHED", "VERIFIED", "PUBLISHED"]).optional(),
 });
 
 export const createPropertySchema = z.object({
@@ -105,6 +107,9 @@ export const createPropertySchema = z.object({
   // Metadata
   scrapeTimestamp: z.string().datetime().optional(),
   searchKeywords: z.array(z.string()).optional(),
+  // Lifecycle
+  origin: z.enum(["SCRAPED", "MANUAL", "IMPORTED", "API"]).optional(),
+  enrichmentStatus: z.enum(["RAW", "GEOCODED", "ENRICHED", "VERIFIED", "PUBLISHED"]).optional(),
   // Tags
   promoTags: z.array(z.string()).optional(),
   titleTag: z.string().optional(),
