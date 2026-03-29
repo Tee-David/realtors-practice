@@ -86,6 +86,25 @@ router.get("/stats/most-viewed", PropertyController.getMostViewed);
 
 /**
  * @swagger
+ * /properties/llm-enrich-count/{siteId}:
+ *   get:
+ *     summary: Get count of properties for a site (for confirmation dialog)
+ *     tags: [Properties]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: siteId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Count of properties in the site
+ */
+router.get("/llm-enrich-count/:siteId", authorize("ADMIN", "EDITOR"), PropertyController.llmEnrichCount);
+
+/**
+ * @swagger
  * /properties/{id}:
  *   get:
  *     summary: Get a single property by ID
@@ -256,6 +275,49 @@ router.put("/:id", authorize("ADMIN", "EDITOR"), validate(updatePropertySchema),
  *         description: Admin or Editor role required
  */
 router.patch("/:id/enrich", authorize("ADMIN", "EDITOR"), PropertyController.enrich);
+
+/**
+ * @swagger
+ * /properties/{id}/llm-enrich:
+ *   post:
+ *     summary: Enrich a single property using LLM extraction from its description
+ *     tags: [Properties]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Enrichment result with extracted fields
+ */
+router.post("/:id/llm-enrich", authorize("ADMIN", "EDITOR"), PropertyController.llmEnrich);
+
+/**
+ * @swagger
+ * /properties/llm-enrich-by-site:
+ *   post:
+ *     summary: Enrich all properties from a specific site using LLM
+ *     tags: [Properties]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [siteId]
+ *             properties:
+ *               siteId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Batch enrichment summary
+ */
+router.post("/llm-enrich-by-site", authorize("ADMIN", "EDITOR"), PropertyController.llmEnrichBySite);
 
 /**
  * @swagger

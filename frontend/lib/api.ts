@@ -56,6 +56,9 @@ export const properties = {
   versions: (id: string, params?: Record<string, unknown>) => api.get(`/properties/${id}/versions`, { params }),
   priceHistory: (id: string) => api.get(`/properties/${id}/price-history`),
   enrich: (id: string, data: Record<string, unknown>) => api.patch(`/properties/${id}/enrich`, data),
+  llmEnrich: (id: string) => api.post(`/properties/${id}/llm-enrich`, {}),
+  llmEnrichBySite: (siteId: string) => api.post("/properties/llm-enrich-by-site", { siteId }),
+  llmEnrichCount: (siteId: string) => api.get(`/properties/llm-enrich-count/${siteId}`),
   bulkAction: (data: { ids: string[]; action: string }) => api.post("/properties/bulk-action", data),
   stats: () => api.get("/properties/stats"),
 };

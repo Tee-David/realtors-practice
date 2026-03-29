@@ -11,67 +11,180 @@ interface ParsedQuery {
     bedrooms?: number;
     listingType?: string;
     propertyType?: string;
+    category?: string;
+    area?: string;
   };
 }
+
+// Common Nigerian property areas for NL detection
+const NIGERIAN_AREAS: string[] = [
+  "lekki", "ikoyi", "victoria island", "vi", "ajah", "ikeja", "surulere",
+  "yaba", "gbagada", "ojodu", "maryland", "festac", "agege", "oshodi",
+  "isolo", "apapa", "ebute metta", "magodo", "omole", "shangisha", "ketu",
+  "mile 2", "mile 12", "ojota", "berger", "ogba", "pen cinema", "wuse",
+  "maitama", "asokoro", "garki", "gwarinpa", "jabi", "life camp", "lugbe",
+  "kubwa", "durumi", "apo", "gudu", "lokogoma", "katampe", "banana island",
+  "chevron", "jakande", "sangotedo", "abraham adesanya", "orchid", "lafiaji",
+  "oniru", "marina", "cms", "obanikoro", "shomolu", "bariga", "mushin",
+  "ikotun", "igando", "egbeda", "abule egba", "iyana ipaja", "alimosho",
+  "rumuola", "rumuomasi", "rumuola", "eliozu", "woji", "ada george",
+  "trans amadi", "obio akpor", "gra port harcourt", "new gra",
+  "enugu gra", "independence layout", "trans ekulu", "new haven",
+  "kano gra", "nassarawa gra", "ibadan", "bodija", "ui",
+];
+
+const NIGERIAN_AREAS_DISPLAY: Record<string, string> = {
+  "vi": "Victoria Island",
+};
 
 export class SearchService {
   private static readonly INDEX_NAME = "properties";
 
   /**
-   * Extremely simple NLP parser via Regex
-   * Understands: "under 5m", "3 bed", "flat", "rent", "in lekki"
+   * Parse natural language property queries using regex.
+   * Understands: prices ("under 5M", "above 2M", "30k"),
+   * bedrooms ("3 bed", "3br", "3 bedroom"), areas (Lagos neighbourhoods),
+   * listing types ("for rent", "to let", "for sale"), and property types.
    */
   static parseNaturalLanguage(query: string): ParsedQuery {
     const extracted: ParsedQuery["extracted"] = {};
     const filters: string[] = [];
     let cleanQuery = query.toLowerCase();
 
-    // 1. Extract Price (under Xm, less than Xm, up to Xm)
-    const priceMatch = cleanQuery.match(/(?:under|less than|up to|<) ?(\d+(?:\.\d+)?)[ ]?(m|million|k|thousand)/);
-    if (priceMatch) {
-      const amount = parseFloat(priceMatch[1]);
-      const multiplier = priceMatch[2].startsWith("m") ? 1000000 : 1000;
+    // ── Helper: parse Nigerian price notation
+    // Handles: "5M", "5 million", "200k", "200 thousand", "30k", bare numbers
+    function parseNigerianPrice(raw: string): number {
+      const val = parseFloat(raw.replace(/,/g, ""));
+      return val; // multiplier applied at call site
+    }
+
+    // 1. Max price: "under 5M", "less than 2M", "up to 200k", "max 5m", "< 5m"
+    const maxPriceMatch = cleanQuery.match(
+      /(?:under|less than|up to|max|<)\s*(\d+(?:[.,]\d+)?)\s*(m(?:illion)?|k(?:thousand)?|billion|bn)?/
+    );
+    if (maxPriceMatch) {
+      const amount = parseNigerianPrice(maxPriceMatch[1]);
+      const suffix = (maxPriceMatch[2] || "").toLowerCase();
+      const multiplier = suffix.startsWith("b") ? 1_000_000_000
+        : suffix.startsWith("m") ? 1_000_000
+        : suffix.startsWith("k") ? 1_000
+        : 1;
       extracted.maxPrice = amount * multiplier;
       filters.push(`price <= ${extracted.maxPrice}`);
-      cleanQuery = cleanQuery.replace(priceMatch[0], "");
+      cleanQuery = cleanQuery.replace(maxPriceMatch[0], "");
     }
 
-    // Over Xm
-    const textOverMatch = cleanQuery.match(/(?:over|more than|above|>) ?(\d+(?:\.\d+)?)[ ]?(m|million|k|thousand)/);
-    if (textOverMatch) {
-      const amount = parseFloat(textOverMatch[1]);
-      const multiplier = textOverMatch[2].startsWith("m") ? 1000000 : 1000;
+    // 2. Min price: "above 2M", "over 2M", "more than 200k", "> 5m"
+    const minPriceMatch = cleanQuery.match(
+      /(?:above|over|more than|min|>)\s*(\d+(?:[.,]\d+)?)\s*(m(?:illion)?|k(?:thousand)?|billion|bn)?/
+    );
+    if (minPriceMatch) {
+      const amount = parseNigerianPrice(minPriceMatch[1]);
+      const suffix = (minPriceMatch[2] || "").toLowerCase();
+      const multiplier = suffix.startsWith("b") ? 1_000_000_000
+        : suffix.startsWith("m") ? 1_000_000
+        : suffix.startsWith("k") ? 1_000
+        : 1;
       extracted.minPrice = amount * multiplier;
       filters.push(`price >= ${extracted.minPrice}`);
-      cleanQuery = cleanQuery.replace(textOverMatch[0], "");
+      cleanQuery = cleanQuery.replace(minPriceMatch[0], "");
     }
 
-    // 2. Extract Bedrooms (3 bed, 4bhk, 2 bedroom)
-    const bedMatch = cleanQuery.match(/(\d+) ?(bed|bedroom|beds|bhk)/);
+    // 3. Bedrooms: "3 bed", "3 beds", "3 bedroom", "3 bedrooms", "3br", "3bhk"
+    const bedMatch = cleanQuery.match(/(\d+)\s*(?:bed(?:room)?s?|br|bhk)\b/);
     if (bedMatch) {
       extracted.bedrooms = parseInt(bedMatch[1], 10);
       filters.push(`bedrooms = ${extracted.bedrooms}`);
       cleanQuery = cleanQuery.replace(bedMatch[0], "");
     }
 
-    // 3. Extract Listing Type (rent, sale, shortlet, lease)
-    if (cleanQuery.includes("rent") || cleanQuery.includes("letting")) {
+    // 4. Listing type: "for rent", "to let", "to lease" → RENT
+    //                  "for sale", "to buy", "to purchase" → SALE
+    //                  "shortlet", "short let", "short-let" → SHORTLET
+    //                  "for lease" → LEASE
+    if (/\b(?:for\s+rent|to\s+let|for\s+letting|to\s+lease(?!\s+hold))\b/.test(cleanQuery)) {
       extracted.listingType = "RENT";
       filters.push(`listingType = RENT`);
-      cleanQuery = cleanQuery.replace(/(?:for )?rent|letting/g, "");
-    } else if (cleanQuery.includes("sale") || cleanQuery.includes("buy")) {
+      cleanQuery = cleanQuery.replace(/\b(?:for\s+rent|to\s+let|for\s+letting|to\s+lease)\b/g, "");
+    } else if (/\b(?:for\s+sale|to\s+buy|to\s+purchase)\b/.test(cleanQuery)) {
       extracted.listingType = "SALE";
       filters.push(`listingType = SALE`);
-      cleanQuery = cleanQuery.replace(/(?:for )?sale|buy/g, "");
-    } else if (cleanQuery.includes("shortlet") || cleanQuery.includes("short let")) {
+      cleanQuery = cleanQuery.replace(/\b(?:for\s+sale|to\s+buy|to\s+purchase)\b/g, "");
+    } else if (/\b(?:short[\s-]?let|shortlet)\b/.test(cleanQuery)) {
       extracted.listingType = "SHORTLET";
       filters.push(`listingType = SHORTLET`);
-      cleanQuery = cleanQuery.replace(/short[ -]?let/g, "");
+      cleanQuery = cleanQuery.replace(/\b(?:short[\s-]?let|shortlet)\b/g, "");
+    } else if (/\b(?:for\s+lease|leasehold)\b/.test(cleanQuery)) {
+      extracted.listingType = "LEASE";
+      filters.push(`listingType = LEASE`);
+      cleanQuery = cleanQuery.replace(/\b(?:for\s+lease|leasehold)\b/g, "");
+    } else if (/\brent\b/.test(cleanQuery)) {
+      extracted.listingType = "RENT";
+      filters.push(`listingType = RENT`);
+      cleanQuery = cleanQuery.replace(/\brent\b/g, "");
+    } else if (/\b(?:sale|buy)\b/.test(cleanQuery)) {
+      extracted.listingType = "SALE";
+      filters.push(`listingType = SALE`);
+      cleanQuery = cleanQuery.replace(/\b(?:sale|buy)\b/g, "");
     }
 
-    // Clean up remaining query strictly for text search (remove stopwords like "in", "for", "a")
+    // 5. Property type → category mapping
+    const typeMap: Record<string, { propertyType: string; category: string }> = {
+      "flat": { propertyType: "Flat", category: "RESIDENTIAL" },
+      "apartment": { propertyType: "Flat", category: "RESIDENTIAL" },
+      "mini flat": { propertyType: "Mini Flat", category: "RESIDENTIAL" },
+      "self contain": { propertyType: "Self Contain", category: "RESIDENTIAL" },
+      "selfcon": { propertyType: "Self Contain", category: "RESIDENTIAL" },
+      "studio": { propertyType: "Studio", category: "RESIDENTIAL" },
+      "duplex": { propertyType: "Duplex", category: "RESIDENTIAL" },
+      "bungalow": { propertyType: "Bungalow", category: "RESIDENTIAL" },
+      "terrace": { propertyType: "Terrace", category: "RESIDENTIAL" },
+      "semi-detached": { propertyType: "Semi-Detached", category: "RESIDENTIAL" },
+      "semi detached": { propertyType: "Semi-Detached", category: "RESIDENTIAL" },
+      "detached": { propertyType: "Detached House", category: "RESIDENTIAL" },
+      "mansion": { propertyType: "Mansion", category: "RESIDENTIAL" },
+      "penthouse": { propertyType: "Penthouse", category: "RESIDENTIAL" },
+      "maisonette": { propertyType: "Maisonette", category: "RESIDENTIAL" },
+      "house": { propertyType: "Detached House", category: "RESIDENTIAL" },
+      "land": { propertyType: "Land", category: "LAND" },
+      "plot": { propertyType: "Land", category: "LAND" },
+      "commercial land": { propertyType: "Commercial Land", category: "LAND" },
+      "office": { propertyType: "Office Space", category: "COMMERCIAL" },
+      "office space": { propertyType: "Office Space", category: "COMMERCIAL" },
+      "shop": { propertyType: "Shop", category: "COMMERCIAL" },
+      "warehouse": { propertyType: "Warehouse", category: "COMMERCIAL" },
+      "showroom": { propertyType: "Showroom", category: "COMMERCIAL" },
+      "factory": { propertyType: "Factory", category: "INDUSTRIAL" },
+    };
+
+    for (const [keyword, mapping] of Object.entries(typeMap)) {
+      const escapedKeyword = keyword.replace(/[-]/g, "\\s*");
+      const regex = new RegExp(`\\b${escapedKeyword}\\b`);
+      if (regex.test(cleanQuery)) {
+        extracted.propertyType = mapping.propertyType;
+        extracted.category = mapping.category;
+        // Don't remove from cleanQuery — it helps text search relevance
+        break;
+      }
+    }
+
+    // 6. Area detection — Lagos / Abuja / PH neighbourhoods
+    for (const area of NIGERIAN_AREAS) {
+      // Match "in lekki", "lekki", "at vi", etc.
+      const areaRegex = new RegExp(`\\b(?:in|at|around|near)?\\s*${area.replace(/\s+/g, "\\s+")}\\b`);
+      if (areaRegex.test(cleanQuery)) {
+        // Store display name (expand abbreviation if known)
+        extracted.area = NIGERIAN_AREAS_DISPLAY[area] || area.replace(/\b\w/g, (c) => c.toUpperCase());
+        // Don't filter on area at Meilisearch level since area is a text field
+        // (exact match filter would be too strict for partial location text)
+        // Instead we keep it in the clean query for text search
+        break;
+      }
+    }
+
+    // Clean up remaining query: remove stopwords
     cleanQuery = cleanQuery
-      .replace(/\b(?:in|for|a|an|the|with)\b/g, "")
+      .replace(/\b(?:in|for|a|an|the|with|at|near|around)\b/g, "")
       .replace(/\s+/g, " ")
       .trim();
 
@@ -125,6 +238,9 @@ export class SearchService {
         hits: result.hits,
         query: parsed.cleanQuery,
         extracted: parsed.extracted,
+        // parsedQuery is the same as extracted — exposed so the frontend can display
+        // a human-readable "AI interpreted" summary of the NL filters applied
+        parsedQuery: Object.keys(parsed.extracted).length > 0 ? parsed.extracted : null,
         estimatedTotalHits: result.estimatedTotalHits,
         facetDistribution: result.facetDistribution,
         processingTimeMs: result.processingTimeMs,

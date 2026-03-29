@@ -1316,6 +1316,12 @@ export default function DataExplorerPage() {
   const [showBulkDropdown, setShowBulkDropdown] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+  // ── LLM Enrichment state
+  const [enrichProgress, setEnrichProgress] = useState<{ current: number; total: number } | null>(null);
+  const [showEnrichBySiteDropdown, setShowEnrichBySiteDropdown] = useState(false);
+  const [enrichBySiteConfirm, setEnrichBySiteConfirm] = useState<{ site: { id: string; name: string }; count: number } | null>(null);
+  const [enrichBySiteLoading, setEnrichBySiteLoading] = useState(false);
+
   // ── Property Detail Slide-Over
   const [slideOverItem, setSlideOverItem] = useState<any>(null);
   const [slideOverOpen, setSlideOverOpen] = useState(false);
@@ -1464,6 +1470,62 @@ export default function DataExplorerPage() {
       toast.success(`Re-scrape triggered for ${urls.length} properties`);
     } catch { toast.error("Failed to trigger bulk re-scrape"); }
   }, [filteredItems, selectedIds, startScrape]);
+
+  // ── LLM Enrich Selected — calls llmEnrich for each selected property sequentially
+  const handleLLMEnrichSelected = useCallback(async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setEnrichProgress({ current: 0, total: ids.length });
+    let enriched = 0;
+    let failed = 0;
+    for (let i = 0; i < ids.length; i++) {
+      setEnrichProgress({ current: i + 1, total: ids.length });
+      try {
+        await propertiesApi.llmEnrich(ids[i]);
+        enriched++;
+      } catch {
+        failed++;
+      }
+    }
+    setEnrichProgress(null);
+    queryClient.invalidateQueries({ queryKey: ["data-explorer"] });
+    if (failed === 0) {
+      toast.success(`Enriched ${enriched} ${enriched === 1 ? "property" : "properties"} via LLM`);
+    } else {
+      toast.success(`Enriched ${enriched} properties. ${failed} failed.`);
+    }
+    setSelectedIds(new Set());
+  }, [selectedIds, queryClient]);
+
+  // ── LLM Enrich by Site — fetch count then show confirmation dialog
+  const handleEnrichBySiteClick = useCallback(async (site: { id: string; name: string }) => {
+    setShowEnrichBySiteDropdown(false);
+    try {
+      const res = await propertiesApi.llmEnrichCount(site.id);
+      const count = res.data?.data?.count ?? 0;
+      setEnrichBySiteConfirm({ site, count });
+    } catch {
+      toast.error("Failed to fetch property count for this site");
+    }
+  }, []);
+
+  const handleConfirmEnrichBySite = useCallback(async () => {
+    if (!enrichBySiteConfirm) return;
+    setEnrichBySiteLoading(true);
+    setEnrichBySiteConfirm(null);
+    try {
+      const res = await propertiesApi.llmEnrichBySite(enrichBySiteConfirm.site.id);
+      const result = res.data?.data;
+      queryClient.invalidateQueries({ queryKey: ["data-explorer"] });
+      toast.success(
+        `Enriched ${result?.enriched ?? "?"} of ${result?.total ?? "?"} properties from ${enrichBySiteConfirm.site.name}`
+      );
+    } catch {
+      toast.error("Enrichment by site failed");
+    } finally {
+      setEnrichBySiteLoading(false);
+    }
+  }, [enrichBySiteConfirm, queryClient]);
 
   const handleKanbanDrop = useCallback(async (itemId: string, newStatus: string) => {
     const actionMap: Record<string, string> = { VERIFIED: "verify", FLAGGED: "flag", REJECTED: "reject" };
@@ -1933,6 +1995,26 @@ export default function DataExplorerPage() {
               style={{ backgroundColor: "rgba(239,68,68,0.15)", color: "#dc2626" }}>
               Reject
             </button>
+            {/* Enrich Selected button */}
+            <button
+              onClick={handleLLMEnrichSelected}
+              disabled={!!enrichProgress}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border disabled:opacity-60"
+              style={{ borderColor: "var(--primary)", color: "var(--primary)", backgroundColor: "rgba(0,1,252,0.07)" }}
+              title="Extract structured data from property descriptions using AI"
+            >
+              {enrichProgress ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Enriching {enrichProgress.current} of {enrichProgress.total}…
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Enrich Selected
+                </>
+              )}
+            </button>
             {/* Extended bulk actions dropdown */}
             <div className="relative">
               <button onClick={() => setShowBulkDropdown(!showBulkDropdown)}
@@ -1983,6 +2065,58 @@ export default function DataExplorerPage() {
             </div>
           </div>
         )}
+
+        {/* Enrich by Site dropdown — always visible in toolbar */}
+        <div className="relative">
+          <button
+            onClick={() => setShowEnrichBySiteDropdown(!showEnrichBySiteDropdown)}
+            disabled={enrichBySiteLoading}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border text-sm font-medium transition-all hover:border-[var(--primary)] disabled:opacity-60"
+            style={{ borderColor: "var(--border)", color: "var(--foreground)", backgroundColor: "var(--background)" }}
+            title="Enrich all properties from a specific site using AI"
+          >
+            {enrichBySiteLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin" style={{ color: "var(--primary)" }} />
+            ) : (
+              <Bot className="w-4 h-4" style={{ color: "var(--primary)" }} />
+            )}
+            <span className="hidden sm:inline">Enrich by Site</span>
+            <ChevronDown className="w-3.5 h-3.5" style={{ color: "var(--muted-foreground)" }} />
+          </button>
+          {showEnrichBySiteDropdown && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setShowEnrichBySiteDropdown(false)} />
+              <div
+                className="absolute right-0 top-full mt-1 z-50 w-56 rounded-xl border shadow-xl overflow-hidden"
+                style={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }}
+              >
+                <div className="px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>
+                  <p className="text-xs font-semibold" style={{ color: "var(--foreground)" }}>Choose a site to enrich</p>
+                  <p className="text-[10px] mt-0.5" style={{ color: "var(--muted-foreground)" }}>AI will extract data from descriptions</p>
+                </div>
+                <div className="max-h-64 overflow-y-auto py-1">
+                  {allSites.length === 0 ? (
+                    <p className="px-4 py-3 text-xs italic" style={{ color: "var(--muted-foreground)" }}>No sites found</p>
+                  ) : (
+                    allSites.map((site) => (
+                      <button
+                        key={site.id}
+                        onClick={() => handleEnrichBySiteClick(site)}
+                        className="w-full text-left px-4 py-2.5 text-xs font-medium flex items-center gap-2 transition-colors"
+                        style={{ color: "var(--foreground)" }}
+                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--secondary)")}
+                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                      >
+                        <Sparkles className="w-3.5 h-3.5 shrink-0" style={{ color: "var(--primary)" }} />
+                        {site.name}
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Active filter chips */}
@@ -2381,6 +2515,48 @@ export default function DataExplorerPage() {
                 className="flex-1 px-4 py-2 rounded-lg text-sm font-semibold"
                 style={{ backgroundColor: "#dc2626", color: "#fff" }}>
                 Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Enrich by Site Confirmation ─────────────────────────────────────────── */}
+      {enrichBySiteConfirm && (
+        <div className="fixed inset-0 z-[1300] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-xl border shadow-2xl" style={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }}>
+            <div className="px-6 py-5">
+              <div className="w-12 h-12 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: "rgba(0,1,252,0.1)" }}>
+                <Sparkles className="w-6 h-6" style={{ color: "var(--primary)" }} />
+              </div>
+              <h3 className="text-base font-bold mb-1" style={{ color: "var(--foreground)" }}>
+                Enrich {enrichBySiteConfirm.count} {enrichBySiteConfirm.count === 1 ? "Property" : "Properties"}?
+              </h3>
+              <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+                AI will extract structured data from the descriptions of all {enrichBySiteConfirm.count} properties from{" "}
+                <span className="font-semibold" style={{ color: "var(--foreground)" }}>{enrichBySiteConfirm.site.name}</span>.
+                Only missing fields will be filled — existing data is never overwritten.
+              </p>
+              {enrichBySiteConfirm.count > 50 && (
+                <p className="text-xs mt-2 px-3 py-2 rounded-lg" style={{ backgroundColor: "rgba(234,179,8,0.1)", color: "#ca8a04" }}>
+                  This may take several minutes for large batches.
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-3 px-6 py-4 border-t" style={{ borderColor: "var(--border)" }}>
+              <button
+                onClick={() => setEnrichBySiteConfirm(null)}
+                className="flex-1 px-4 py-2 rounded-lg text-sm font-medium border"
+                style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmEnrichBySite}
+                className="flex-1 px-4 py-2 rounded-lg text-sm font-semibold"
+                style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
+              >
+                Enrich {enrichBySiteConfirm.count}
               </button>
             </div>
           </div>

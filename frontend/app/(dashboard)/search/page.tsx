@@ -19,7 +19,7 @@ import { BottomSheet, BottomSheetContent, BottomSheetClose } from "@/components/
 import { DraggableBottomSheet } from "@/components/ui/draggable-bottom-sheet";
 import { PropertyDetailPanel } from "@/components/property/property-detail-panel";
 import { useSearch } from "@/hooks/use-search";
-import { MapPin, Sparkles, X, Brain, Zap } from "lucide-react";
+import { MapPin, Sparkles, X, Brain, Zap, Info } from "lucide-react";
 import { AIInsightPlaceholder } from "@/components/ai/ai-placeholder";
 import type { Property, PropertyCategory } from "@/types/property";
 
@@ -35,6 +35,66 @@ const QUICK_SEARCHES = [
   "Warehouse in Oshodi",
   "Furnished flat in Surulere"
 ];
+
+// ─── NL query interpreted banner ─────────────────────────────────────────────
+
+function buildNLSummary(parsed: Record<string, any>): string {
+  const parts: string[] = [];
+  if (parsed.bedrooms) parts.push(`${parsed.bedrooms} bedroom`);
+  if (parsed.propertyType) parts.push(parsed.propertyType.toLowerCase());
+  else if (parsed.category) {
+    const catMap: Record<string, string> = {
+      RESIDENTIAL: "property", LAND: "land", COMMERCIAL: "commercial property",
+      INDUSTRIAL: "industrial property", SHORTLET: "shortlet",
+    };
+    parts.push(catMap[parsed.category] || parsed.category.toLowerCase());
+  }
+  if (parsed.area) parts.push(`in ${parsed.area}`);
+  if (parsed.maxPrice) parts.push(`max ₦${new Intl.NumberFormat("en-NG").format(parsed.maxPrice)}`);
+  if (parsed.minPrice) parts.push(`min ₦${new Intl.NumberFormat("en-NG").format(parsed.minPrice)}`);
+  if (parsed.listingType) {
+    const ltMap: Record<string, string> = {
+      RENT: "for rent", SALE: "for sale", SHORTLET: "shortlet", LEASE: "for lease",
+    };
+    parts.push(ltMap[parsed.listingType] || parsed.listingType.toLowerCase());
+  }
+  return parts.length > 0 ? parts.join(", ") : "";
+}
+
+function NLInterpretedBanner({
+  parsedInfo,
+  onEditFilters,
+}: {
+  parsedInfo: Record<string, any> | null;
+  onEditFilters: () => void;
+}) {
+  if (!parsedInfo || Object.keys(parsedInfo).length === 0) return null;
+  const summary = buildNLSummary(parsedInfo);
+  if (!summary) return null;
+  return (
+    <div
+      className="flex items-start gap-2.5 px-4 py-3 rounded-xl border text-xs"
+      style={{
+        backgroundColor: "rgba(0,1,252,0.05)",
+        borderColor: "rgba(0,1,252,0.2)",
+        color: "var(--foreground)",
+      }}
+    >
+      <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: "var(--primary)" }} />
+      <div className="flex-1 min-w-0">
+        <span className="font-semibold" style={{ color: "var(--primary)" }}>Searching for: </span>
+        <span>{summary}</span>
+      </div>
+      <button
+        onClick={onEditFilters}
+        className="text-xs font-semibold underline underline-offset-2 shrink-0"
+        style={{ color: "var(--primary)" }}
+      >
+        Edit filters
+      </button>
+    </div>
+  );
+}
 
 export default function SearchPage() {
   const [query, setQuery] = useState("");
@@ -206,6 +266,10 @@ export default function SearchPage() {
                      </div>
 
                      <div className="flex-1 overflow-y-auto p-4 scroller space-y-4">
+                         <NLInterpretedBanner
+                           parsedInfo={parsedInfo}
+                           onEditFilters={() => setActiveFilters([])}
+                         />
                          <SearchResults
                             hits={hits}
                             totalHits={totalHits}
@@ -247,6 +311,10 @@ export default function SearchPage() {
                    </div>
 
                    <div className="flex-1 overflow-y-auto p-4 scroller space-y-4">
+                       <NLInterpretedBanner
+                         parsedInfo={parsedInfo}
+                         onEditFilters={() => setActiveFilters([])}
+                       />
                        <SearchResults
                           hits={hits}
                           totalHits={totalHits}
